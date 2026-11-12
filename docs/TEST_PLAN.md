@@ -40,6 +40,19 @@ Before deployment, collect a reproducible, dated benchmark of **actual UK events
 7. **Freshness**: each source and event has retrieved_at/verified_at; stale items visibly labelled.
 8. **Stability**: no provider error crashes whole run, no duplicate cards, no corrupted published snapshot.
 
+## Home Assistant first-run wizard / notification acceptance
+
+Specification: [HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md](HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md).
+- [ ] First Open Web UI launches HA Ingress wizard, not an exposed WAN port. Existing normal HA credentials apply; only admins can edit.
+- [ ] Individual provider cards include factual signup/doc links and separate Save and Test, with proper masked credentials, no-key, disabled, restricted, quota and authentication statuses.
+- [ ] Save A does not overwrite B; interruption/restart/upgrade retains each key; errors/retries do not leak secrets.
+- [ ] Separate GitHub repo/branch/path/token Save/Test; correct missing repo/token permission/Pages failure; publication OFF without licence clearance.
+- [ ] Schedule Save, GMT/BST handling, 04:00 collection and pre-05:00 intended publish, additional later refreshes and provider-specific quota reset.
+- [ ] First-run completion persists, wizard does not auto-open after completion, owner can revisit all settings manually.
+- [ ] Partial provider outage shows dashboard status; repeated actionable failure creates a **single stable-ID HA notification** with provider/error/impact/last-good/next-retry/action; recovery resolves without alert spam.
+- [ ] Notification API access security reviewed and scoped appropriately; no credentials in HA notifications, public GitHub, UI responses or logs.
+- [ ] Concurrent B1G 10-TV JSON downloads result in zero incremental upstream provider quota usage.
+
 ## Operational acceptance
 
 - Test without credentials must pass deterministically with sample data.
