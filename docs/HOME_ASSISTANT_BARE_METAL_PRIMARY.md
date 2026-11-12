@@ -38,6 +38,10 @@
 
 The project code remains in PRIVATE jimmyfazz/SportsLiveInfo. A separate public static JSON feed repo is **not yet created** and requires **source licensing clearance**; private/personal use on ten TVs does not itself authorise public redistribution. For source-restricted TV EPG data, use B1's own permitted local EPG for broadcaster matching rather than putting those records on public GitHub.
 
+## Mandatory first-run onboarding, settings and Home Assistant notifications
+
+**Implementation must follow [HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md](HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md).** On first launch, display a resumable embedded HA Ingress setup wizard with supplier links and individually saved/tested API keys, UK TV source setup, a separate GitHub feed destination/token, and UK-local collection/publication scheduler. Save each independently and **never automatically reopen first-run wizard once finished**; keep an everyday Settings/Health dashboard. Home Assistant persistent notifications should give actionable, comprehensive but non-intrusive errors outside the wizard, de-duplicated with stable IDs and rate limits. Publication remains OFF until source licensing is cleared. This is a required feature, not yet implemented.
+
 ## 3. Home Assistant App packaging and installation (planned)
 
 Proposed tree:
