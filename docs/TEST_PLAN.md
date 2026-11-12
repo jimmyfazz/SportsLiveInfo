@@ -53,6 +53,19 @@ Specification: [HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md](HOME_ASSIS
 - [ ] Notification API access security reviewed and scoped appropriately; no credentials in HA notifications, public GitHub, UI responses or logs.
 - [ ] Concurrent B1G 10-TV JSON downloads result in zero incremental upstream provider quota usage.
 
+## Critical B1 integration EPG and API-scope tests
+
+See [B1 forensic EPG and credentials audit](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md).
+- [ ] Entire Sky Sports/TNT/Premier standard-service current and upcoming windows compared with licensed/official source; generic provider programmes upgraded only with matching channel/time-window and verified better detail.
+- [ ] Source SHA / true generation time correctly distinguishes 05:00 morning snapshot from later upstream farleyflex update.
+- [ ] 17 stable source aliases, Sky Sports+, TNT5-8, regional and +1 variants tested without unsafe remap; existing provider manual overrides/disabled sources preserved.
+- [ ] Valid EPG event omitted by a partial or empty API-Sports free-tier response is not silently deleted.
+- [ ] Sports Today 'On now' reflects genuine event state, not solely programme live window or start+heuristic duration.
+- [ ] Ten body cards plus optional PPV boxing headline (Mac rule) confirmed or intentional Android difference explicitly documented.
+- [ ] Ten TV clients, one public snapshot: no sport provider keys stored on TVs; supplier requests don't increase with clients.
+- [ ] HA wizard does not request TMDB/OMDb, VOD artwork, IPTV account/playlist credentials or TheSportsDB public test key.
+- [ ] No raw/copy-derived third-party programme descriptions published publicly without documented source licence; denied public EPG uses B1's own source and last-good guide.
+
 ## Operational acceptance
 
 - Test without credentials must pass deterministically with sample data.
