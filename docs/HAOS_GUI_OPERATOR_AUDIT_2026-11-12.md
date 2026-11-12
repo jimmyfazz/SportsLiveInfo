@@ -20,6 +20,7 @@ This audit covers `sportsliveinfo/src/sportsliveinfo/server.py`, storage/engine 
 | GUI-007, high | Public publish button appeared active even without token, approvals or enabled publishing (backend already refused). | Visible independent prerequisites, disabled publish control until all are satisfied. | Confirm backend still refuses unapproved data. |
 | GUI-008, medium | Browser user experience relied on implicit click feedback. | Semantic `role=status` save/test notices, visual status colours with explicit text, labelled navigation. | Screen-reader inspection and keyboard-only manual test. |
 | GUI-009, high | First-run setup contained only a banner and a completion button at the end of long forms. | Persistent three-stage sources → scheduler → optional GitHub step shortcuts, with accessible setup group and separately styled validation errors. | Interrupt/resume setup on Home Assistant Ingress. |
+| SRC-010, high | EPG Test Connection accepted a syntactically valid but fully expired programme list, falsely implying usable guide coverage. | A non-destructive preflight now requires at least one programme overlapping the next 24h; returns an unsuccessful test and local diagnostic otherwise. | Synthetic current/expired XMLTV unit tests plus real expired-feed negative. |
 
 ## Behaviour deliberately unchanged
 1. No browser JavaScript, third-party UI assets, analytics or external CSS; the existing private Home Assistant Ingress/CSRF boundaries are retained.
