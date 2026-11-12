@@ -1,5 +1,7 @@
 # Proposed system architecture
 
+> **Legacy exploratory design.** Read [MASTER_IMPLEMENTATION_ROADMAP.md](MASTER_IMPLEMENTATION_ROADMAP.md) for the current architecture: dual independent full **international EPG** + **sports events** pipelines, common source/canonical identities, HAOS mini-PC local App, 10 read-only B1G clients, rights-gated outbound static feed. Legacy 'no mandatory always-on server' and UK-only language below no longer applies.
+
 ## Principle
 
 Small, modular, deterministic Python aggregator with cache, defensive fetchers, robust provenance, no paid AI and no mandatory always-on server. Keep private development outputs private.
