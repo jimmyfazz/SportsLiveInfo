@@ -18,6 +18,10 @@ The only observed user-entered third-party API keys in Android Settings are **AP
 
 Important B1 corrective candidates from this audit: free-fixture API missing coverage must not suppress independently credible EPG fixtures; event status is not equivalent to broadcasting programme time; Android sports rank currently caps including PPV at 10 whereas Mac uses 10 plus 1 optional PPV. All such fixes belong in separately reviewed B1 code changes, not silent changes to SportsLiveInfo.
 
+## Locked B1G read-only integration policy
+
+**Owner decision:** The ten B1G TVs are **read-only HTTPS consumers** of the central sports/EPG feed. They must never receive GitHub write credentials, send subscription inventory or hidden-category/channel changes to GitHub, or call sporting-provider APIs. Source finding: Android `ChannelVisibilityStore.visibleLiveCategoriesForAccount` applies account-scoped hidden live categories and channels through `EffectiveLiveCatalogue.project`. Preserve that filtering and current-account preferences locally; the central feed may be a union across multiple TVs but each TV must render only its own visible, playable channels. Optional owner-triggered, secret-free channel inventory **local export / HAOS import**, never background device-to-GitHub writes. See [mandatory read-only policy](docs/B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md).
+
 ## Non-negotiable requirements
 
 1. Zero recurring subscription cost for the initial private prototype. Avoid paid data services and language-model inference. Provider adapters must be pluggable; never tie the whole app to one provider.
