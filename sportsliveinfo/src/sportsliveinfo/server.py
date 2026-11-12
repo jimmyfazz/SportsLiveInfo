@@ -20,27 +20,129 @@ LIVE_LABELS = {"live": "LIVE", "live_probable": "Probably live", "upcoming": "Up
                "time_tbc": "Time TBC", "unknown": "Unknown"}
 
 CSS = """
-:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:#081224;color:#e8f3ff}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 90% -30%,#103b54,transparent 55%),#081224}
-main{max-width:1140px;margin:auto;padding:24px 24px 50px}header{display:flex;align-items:center;gap:17px;margin-bottom:23px}header img{width:68px;height:68px;object-fit:contain}
-h1{font-size:27px;letter-spacing:-.7px;margin:0}h2{font-size:18px;margin:0 0 16px}h3{font-size:16px;margin:0 0 8px}
-p{line-height:1.55;margin:8px 0 15px;color:#b2c3d6}.sub{font-size:13px;color:#a5b8cc}
-nav{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:24px}nav a{color:#d1e6f5;border:1px solid #29465b;border-radius:11px;padding:10px 14px;text-decoration:none}nav a:hover,nav a.active{background:#123c52;border-color:#3fb8ba}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.card{padding:20px;border-radius:16px;border:1px solid #254157;background:#0d2034;box-shadow:0 8px 20px #0002}
-.metric{font-size:32px;font-weight:700;color:#bbf977}.pill{display:inline-block;padding:4px 9px;border-radius:20px;background:#14364a;color:#85e1eb;font-size:12px}
-.warn{color:#ffd68b}.ok{color:#b1ec91}.critical{color:#ffb1a2}label{display:block;margin:12px 0 6px;font-size:13px;color:#d8e8f7}
-input[type=text],input[type=password],select{width:100%;background:#071627;border:1px solid #376078;color:#f4f9ff;padding:12px 13px;border-radius:8px;font:inherit}
-input[type=checkbox]{accent-color:#88df88;width:18px;height:18px;vertical-align:middle}button{border:0;background:linear-gradient(110deg,#05c6cc,#a2ef59);color:#071524;border-radius:9px;padding:10px 16px;font-size:14px;font-weight:750;cursor:pointer;margin-top:10px}button:hover{filter:brightness(1.08)}button.secondary{background:#234659;color:white}
-form{margin:0 0 15px}.help{font-size:12px;color:#94adbf}.formrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.divider{height:1px;background:#294258;margin:18px 0}
-table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:9px;text-align:left;border-bottom:1px solid #244054;word-break:break-word}th{color:#b8d4e4}
-.alert{padding:13px 16px;border-radius:11px;border-left:4px solid #80dfe3;background:#133043;margin-bottom:20px}.error{border-color:#ffb181;background:#38252b}
-a{color:#7be1eb}small{color:#a0b8cb}.footer{margin-top:30px;color:#829db1;font-size:12px}
-@media(max-width:600px){main{padding:14px}header img{width:48px;height:48px}h1{font-size:22px}.card{padding:14px}}
+:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --bg:#071220;--surface:#102438;--surface2:#142d43;--border:#2a4659;
+  --text:#eff7fc;--muted:#acc2d3;--accent:#67dfcb;--lime:#b9f185;--amber:#ffcf80;--red:#ffada4;
+  background:var(--bg);color:var(--text)}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;min-width:320px;background:radial-gradient(ellipse at 85% -10%,#16495b 0,transparent 46%),var(--bg);line-height:1.5}
+main{max-width:1340px;margin:auto;padding:24px clamp(14px,3vw,40px) 48px}
+a{color:var(--accent);text-underline-offset:3px}
+a:hover{text-decoration-thickness:2px}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{
+  outline:3px solid var(--lime);outline-offset:3px}
+.skip{position:absolute;left:12px;top:-80px;z-index:100;background:var(--lime);color:#06111c;padding:12px}
+.skip:focus{top:8px}
+header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:0 0 22px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:16px;min-width:0}
+header img{width:60px;height:60px;object-fit:contain;filter:drop-shadow(0 5px 16px #31bda344)}
+h1{font-size:clamp(24px,2.5vw,33px);letter-spacing:-.8px;line-height:1.12;margin:0}
+h2{font-size:clamp(19px,2vw,23px);letter-spacing:-.25px;margin:0 0 12px}
+h3{font-size:16px;margin:0 0 8px}
+p{color:var(--muted);line-height:1.6;margin:8px 0 16px}
+strong{color:var(--text)}
+.sub,.help,small{font-size:12px;color:var(--muted)}
+.sub{font-size:13px}
+.mast-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+nav{position:sticky;top:0;z-index:10;display:flex;gap:5px;overflow-x:auto;white-space:nowrap;
+  margin:0 0 26px;padding:9px;background:#0c2032f2;backdrop-filter:blur(14px);
+  border:1px solid var(--border);border-radius:15px;scrollbar-width:thin}
+nav a{flex:0 0 auto;color:var(--muted);border-radius:9px;padding:9px 13px;text-decoration:none;font-size:13px;font-weight:650}
+nav a:hover{background:var(--surface2);color:var(--text)}
+nav a.active{background:#214c54;color:#e3fff4;box-shadow:inset 0 -2px 0 var(--accent)}
+.page-heading{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,265px),1fr));gap:14px}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:13px}
+.card{min-width:0;padding:21px;border-radius:16px;border:1px solid var(--border);
+  background:linear-gradient(160deg,#132b40,#0e2032);box-shadow:0 8px 24px #0002;overflow-x:auto}
+.card-soft{background:var(--surface);border-color:#264255}
+.metric-card{border-top:3px solid var(--accent)}
+.metric{font-size:clamp(25px,2.7vw,36px);font-variant-numeric:tabular-nums;font-weight:750;letter-spacing:-.9px;color:var(--lime);line-height:1.3}
+.pill,.state{display:inline-flex;align-items:center;padding:4px 10px;border:1px solid #326477;border-radius:100px;
+  background:#163846;color:#9dece8;font-size:12px;font-weight:650;white-space:normal;gap:4px}
+.state.ok{background:#183d32;border-color:#356c4d;color:#b8f9cb}
+.state.warn{background:#473821;border-color:#866632;color:#ffe0a6}
+.state.critical{background:#482a32;border-color:#875161;color:#ffc1bd}
+.state.neutral{background:#21384b;border-color:#395267;color:#d4e0eb}
+.warn{color:var(--amber)}.ok{color:var(--lime)}.critical{color:var(--red)}
+label{display:block;margin:12px 0 6px;font-size:13px;font-weight:600;color:#e2f0f8}
+input[type=text],input[type=password],input[type=search],select{
+  width:100%;min-width:0;background:#071727;border:1px solid #426276;color:var(--text);
+  padding:11px 13px;border-radius:9px;font:inherit}
+input[type=checkbox]{accent-color:var(--lime);width:18px;height:18px;vertical-align:middle}
+button,.button-link{display:inline-block;border:0;background:linear-gradient(110deg,#63dacc,#b6e987);color:#071b25;
+  border-radius:9px;padding:10px 16px;font-size:14px;font-weight:750;cursor:pointer;margin-top:9px;
+  text-decoration:none;min-height:40px}
+button:hover,.button-link:hover{filter:brightness(1.08);text-decoration:none}
+button.secondary,.button-link.secondary{background:#284b5d;color:#eff8fd;border:1px solid #406679}
+button:disabled{opacity:.5;cursor:not-allowed}
+form{margin:0 0 12px}
+.formrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.formrow>select,.formrow>input[type=text]{flex:1 1 170px}
+.divider{height:1px;background:var(--border);margin:18px 0}
+.alert{padding:13px 16px;border-radius:10px;border-left:4px solid var(--accent);background:#123746;margin-bottom:17px}
+.alert.error{border-color:var(--red);background:#3b2b34}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:13px}
+td,th{padding:11px 10px;text-align:left;border-bottom:1px solid #2b4658;overflow-wrap:anywhere;vertical-align:top}
+th{color:#d2e5ed;font-size:12px;letter-spacing:.02em}
+tbody tr:hover{background:#ffffff09}
+table tr:last-child td{border-bottom:0}
+.action-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.action-row .button-link{margin-top:0}
+.step-list{display:grid;gap:12px;list-style:none;margin:16px 0;padding:0}
+.step-list li{padding:14px 16px;background:#0b2030;border:1px solid #2a4856;border-radius:12px}
+.progress-track{height:9px;border-radius:20px;overflow:hidden;background:#304557;margin:9px 0}
+.progress-fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,#2fc7cb,#b8f185)}
+.provider-group{border:1px solid var(--border);background:#0c2132;border-radius:14px;margin:12px 0}
+.provider-group>summary{cursor:pointer;padding:15px 19px;font-weight:750;list-style-position:inside}
+.provider-group[open]>summary{border-bottom:1px solid var(--border)}
+.provider-group>.grid{padding:14px}
+.provider-group .card{box-shadow:none;padding:16px;background:#112b40}
+.source-toolbar{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0 18px}
+.source-toolbar a{border:1px solid #3e6071;border-radius:100px;padding:8px 14px;text-decoration:none}
+.source-toolbar a.active{background:#245766;border-color:#75e0ce;color:white}
+.section-space{margin-top:22px}
+.empty{padding:20px;border:1px dashed #466477;border-radius:12px}
+.footer{margin-top:32px;padding:18px 0;border-top:1px solid var(--border);color:#a1b9c9;font-size:12px}
+@media(max-width:720px){
+ main{padding:14px 12px 36px}
+ header{gap:12px}header img{width:45px;height:45px}
+ nav{margin:0 0 18px;padding:7px;border-radius:11px}
+ nav a{padding:9px 10px}
+ .card{padding:15px}
+ .metric{font-size:28px}
+ .provider-group>.grid{padding:9px}
+ .provider-group .card{padding:14px}
+ .mast-status{width:100%}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
 """
 
 
 def e(value):
-    return html.escape(str(value or ""), quote=True)
+    """Escape user/provider data for HTML, including numeric zero values."""
+    return html.escape(str(value if value is not None else ""), quote=True)
+
+
+def freshness(snapshot, now=None):
+    """Readable, conservative age indicator for a persisted last-good snapshot."""
+    if not snapshot:
+        return "Not collected", "warn"
+    try:
+        stamp = datetime.fromisoformat(snapshot["updated_at"])
+        age = (now or datetime.now(ZoneInfo("UTC"))) - stamp
+        if age.total_seconds() < -300:
+            return "Clock mismatch", "warn"
+        hours = max(0, int(age.total_seconds() // 3600))
+        if hours < 1:
+            return "Updated within 1 hour", "ok"
+        if hours < 24:
+            return "Updated %d hours ago" % hours, "ok"
+        days = hours // 24
+        return "Last updated %d days ago" % days, "warn"
+    except (KeyError, ValueError, TypeError, OverflowError):
+        return "Timestamp unavailable", "warn"
 
 
 class UI(BaseHTTPRequestHandler):
@@ -221,16 +323,37 @@ class UI(BaseHTTPRequestHandler):
 
     def render(self, page, config, notice, query=None):
         query = query or {}
-        tabs = [("dashboard", "Overview"), ("today", "Live today"), ("sources", "Sources & API keys"), ("events", "Sports events"), ("guide", "EPG coverage"), ("scheduler", "Scheduler"), ("publishing", "Publishing"), ("health", "Diagnostics")]
-        head = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SportsLiveInfo</title><style>%s</style></head><body><main>' % CSS
-        head += '<header><img src="icon.png" alt="SportsLiveInfo"><div><h1>SportsLiveInfo</h1><div class="sub">International EPG intelligence · Live sporting fixtures</div></div></header>'
+        tabs = [("dashboard", "Overview"), ("today", "Live today"), ("events", "Sports events"),
+                ("guide", "EPG coverage"), ("sources", "Sources & API keys"), ("scheduler", "Scheduler"),
+                ("publishing", "Publishing"), ("health", "Diagnostics")]
+        sports_enabled = sum(bool(v) for v in config["sports"].values())
+        epg_enabled = sum(bool(v) for v in config["epg"].values())
+        collection_active = self.engine._busy.locked()
+        head = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+                '<meta name="viewport" content="width=device-width,initial-scale=1">'
+                '<meta name="theme-color" content="#071220"><title>SportsLiveInfo</title>'
+                '<style>%s</style></head><body><a class="skip" href="#content">Skip to main content</a><main>') % CSS
+        head += ('<header><div class="brand"><img src="icon.png" alt="">'
+                 '<div><h1>SportsLiveInfo</h1>'
+                 '<div class="sub">Independent sports schedules &amp; private television guide intelligence</div>'
+                 '</div></div><div class="mast-status"><span class="state %s">%s</span>'
+                 '<span class="state neutral">%d sports · %d EPG sources enabled</span></div></header>') % (
+                     "warn" if collection_active else ("ok" if config["setup_complete"] else "warn"),
+                     "Refreshing sources" if collection_active else ("Configured" if config["setup_complete"] else "Setup required"),
+                     sports_enabled, epg_enabled)
         if not config["setup_complete"]:
-            head += '<div class="alert">First-run setup: configure providers, review refresh times and optionally set a publishing destination. Credentials are stored privately in the Home Assistant App data volume.</div>'
+            head += ('<div class="alert" role="status">First-run setup: select sources, save optional API keys, '
+                     'test each provider and review the schedule. Publishing remains disabled unless '
+                     'you explicitly enable it and approve redistribution rights.</div>')
         if notice:
-            head += '<div class="alert">%s</div>' % e(notice)
-        head += '<nav>' + ''.join('<a class="%s" href="?page=%s">%s</a>' % ("active" if page == key else "", e(key), e(label)) for key, label in tabs) + '</nav>'
+            head += '<div class="alert" role="status" aria-live="polite">%s</div>' % e(notice)
+        head += ('<nav aria-label="Main navigation">' +
+                 ''.join('<a %s href="?page=%s">%s</a>' % (
+                     'class="active" aria-current="page"' if page == key else '',
+                     e(key), e(label)) for key, label in tabs) +
+                 '</nav><div id="content"></div>')
         if page == "sources":
-            body = self.sources(config)
+            body = self.sources(config, query)
         elif page == "today":
             body = self.today()
         elif page == "events":
@@ -254,24 +377,73 @@ class UI(BaseHTTPRequestHandler):
         sport = self.store.snapshot("sports")
         epg = self.store.snapshot("epg")
         today = self.store.snapshot("today")
-        events = sport["data"]["events"] if sport else []
-        sources = epg["data"]["sources"] if epg else []
+        events = sport["data"].get("events", []) if sport else []
+        sources = epg["data"].get("sources", []) if epg else []
         day = today["data"] if today else {}
-        candidates = sum(e.get("broadcast_status", "none") != "none" for e in events)
-        result = '<div class="grid">'
-        for title, value, desc in [("Events today", day.get("count", 0), "%s probably live now · %s featured (England, home nations, PPV)" % (day.get("live_now", 0), len(day.get("featured", [])))),
-                                    ("Sporting events (8 days)", len(events), "De-duplicated across enabled sources"),
-                                    ("EPG source feeds", len(sources), "Private guide sources with last-good snapshots"),
-                                    ("EPG channel candidates", candidates, "Unverified guide matches; no channel is fabricated from league rights"),
-                                    ("API calls today", sum(self.store.usage().values()), "Local call-budget ledger; UTC day")]:
-            result += '<div class="card"><div class="sub">%s</div><div class="metric">%s</div><div class="help">%s</div></div>' % (e(title), e(value), e(desc))
-        result += '</div><section class="card" style="margin-top:16px"><h2>Collection status</h2>'
-        result += '<p>Sports snapshot: <strong>%s</strong><br>EPG snapshot: <strong>%s</strong></p>' % (e(sport["updated_at"] if sport else "No successful collection yet"), e(epg["updated_at"] if epg else "No successful collection yet"))
-        result += '<p class="warn">TV broadcaster confirmation is not yet implemented in the live adapters. All unverified sporting events are deliberately non-playable in the planned B1G feed.</p>'
-        result += self._form("collect", '<button type="submit">Refresh both engines now</button>')
-        result += '</section><div class="grid" style="margin-top:16px"><section class="card"><h2>Sports coverage</h2><p>%s</p></section><section class="card"><h2>EPG coverage</h2><p>%s</p></section></div>' % (
-            e(", ".join(s["id"] + " (%s)" % s["events"] for s in sport["data"].get("sources", [])) if sport else "No sporting source collected yet"),
-            e(", ".join(s["id"] + " (%s programmes)" % s["programmes"] for s in sources) or "No EPG source collected yet"))
+        enabled_sports = [n for n, active in config["sports"].items() if active and n in providers.SPORTS]
+        enabled_epg = [n for n, active in config["epg"].items() if active and n in providers.EPG]
+        missing_keys = sorted({providers.SPORTS[n][2] for n in enabled_sports
+                               if providers.SPORTS[n][2] and not config["keys"].get(providers.SPORTS[n][2])})
+        sport_age, sport_severity = freshness(sport)
+        epg_age, epg_severity = freshness(epg)
+        active = self.engine._busy.locked()
+        result = '<div class="page-heading"><div><h2>Operations overview</h2><p>At-a-glance readiness, latest successful snapshots and the actions needed next.</p></div>'
+        result += '<span class="state %s">%s</span></div>' % ("warn" if active else "neutral", "Collection running" if active else "Local-first · private collection")
+        metrics = [
+            ("Events today", day.get("count", 0), "UK calendar day · source-reported or estimated status"),
+            ("Sports events", len(events), "Future event records in the current local snapshot"),
+            ("EPG feeds", len(sources), "Private source feeds represented in the overview"),
+            ("API calls today", sum(self.store.usage().values()), "Requests reserved in the local UTC quota ledger"),
+        ]
+        result += '<div class="kpi-grid">'
+        for title, value, description in metrics:
+            result += ('<article class="card metric-card"><div class="sub">%s</div>'
+                       '<div class="metric">%s</div><div class="help">%s</div></article>') % (
+                           e(title), e(value), e(description))
+        result += '</div>'
+        result += '<div class="grid section-space"><section class="card"><h2>System readiness</h2><ul class="step-list">'
+        checks = [
+            ("Initial setup", bool(config["setup_complete"]), "Complete the first-run setup", "dashboard"),
+            ("Sports source selection", bool(enabled_sports), "Enable at least one sport provider", "sources"),
+            ("EPG source selection", bool(enabled_epg), "Enable an authorised private EPG source", "sources"),
+            ("Provider credentials", not missing_keys, "Enter keys for selected key-required providers", "sources"),
+            ("Sports snapshot", bool(sport), "Run a refresh to collect sports events", "dashboard"),
+            ("EPG snapshot", bool(epg), "Run a refresh to analyse programme coverage", "dashboard"),
+        ]
+        for label, good, action, destination in checks:
+            result += ('<li><span class="state %s">%s</span> <strong>%s</strong>'
+                       '<div class="help">%s</div></li>') % (
+                           "ok" if good else "warn", "Ready" if good else "Needs attention",
+                           e(label), "Completed" if good else (
+                               '<a href="?page=%s">%s</a>' % (e(destination), e(action))))
+        result += '</ul><p class="help">GitHub publishing is optional and excluded from collection readiness. '
+        result += 'Only rights-approved data may be exported.</p></section>'
+        result += '<section class="card"><h2>Latest snapshots</h2>'
+        for title, snapshot, age, severity, destination in [
+            ("Sports intelligence", sport, sport_age, sport_severity, "events"),
+            ("Private EPG analysis", epg, epg_age, epg_severity, "guide"),
+        ]:
+            result += ('<div class="divider"></div><h3>%s</h3>'
+                       '<p><span class="state %s">%s</span></p>'
+                       '<p class="help">Snapshot time (UTC): %s</p>'
+                       '<a href="?page=%s">Explore %s</a>') % (
+                           e(title), severity, e(age), e(snapshot["updated_at"] if snapshot else "No successful refresh"),
+                           e(destination), e(title))
+        result += '<div class="divider"></div><h3>Refresh collection</h3>'
+        result += '<p>A failed or partial provider refresh keeps the previous successful snapshot. '
+        result += 'An EPG source with no current programmes cannot silently replace your guide.</p>'
+        result += self._form("collect", '<button type="submit" %s>%s</button>' % (
+            "disabled" if active else "", "Refresh in progress" if active else "Refresh selected sources now"))
+        result += '<div class="action-row"><a class="button-link secondary" href="?page=sources">Configure sources</a>'
+        result += '<a class="button-link secondary" href="?page=health">View diagnostics</a></div></section></div>'
+        result += '<div class="grid section-space"><section class="card"><h2>Sports source coverage</h2>'
+        result += '<p>%s</p></section><section class="card"><h2>EPG source coverage</h2><p>%s</p></section></div>' % (
+            e(", ".join(str(s["id"]) + " (%s events)" % s.get("events", 0) for s in sport["data"].get("sources", []))
+              if sport else "No collected sports source yet"),
+            e(", ".join(str(s["id"]) + " (%s programmes)" % s.get("programmes", 0) for s in sources)
+              if sources else "No collected EPG source yet"))
+        result += '<p class="warn section-space">A sporting event is not a confirmed TV broadcast. '
+        result += 'Event-to-channel matches remain explicitly unverified until independent broadcast evidence exists.</p>'
         return result
 
     def sources(self, config):
