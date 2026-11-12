@@ -79,7 +79,7 @@ button.secondary,.button-link.secondary{background:#284b5d;color:#eff8fd;border:
 button:disabled{opacity:.5;cursor:not-allowed}
 form{margin:0 0 12px}
 .formrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.formrow>select,.formrow>input[type=text],.formrow>input[type=date]{flex:1 1 150px}
+.formrow>select,.formrow>input[type=text],.formrow>input[type=date],.formrow>input[type=search]{flex:1 1 150px}
 .divider{height:1px;background:var(--border);margin:18px 0}
 .alert{padding:13px 16px;border-radius:10px;border-left:4px solid var(--accent);background:#123746;margin-bottom:17px}
 .alert.error{border-color:var(--red);background:#3b2b34}
@@ -729,7 +729,7 @@ class UI(BaseHTTPRequestHandler):
         if pages > 1:
             base_query = {"page": "events", "sport": sport, "category": category,
                           "date": day, "q": text}
-            body += '<nav aria-label="Event result pages" class="source-toolbar">'
+            body += '<div role="navigation" aria-label="Event result pages" class="source-toolbar">'
             if page_no > 1:
                 body += '<a href="?%s">Previous page</a>' % e(urllib.parse.urlencode(
                     dict(base_query, p=page_no - 1)))
@@ -738,7 +738,7 @@ class UI(BaseHTTPRequestHandler):
             if page_no < pages:
                 body += '<a href="?%s">Next page</a>' % e(urllib.parse.urlencode(
                     dict(base_query, p=page_no + 1)))
-            body += '</nav>'
+            body += '</div>'
         return body + '</section>'
 
     def guide(self):
