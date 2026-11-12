@@ -67,6 +67,30 @@ class CandidateIndexTests(unittest.TestCase):
         self.assertLess(match.call_count, 1800, "index must avoid event × programme scans")
         self.assertTrue(all(status == "single_guide_match" for status, _ in result.values()))
 
+    def test_indexed_lookup_agrees_with_original_all_rows_scan(self):
+        # Differential contract: every candidate passing the original
+        # conservative _matches predicate must remain discoverable.
+        starts = [BASE + timedelta(minutes=29 * i) for i in range(30)]
+        evs = [event("e%d" % i, stamp) for i, stamp in enumerate(starts)]
+        rows = [
+            programme(BASE + timedelta(minutes=17 * i - 180),
+                      BASE + timedelta(minutes=17 * i + 45 + (i % 12) * 10))
+            for i in range(90)
+        ]
+        rows.extend([
+            programme(BASE - timedelta(hours=25), BASE + timedelta(hours=30)),
+            programme(BASE, BASE + timedelta(hours=2), "Match Highlights"),
+        ])
+        guides = {"farleyflex": guide(rows)}
+        original_rows = linking._programme_index(
+            guides, min(starts) - timedelta(hours=1), max(starts) + timedelta(hours=1))
+        output = linking.broadcast_candidates(evs, guides, BASE)
+        for ev in evs:
+            expected = {row[5] for row in original_rows if linking._matches(ev, row)}
+            actual = {candidate["canonical_channel_id"]
+                      for candidate in output.get(ev["id"], ("none", []))[1]}
+            self.assertEqual(expected, actual, ev["id"])
+
     def test_only_distinct_source_families_count_as_multiple_guides(self):
         g = guide([programme(BASE - timedelta(minutes=10), BASE + timedelta(hours=2))])
         same_family = {"epgshare_uk": dict(g, source_id="epgshare_uk"),
