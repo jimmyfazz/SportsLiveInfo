@@ -617,13 +617,19 @@ class UI(BaseHTTPRequestHandler):
         if event.get("broadcast_verified"):
             return ", ".join(str(c.get("name", "")) for c in event.get("broadcasts", []) if isinstance(c, dict)) or "Verified"
         candidates = event.get("broadcast_candidates") or []
-        if candidates:
-            return "EPG match (unverified): " + ", ".join(c.get("channel_name", "") for c in candidates[:3])
+        if isinstance(candidates, list) and candidates:
+            readable = [str(c.get("channel_name", "")) for c in candidates[:3] if isinstance(c, dict)]
+            if readable:
+                return "EPG match (unverified): " + ", ".join(readable)
         return "Not verified"
 
     def _event_row(self, event, fmt="%d %b %H:%M %Z"):
         sources = event.get("sources") or [event.get("source_id", "")]
-        confidence = "%s · %s" % (event.get("fixture_confidence", "reported"), ", ".join(sources))
+        if not isinstance(sources, (list, tuple)):
+            sources = [sources]
+        confidence = "%s · %s" % (
+            event.get("fixture_confidence", "reported"),
+            ", ".join(str(source) for source in sources if source is not None))
         if event.get("start_conflict"):
             confidence += " · start time disagreement"
         state = LIVE_LABELS.get(event.get("live_state", ""), "")
@@ -648,7 +654,14 @@ class UI(BaseHTTPRequestHandler):
             body += '<section class="card" style="margin-bottom:14px"><h3>%s <span class="pill">%s</span></h3>' % (e(group["label"]), e(group["count"]))
             for category in group["categories"]:
                 body += '<p><strong>%s</strong> <small>(%s)</small></p>%s' % (e(category["label"]), e(category["count"]), table_head)
-                body += ''.join(self._event_row(ev, "%H:%M") for ev in category["events"][:60]) + '</table>'
+                body += ''.join(self._event_row(ev, "%H:%M") for ev in category["events"][:30]) + '</table>'
+                if len(category["events"]) > 30:
+                    params = urllib.parse.urlencode({
+                        "page": "events", "sport": group["sport"], "category": category["id"],
+                        "date": day.get("date", "")})
+                    body += ('<p class="help">Showing the first 30 of %d events. '
+                             '<a href="?%s">View all matching events</a></p>') % (
+                                 len(category["events"]), e(params))
             body += '</section>'
         return body
 
