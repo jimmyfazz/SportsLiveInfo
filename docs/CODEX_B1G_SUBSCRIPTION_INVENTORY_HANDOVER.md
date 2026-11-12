@@ -6,6 +6,10 @@
 
 All ten TVs are **strictly read-only** clients of the sports/EPG GitHub feed. **Do not build a per-device GitHub writer, GitHub token configuration, background playlist upload, channel-change push, hosted webhook, or automatic synchronisation of hidden preferences.** Hidden categories and channels are account-scoped locally in Android's `ChannelVisibilityStore`, which calls `EffectiveLiveCatalogue.project`; those choices must continue to govern EPG and Sports Today UI regardless of central superset contents. Optional channel discovery is a **manual owner-triggered safe export**, then **local HAOS import**. Consult [read-only B1G policy](B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md).
 
+## Required architecture — canonical identity + local matching
+
+**New mandatory specification:** [CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md](CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md). Do not implement EPG enrichment by downloading a broader XMLTV source alone. Create the shared `canonical_channel_id` registry (UK/France/other discovered channels, source-specific EPG IDs, verified aliases, region/variant/timeshift, provenance), and upgrade B1G's indexed channel resolver to use it, retaining account-local stream IDs, manual source selection, hidden categories/channels and per-device overlays. Verify event-to-programme-to-broadcaster separately. Include hard-negative regression tests for regional BBC, Sky News vs Sky Sports News, Sky Sports+ vs standard, TNT numbered channels, CANAL+/beIN/RMC editions and +1 feeds. No TV GitHub write permission; ambiguous matches remain unmatched. Benchmark precision with labelled real safe inventory and retain fallback to existing B1 EPG if central sources are missing.
+
 ## Goal
 
 Extend private `jimmyfazz/SportsLiveInfo` Home Assistant OS App to serve **UK, French and other countries actually available in B1G subscription(s)**, plus accurate sporting rail cards with real channel information. Keep TV-side playable-stream and per-account EPG mappings local. Do NOT centralise movie/series TMDB/OMDb/poster/hero APIs.
