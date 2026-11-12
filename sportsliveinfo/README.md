@@ -1,7 +1,10 @@
-# SportsLiveInfo for Home Assistant
+# SportsLiveInfo Home Assistant App
 
-An international television-EPG and sporting event collector for Home Assistant OS. Uses a private Home Assistant Ingress dashboard, persistent local cache, source-aware budgets, optional UK and French guide sources and football/F1 sporting adapters. Future B1G read-only feed publication is controlled by a public-data licence gate.
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](../docs/CURRENT_STATUS.md).
 
-**Version 0.1.0 is a working foundation, not yet a complete worldwide sports/EPG service.** See the Documentation tab for supported sources and limitations. No public access to Home Assistant is required.
+**v0.3.0 · experimental · reviewed 12 November 2026.** Private Ingress administration, persistent SQLite, bounded EPG/sport collection, coverage diagnostics, Live today, event filters, schedule and optional rights-gated `sli/1.0` publication are implemented in source.
 
-Development release v0.2.0: private EPG coverage analysis, separate sport events viewer, OpenLigaDB no-key adapter and one-source connection tests. Public guide republication and B1G consumption remain disabled until source rights and a real feed are verified.
+[SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the **private source/installation repository and stays private**. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the **public daily-feed repository**, not an App installer. Install the App directory through local private delivery as described in [installation and use](DOCS.md).
+
+The full source review attempted 86 Python 3.12 tests: 81 passed, two feed/test input errors and three localhost tests blocked by the runner. Actual Docker/HAOS deployment, live source accuracy/rights and B1G device acceptance remain unverified. The feed has no EPG programme rows; provider EPG remains primary. See [current status](../docs/CURRENT_STATUS.md) and [changelog](CHANGELOG.md).

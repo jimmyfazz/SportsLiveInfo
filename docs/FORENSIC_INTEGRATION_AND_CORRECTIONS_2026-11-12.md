@@ -1,5 +1,8 @@
 # All-branch forensic audit and Claude integration: SportsLiveInfo
 
+> **Historical audit / receipt — reviewed 12 November 2026.** Preserved against its stated original revision. Findings, branch/merge positions, provider claims and pass counts below are historical, not freshly verified current facts. Current source is v0.3.0; the combined review attempted 86 tests (81 passed, five errors, three of those environment-blocked). Use CURRENT_STATUS for resolved/remaining work; no new live source, licence or device verification occurred.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Date:** 12 November 2026. **Scope:** all GitHub branches, unmerged development, production Python modules, Home Assistant App packaging, JSON contracts, automated tests and owner requirements.
 **Status:** source-reviewed and corrected experimental implementation. No live provider, Docker build, HAOS install, client-device or licence-approval proof is implied.
 

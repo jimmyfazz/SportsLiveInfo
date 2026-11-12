@@ -1,5 +1,8 @@
 # SportsLiveInfo — forensic source, EPG, manifest, B1G and operator-experience audit
 
+> **Historical audit / receipt — reviewed 12 November 2026.** Preserved against its stated original revision. Findings, branch/merge positions, provider claims and pass counts below are historical, not freshly verified current facts. Current source is v0.3.0; the combined review attempted 86 tests (81 passed, five errors, three of those environment-blocked). Use CURRENT_STATUS for resolved/remaining work; no new live source, licence or device verification occurred.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Inspection date:** 12 November 2026  
 **Source baseline:** private \`jimmyfazz/SportsLiveInfo\` main \`7051240b557353211056b0afeb5007b5ca342185\`, prior to this report; public output repository \`jimmyfazz/LiveSports-EPG\` is a separate public README-only repository.  
 **Status labels:** SOURCE-VERIFIED = implementation present in inspected code; SPECIFIED = design documented only; CANDIDATE = provider named but live data/reuse rights not validated; FIX-IN-PR = code added on this audit branch; EXTERNAL-TEST = not yet reproduced on HAOS/Android. Do not equate an HTTP 200, a configured provider or a passing parser fixture with comprehensive coverage or a license to redistribute data.

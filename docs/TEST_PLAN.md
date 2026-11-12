@@ -1,5 +1,8 @@
 # Forensic quality, integration and acceptance tests
 
+> **Current documentation context — reviewed 12 November 2026.** This is a benchmark/acceptance plan for both international EPG (UK/France first) and sports; tests are in flat tests/test_*.py. Current receipt: 86 attempted, 81 passed, two feed/test input errors and three environment-blocked localhost tests.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 ## No invented coverage claims
 
 Before deployment, collect a reproducible, dated benchmark of **actual UK events** and channels. No provider is assumed complete or accurate from marketing claims alone. Record query date/time, source endpoint version, sample geography, competition, event ID, expected field values, discrepancy type, API response health, source licence status.

@@ -1,6 +1,10 @@
 > **SUPERSEDED AS PRIMARY DEPLOYMENT (12 November 2026):** The owner has selected **Home Assistant installed directly on an always-on personal-home mini PC with no Proxmox**. The primary plan is [HOME_ASSISTANT_BARE_METAL_PRIMARY.md](HOME_ASSISTANT_BARE_METAL_PRIMARY.md). The Proxmox and office-host options below are preserved only as fallbacks. Statements below describing Proxmox as the selected environment are historical and should not direct implementation.
 
 # Deployment decision — Home Assistant App or Proxmox LXC
+
+> **Superseded reference — reviewed 12 November 2026.** Preserved as an earlier proposal, not installation or current wire-format instructions. Use the master roadmap, implemented sli/1.0 contract and private local App operator guide. UK-only/optional-B1/Proxmox-primary assumptions are superseded.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Research date:** 2026-11-12. **Status:** architecture proposal only; no installation or integration implemented.
 
 ## User requirements, superseding earlier standalone-host assumptions
@@ -67,7 +71,7 @@ Suggested relative tree (not present yet):
 - Additional afternoon/early evening updates and more frequent event-day changes within quota to catch reschedules, tennis order-of-play and late announced boxing times. Example *starting point*: 04:15, 12:00, 17:00 and an event-triggered update when provider allowances permit.
 - B1G performs a first successful read near 05:00 UK time, again during day/after wake, with stagger+jitter between TV clients and ETag/If-None-Match where supported. On no network or missing fresh revision, show last-good snapshot clearly stale.
 - Include `schema_version`, `generated_at`, `valid_for_local_date`, `expires_at`, `revision`, `source_health`, `coverage_state`; B1G parses stable contract. Never expose GitHub API write token to TVs.
-- Private GitHub repo is for code; separate **public** Pages feed would require permission to redistribute each included datum and is **not yet created/approved**. If rights not cleared, publish only permitted fixture metadata or keep broadcaster matching inside B1 from user-authorised local EPG.
+- Private GitHub repo is for code; separate **public** Pages feed would require permission to redistribute each included datum and is **already `jimmyfazz/LiveSports-EPG` (PUBLIC), but live publication remains unapproved and was absent at the current review**. If rights not cleared, publish only permitted fixture metadata or keep broadcaster matching inside B1 from user-authorised local EPG.
 - GitHub Pages can deploy public static content on GitHub Free: https://docs.github.com/en/pages/setting-up-a-github-pages-site-with-jekyll . Watch cache/deployment propagation and avoid guarantees of instantaneous refresh.
 
 ## Failure boundaries

@@ -1,6 +1,17 @@
 # Free provider/source registry
 
+> **Current documentation context — reviewed 12 November 2026.** The current inventory is separated below from dated research. Registry entries and code budgets do not establish supplier availability, free-tier allowance or publication rights.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Research date:** 2026-11-12. **Status legend:** DOC-CONFIRMED = specific published claims verified against docs; CANDIDATE = must inspect exact endpoints/terms; RESTRICTED = restricted/unsuitable for production publication; NONE = no approved data ingest. These statuses are **not** successful integration tests.
+
+## Current implementation inventory (source checked 12 November 2026)
+
+`providers.SPORTS` contains 16 entries: Jolpica, OpenF1, OpenLigaDB, football-data.org, TheSportsDB, CricketData.org, and ten API-Sports adapters (football, rugby, basketball, hockey, NFL, baseball, handball, volleyball, AFL, MMA). All API-Sports entries share the saved `api_sports` key setting. Three optional owner-entered sports keys are API-Sports, football-data.org and CricketData.org. Jolpica is initially selected, new sources disabled; setup completion is required before collection.
+
+`providers.EPG` contains 27 candidate feeds across 15 source markets, all opt-in. `guide.py` has service tables for eight markets and 41 diagnostic lineup families. [Current status](CURRENT_STATUS.md) records measured code counts and validation; [source expansion report](SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md) records the original expansion. SportsAPI.app, SportAPI.ai, specialist Tennis API and Boxerbook are research candidates, not implemented adapters in this snapshot. Do not confuse SportsAPI.app with API-Sports.
+
+The tables below retain dated research claims. Endpoint operation, supplier quotas/free eligibility and legal terms were **not newly reverified** in this documentation-only update. DOC-CONFIRMED refers to the original research, not current deployment approval. Even a working source is not automatically licensed for public redistribution.
 
 ## Fixture / event data
 

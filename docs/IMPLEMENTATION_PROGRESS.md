@@ -1,7 +1,29 @@
 # SportsLiveInfo — implementation progress and agent handover
+
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Updated:** 12 November 2026  
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
-**Latest development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
+**Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
+
+## Current documentation reconciliation — 12 November 2026
+
+**Baseline:** `main` at `579541fa9a8f7f0108e454f654221c01049b6e76`; documentation branch `docs/current-documentation-20261112`. This baseline already contains the v0.3.0 expansion, forensic hardening, token onboarding and packaging source. Older branch-specific sections below are historical receipts, not unmerged-work or current-green claims.
+
+**Work:** reconcile every Markdown document, add [current status](CURRENT_STATUS.md) and [document index](DOCUMENTATION_INDEX.md), correct installation and repository roles, current source counts, current test receipt, implemented feed limits and next acceptance gates. Runtime source, schemas/fixtures, HA settings and visibility unchanged.
+
+**Verification:** complete source snapshot materialized from pinned GitHub files; Python 3.12.15 compilation passed. Full suite: **86 attempted, 81 passed, 5 errors**. Two rights-feed tests error on missing `category_id`; three HTTP tests are blocked by localhost bind permissions. This is a non-green baseline and is recorded rather than repaired in this docs-only task. The remaining 81 include golden fixture/hash tests. Exact names/results in CURRENT_STATUS.
+
+**Owner-confirmed roles:** SportsLiveInfo is PRIVATE source/installation; LiveSports-EPG is PUBLIC daily feed, checked README-only. No rights-approved feed or device deployment established. HA connector in this session exposed no Supervisor/App tools; no exposed SportsLiveInfo entity was found, which does not establish installation absence. Existing owner authenticated remote administration is separate from the project's no-new-public-App-endpoint requirement.
+
+**Coverage/rights:** source counts are 16 sports entries (10 API-Sports), 27 EPG candidates across 15 markets, 24 taxonomy sports / 127 competitions, service tables in 8 markets / 41 families. Live completeness and terms were not reverified. Local programme suggestions exist; public `epg_supplements` contract and TV rendering do not.
+
+**Next:** reconcile feed/test input errors, repeat suite with sockets and current CI, then actual private HAOS and live source/rights validation. **Rollback:** revert this docs commit; no runtime migration. **Review:** documentation PR required; no claim of approval/merge before GitHub confirms it.
+
+## Historical implementation receipts
+
+The following sections preserve what their original revisions reported. Statements such as “no public feed repo created”, “not executed” and “55 tests pass” must be read against that section's revision; current facts and results are above and in CURRENT_STATUS.
 
 ## Source expansion and sports sub-categories — v0.3.0, 12 November 2026
 
@@ -16,7 +38,7 @@
 
 **B1G feed (sli/1):** implemented and fixture-tested (`feed.py`, `schemas/`, `docs/FEED_CONTRACT_SLI_V1.md`); atomic Git Data API publisher, retention 10, preview, optional auto-publish. **Public repository `jimmyfazz/LiveSports-EPG` exists but no feed JSON has been published** (no configured publishing token or approved sources). B1G reader design: B1 repo `docs/SPORTSLIVEINFO_FEED_READER_IMPLEMENTATION_2026-11-12.md` (not implemented). Local tests: 55/55.
 
-**API keys needed:** three, all free and optional — API-Sports (covers all 11 API-Sports adapters), football-data.org, CricketData.org. Jolpica, OpenF1, OpenLigaDB, TheSportsDB (public key) and all EPG feeds need none. A GitHub token is only for optional publishing.
+**API keys needed:** three, all free and optional — API-Sports (shared by the 10 API-Sports adapter entries in the reviewed source), football-data.org, CricketData.org. Jolpica, OpenF1, OpenLigaDB, TheSportsDB (public key) and all EPG feeds need none. A GitHub token is only for optional publishing.
 
 ## New functional implementation — v0.2.0, 12 November 2026
 

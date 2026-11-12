@@ -1,5 +1,8 @@
 # Codex handover — discover actual B1G subscription channels and drive SportsLiveInfo EPG coverage
 
+> **Current documentation context — reviewed 12 November 2026.** This is an execution handover, not permission to upload real accounts. No private subscription inventory was obtained in this review; any future export/import must remain owner-triggered and local.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Priority: HIGH.** This is an actionable instruction set for Codex operating on the owner's **local terminal**. Do not confuse repo code inspection with live authenticated subscription inventory. No account credentials, playlist URLs or tokens may be committed to GitHub.
 
 ## Confirmed owner decision — no TV write operations

@@ -1,7 +1,28 @@
 # Build backlog — PR-sized independent tasks for Codex and Claude
-**Issued 12 November 2026**. This is a **dependency-ordered, auditable backlog**; all items start TODO. Evidence must be checked in before any change to DONE. Required for BOTH comprehensive EPG and sports event products.
+
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
+**Issued 12 November 2026**. This is a **dependency-ordered, auditable backlog**; packages below are acceptance requirements; current implementation is mixed and none should be marked fully accepted without its evidence. Evidence must be checked in before any change to DONE. Required for BOTH comprehensive EPG and sports event products.
 
 Legend: `[C]` Codex lead; `[L]` Claude Code lead; `[B]` both review; `[O]` owner input required for secrets/subscription/rights; `BLOCKED` cannot legitimately finish without owner input.
+
+## Current package disposition — 12 November 2026
+
+| Packages | Current implementation / remaining gate |
+|---|---|
+| CORE-001–006 | App entrypoint, flat offline tests/CI, six feed schemas, SQLite, daily quotas and source-level publication checks exist. Complete packaging CLI, per-field rights, migration/restore and performance matrices remain partial. |
+| EPG-001–005 | Streaming parser, source registry, partial identity, coverage and conservative local overlay evaluator exist. Full specified corpus, quality proof and B1 integration remain open. |
+| EPG-006–007 | 27 source candidates / 15 markets; live validation, permissions and inventory-driven coverage unverified. |
+| SPORT-001–003, 005–006 | 16 adapter entries and taxonomy/fusion exist; richer hierarchy, omissions, real competition recall and independent acceptance incomplete. |
+| SPORT-004 | SportsAPI.app / SportAPI.ai remain research-only; current API-Sports adapters are a different supplier. |
+| LINK-001–003 | Provisional candidates and export evidence gate exist; reviewed verification, EPG-only event handling and benchmarks incomplete. |
+| HA-001–004 | Package, setup/Save/Test, schedule, diagnostics and token GET checks exist; actual HAOS, full wizard acceptance and safe inventory import incomplete. |
+| HA-005–006 | HA persistent notifications and real-host resource/restore acceptance outstanding. |
+| PUB-001 | `sli/1.0` builder/atomic writer/preview exist; target is PUBLIC `jimmyfazz/LiveSports-EPG`, checked README-only. Live rights-approved publication/deployment verification outstanding. |
+| B1-001–005 / RELEASE | Contracts and handover only in this source review; Android and one/ten-TV acceptance not verified. |
+
+**Immediate validation blocker:** 86 tests attempted on Python 3.12; 81 passed, two rights-feed tests error on missing `category_id`, three HTTP tests cannot bind localhost in this runner. See [exact receipt and next steps](CURRENT_STATUS.md). Historic all-TODO and old pass counts do not describe this baseline. Source/installation remains PRIVATE; daily feed PUBLIC.
 
 ## 0 — prerequisite contract, package, dev tooling (merge in order)
 
@@ -48,7 +69,7 @@ Legend: `[C]` Codex lead; `[L]` Claude Code lead; `[B]` both review; `[O]` owner
 
 ## 4 — distribution and B1 integration
 
-- **PUB-001 [C,L,O]** Licence-gated GitHub writer and immutable content-hashed assets, manifest pointer, deploy verification/rollback, token scoping, source of truth. **BLOCKED until owner chooses feed target and permits publication rights.**
+- **PUB-001 [C,L,O]** Licence-gated GitHub writer and immutable content-hashed assets, manifest pointer, deploy verification/rollback, token scoping, source of truth. **Live publication blocked pending documented source rights and owner authorization; the feed target is already `jimmyfazz/LiveSports-EPG` (PUBLIC).**
 - **B1-001 [L,C]** Read-only Android manifest fetch, schema validation, one cached last-good revision, independent sports and EPG region segments, fallback if CDN stale. Acceptance: no GitHub/API-sports keys on TV; local network only for its IPTV account.
 - **B1-002 [L,C]** Channel identity: exact provider/source ID→verified alias→unique strict name→review suggestion; keep manual overrides, account visible projection and hidden category/channel choice. Acceptance: 0 wrong auto mappings in hard-negative tests.
 - **B1-003 [L,C]** Guide integration of safe EPG enrichment, full multi-day programmes, per-country source priority and cache; no playback/EPG regressions. Acceptance: actual channel shows correct programme, not just sports card.
