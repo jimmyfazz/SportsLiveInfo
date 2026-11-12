@@ -17,6 +17,7 @@ EPG = {
 }
 SPORTS = {
     "jolpica": ("Formula 1 · Jolpica", "https://api.jolpi.ca/ergast/f1/current.json", None, 6),
+    "openligadb": ("Football · OpenLigaDB German Bundesliga", "https://api.openligadb.de/getmatchdata/bl1", None, 4),
     "football_data": ("Football · football-data.org", "https://api.football-data.org/v4/matches", "football_data", 45),
     "api_sports": ("Football · API-Sports", "https://v3.football.api-sports.io/fixtures", "api_sports", 80),
 }
@@ -116,7 +117,10 @@ def decode_xmltv(raw, source, max_expanded=65_000_000, max_programmes=100_000):
 
 def f1_events(data):
     obj = json.loads(data)
-    rows = obj.get("MRData", {}).get("RaceTable", {}).get("Races", [])
+    table = obj.get("MRData", {}).get("RaceTable", {})
+    if not isinstance(table.get("Races"), list):
+        raise ValueError("Jolpica F1 races payload missing or invalid")
+    rows = table["Races"]
     events = []
     for race in rows:
         try:
@@ -124,7 +128,7 @@ def f1_events(data):
             location = circuit.get("Location", {})
             season, round_ = str(race["season"]), str(race["round"])
             sessions = [("race", race)]
-            sessions.extend((key, race[key]) for key in ("FirstPractice", "SecondPractice", "ThirdPractice", "Qualifying", "Sprint", "SprintQualifying") if key in race)
+            sessions.extend((key, race[key]) for key in ("FirstPractice", "SecondPractice", "ThirdPractice", "Qualifying", "Sprint", "SprintQualifying", "SprintShootout") if key in race)
             for kind, entry in sessions:
                 if not entry.get("date") or not entry.get("time"):
                     continue
@@ -139,7 +143,10 @@ def f1_events(data):
 
 
 def football_data_events(data):
-    matches = json.loads(data).get("matches", [])
+    payload = json.loads(data)
+    if not isinstance(payload.get("matches"), list):
+        raise ValueError("football-data.org matches payload missing or invalid")
+    matches = payload["matches"]
     events = []
     for m in matches:
         try:
@@ -159,7 +166,15 @@ def football_data_events(data):
 
 
 def api_sports_events(data):
-    rows = json.loads(data).get("response", [])
+    payload = json.loads(data)
+    if payload.get("errors"):
+        raise ValueError("API-Sports reported an upstream data error")
+    paging = payload.get("paging") or {}
+    if int(paging.get("total", 1)) > int(paging.get("current", 1)):
+        raise ValueError("API-Sports fixture page incomplete; keep previous last-good")
+    rows = payload.get("response")
+    if not isinstance(rows, list):
+        raise ValueError("API-Sports fixtures payload missing or invalid")
     events = []
     for row in rows:
         try:
@@ -173,5 +188,45 @@ def api_sports_events(data):
                            "status": fixture.get("status", {}).get("short", "NS"), "venue": (fixture.get("venue") or {}).get("name") or "",
                            "source_id": "api_sports", "broadcasts": [], "broadcast_verified": False})
         except (ValueError, KeyError, TypeError):
+            continue
+    return events
+
+
+def openligadb_events(data):
+    """Parse community-maintained Bundesliga match records (no supplied secret).
+
+    Prefer the unambiguous UTC timestamp. Never infer dates from a naïve
+    local-time string or fabricate teams or television carriage.
+    """
+    rows = json.loads(data)
+    if not isinstance(rows, list):
+        raise ValueError("OpenLigaDB returned an unexpected response shape")
+    events = []
+    for m in rows:
+        if not isinstance(m, dict):
+            continue
+        try:
+            raw_time = m.get("matchDateTimeUTC")
+            if not raw_time or not m.get("matchID"):
+                continue
+            when = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+            if when.tzinfo is None:
+                continue
+            when = when.astimezone(timezone.utc)
+            home = m["team1"]["teamName"]
+            away = m["team2"]["teamName"]
+            if not home or not away:
+                continue
+            events.append({
+                "id": "openligadb:%s" % m["matchID"],
+                "sport": "football", "competition": m.get("leagueName") or "German Bundesliga",
+                "event_type": "match", "title": f"{home} v {away}",
+                "participants": [home, away],
+                "start_utc": when.isoformat(timespec="seconds"), "start_precision": "scheduled",
+                "status": "finished" if m.get("matchIsFinished") else "scheduled",
+                "venue": (m.get("location") or {}).get("locationStadium") or "",
+                "source_id": "openligadb", "broadcasts": [], "broadcast_verified": False,
+            })
+        except (TypeError, KeyError, ValueError):
             continue
     return events

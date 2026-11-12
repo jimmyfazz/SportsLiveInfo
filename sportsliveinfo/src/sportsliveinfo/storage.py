@@ -9,7 +9,7 @@ from pathlib import Path
 
 DEFAULT = {
     "setup_complete": False,
-    "sports": {"jolpica": True, "football_data": False, "api_sports": False},
+    "sports": {"jolpica": True, "openligadb": False, "football_data": False, "api_sports": False},
     "epg": {"farleyflex": False, "fr_programmetv": False, "fr_telerama": False, "fr_xmltv": False},
     "keys": {},
     "schedule": ["04:00", "12:00", "17:00"],
@@ -65,7 +65,17 @@ class Store:
             db.commit()
 
     def config(self):
-        return self._get("config") or json.loads(json.dumps(DEFAULT))
+        # Carry new source defaults into pre-existing v0.1 installations; do not
+        # re-enable or overwrite saved provider choices or credentials.
+        stored = self._get("config") or {}
+        config = json.loads(json.dumps(DEFAULT))
+        for key, value in stored.items():
+            if key in config:
+                if isinstance(config[key], dict) and isinstance(value, dict):
+                    config[key].update(value)
+                else:
+                    config[key] = value
+        return config
 
     def configure(self, update):
         """Update selected top-level values; nested dict updates retain other provider keys."""

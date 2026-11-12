@@ -127,6 +127,14 @@ class UI(BaseHTTPRequestHandler):
                     raise ValueError("Unknown EPG source")
                 self.store.configure({"epg": {name: value("enabled") == "on"}})
                 page = "sources"
+            elif action == "test_source":
+                kind, name = value("kind"), value("provider")
+                if kind not in ("sports", "epg") or name not in (providers.SPORTS if kind == "sports" else providers.EPG):
+                    raise ValueError("Unknown test source")
+                # One source only. No credentials or untrusted URLs enter logs.
+                status = self.engine.test_source(kind, name)
+                page = "sources"
+                message = status
             elif action == "github":
                 owner, repository, branch = value("owner"), value("repository"), value("branch")
                 if not all(re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", k) for k in (owner, repository, branch)):
@@ -159,9 +167,9 @@ class UI(BaseHTTPRequestHandler):
             elif action == "collect":
                 if not self.store.config()["setup_complete"]:
                     raise ValueError("Finish initial setup first")
-                self.engine.start_collection()
+                started = self.engine.start_collection()
                 page = "dashboard"
-                message = "Refresh started. Check status and source history shortly"
+                message = "Refresh started. Check source history shortly" if started else "A refresh is already running"
             elif action == "publish":
                 self.engine.publish()
                 page = "publishing"
@@ -181,7 +189,7 @@ class UI(BaseHTTPRequestHandler):
         return '<form method="post"><input type="hidden" name="csrf" value="%s"><input type="hidden" name="action" value="%s">%s%s</form>' % (e(self.server.csrf), e(action), extra, inner)
 
     def render(self, page, config, notice):
-        tabs = [("dashboard", "Overview"), ("sources", "Sources & API keys"), ("scheduler", "Scheduler"), ("publishing", "Publishing"), ("health", "Diagnostics")]
+        tabs = [("dashboard", "Overview"), ("sources", "Sources & API keys"), ("events", "Sports events"), ("guide", "EPG coverage"), ("scheduler", "Scheduler"), ("publishing", "Publishing"), ("health", "Diagnostics")]
         head = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SportsLiveInfo</title><style>%s</style></head><body><main>' % CSS
         head += '<header><img src="icon.png" alt="SportsLiveInfo"><div><h1>SportsLiveInfo</h1><div class="sub">International EPG intelligence · Live sporting fixtures</div></div></header>'
         if not config["setup_complete"]:
@@ -191,6 +199,10 @@ class UI(BaseHTTPRequestHandler):
         head += '<nav>' + ''.join('<a class="%s" href="?page=%s">%s</a>' % ("active" if page == key else "", e(key), e(label)) for key, label in tabs) + '</nav>'
         if page == "sources":
             body = self.sources(config)
+        elif page == "events":
+            body = self.events()
+        elif page == "guide":
+            body = self.guide()
         elif page == "scheduler":
             body = self.schedule(config)
         elif page == "publishing":
@@ -202,7 +214,7 @@ class UI(BaseHTTPRequestHandler):
         if not config["setup_complete"]:
             body += '<section class="card" style="margin-top:18px"><h2>Complete first-run setup</h2><p>You can return later to change individual suppliers and the schedule. The wizard will not show again automatically after finishing.</p>'
             body += self._form("finish", '<button type="submit">Finish setup</button>') + '</section>'
-        return head + body + '<div class="footer">0.1.0 · Local-first operation · No public access to Home Assistant · No TV write access to GitHub</div></main></body></html>'
+        return head + body + '<div class="footer">0.2.0 · Local-first operation · No public access to Home Assistant · No TV write access to GitHub</div></main></body></html>'
 
     def dashboard(self, config):
         sport = self.store.snapshot("sports")
@@ -236,12 +248,79 @@ class UI(BaseHTTPRequestHandler):
             else:
                 content += '<p class="ok">No API key required · conservative daily budget: %d calls</p>' % limit
             content += '<button type="submit">Save this provider</button>'
-            body += '<section class="card"><h3>%s</h3><p class="help">Endpoint: %s</p>%s</section>' % (e(label), e(urllib.parse.urlsplit(url).hostname), self._form("sports", content))
+            test_button = self._form("test_source", '<button class="secondary" type="submit">Test connection (uses 1 quota call)</button>',
+                '<input type="hidden" name="kind" value="sports"><input type="hidden" name="provider" value="%s">' % e(name))
+            body += '<section class="card"><h3>%s</h3><p class="help">Endpoint: %s</p>%s%s</section>' % (
+                e(label), e(urllib.parse.urlsplit(url).hostname), self._form("sports", content), test_button)
         body += '</div><h2 style="margin-top:28px">International television EPG sources</h2><p>Optional, private guide collection only. Public re-publication of third-party programme text is DISABLED until verified rights are available. Source quality, geography and licence restrictions vary.</p><div class="grid">'
         for name, (label, url) in providers.EPG.items():
             content = '<input type="hidden" name="provider" value="%s"><label><input type="checkbox" name="enabled" value="on" %s> Enable private guide collection</label><p class="warn help">Rights for public redistribution not established</p><button type="submit">Save this source</button>' % (e(name), "checked" if config["epg"].get(name) else "")
-            body += '<section class="card"><h3>%s</h3><p class="help">Source: %s</p>%s</section>' % (e(label), e(urllib.parse.urlsplit(url).hostname), self._form("epg", content))
+            test_button = self._form("test_source", '<button class="secondary" type="submit">Test EPG (downloads guide)</button>',
+                '<input type="hidden" name="kind" value="epg"><input type="hidden" name="provider" value="%s">' % e(name))
+            body += '<section class="card"><h3>%s</h3><p class="help">Source: %s</p>%s%s</section>' % (
+                e(label), e(urllib.parse.urlsplit(url).hostname), self._form("epg", content), test_button)
         return body + '</div>'
+
+    def events(self):
+        snapshot = self.store.snapshot("sports")
+        data = snapshot["data"] if snapshot else {}
+        events = data.get("events", [])
+        body = '<h2>Sporting events</h2><p>Independent sports fixtures, races and sessions, normally the next seven UK days. This view does not claim a broadcaster unless a separately verified source has supplied one.</p>'
+        body += '<section class="card"><h3>%s collected events</h3><p class="help">%s · Data is private on this Home Assistant instance.</p>' % (
+            e(len(events)), e(snapshot["updated_at"] if snapshot else "No sporting snapshot yet"))
+        body += '<table><tr><th>UK start time</th><th>Sport and competition</th><th>Event</th><th>UK channel</th></tr>'
+        count = 0
+        for event in events:
+            if count >= 100:
+                break
+            try:
+                when = datetime.fromisoformat(event["start_utc"]).astimezone(ZoneInfo("Europe/London"))
+                when_text = when.strftime("%d %b %H:%M %Z")
+            except (ValueError, KeyError, TypeError):
+                when_text = "Unconfirmed"
+            verified = event.get("broadcast_verified", False)
+            channels = event.get("broadcasts", []) if verified else []
+            channel = ", ".join(str(c.get("name", "")) for c in channels if isinstance(c, dict)) or "Not verified"
+            body += '<tr><td>%s</td><td>%s<br><small>%s</small></td><td>%s</td><td>%s</td></tr>' % (
+                e(when_text), e(event.get("sport", "")), e(event.get("competition", "")),
+                e(event.get("title", "")), e(channel))
+            count += 1
+        body += '</table>'
+        if len(events) > 100:
+            body += '<p class="help">Showing first 100 events; %s total in snapshot.</p>' % e(len(events))
+        if not events:
+            body += '<p>No events have been collected yet. Configure sources and run a refresh.</p>'
+        return body + '</section>'
+
+    def guide(self):
+        body = '<h2>International EPG coverage</h2><p>Private UK and French source analysis: distinguish a real 24-hour programme schedule from a feed that merely responds successfully. Canonical IDs are conservative hints; actual IPTV stream mapping remains local to B1G.</p>'
+        any_source = False
+        for name, (label, _) in providers.EPG.items():
+            snapshot = self.store.snapshot("epg-quality:" + name)
+            if not snapshot:
+                continue
+            any_source = True
+            q = snapshot["data"]
+            total = int(q.get("channels", 0))
+            full = q.get("full_coverage_channels", {})
+            body += '<section class="card" style="margin-bottom:14px"><h3>%s (%s)</h3>' % (e(label), e(q.get("country", "unknown")))
+            body += '<p class="sub">Last analysis: %s · %s channels · %s valid programmes · %s generic titles · %s invalid programmes</p>' % (
+                e(q.get("analysed_at")), e(total), e(q.get("valid_programmes", 0)),
+                e(q.get("generic_programmes", 0)), e(q.get("invalid_programmes", 0)))
+            body += '<div class="grid">'
+            for horizon in ("24h", "72h", "168h"):
+                body += '<div><div class="metric">%s / %s</div><div class="help">Channels with a full %s guide</div></div>' % (
+                    e(full.get(horizon, 0)), e(total), e(horizon))
+            body += '</div><div class="divider"></div><h3>Channels needing attention (worst 24h gaps)</h3>'
+            body += '<table><tr><th>Channel</th><th>Recognised service</th><th>24h programme coverage</th></tr>'
+            for row in q.get("channels_needing_attention", []):
+                body += '<tr><td>%s</td><td>%s</td><td>%s h</td></tr>' % (
+                    e(row.get("name", "")), e(row.get("canonical_id") or "Needs matching"),
+                    e(row.get("coverage_hours", {}).get("24h", 0)))
+            body += '</table><p class="help">Programme text and channel identifiers remain private. Guide source redistribution is disabled until independently licensed.</p></section>'
+        if not any_source:
+            body += '<section class="card"><p>No successful EPG import yet. Enable an approved UK or French guide in Sources and run a refresh.</p></section>'
+        return body
 
     def schedule(self, config):
         times = ", ".join(config["schedule"])
