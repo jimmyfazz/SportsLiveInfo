@@ -221,6 +221,7 @@ class UI(BaseHTTPRequestHandler):
         action = value("action")
         page = "dashboard" if self.store.config()["setup_complete"] else "sources"
         message = "Settings saved"
+        is_error = False
         try:
             if action == "sports":
                 name = value("provider")
@@ -258,6 +259,7 @@ class UI(BaseHTTPRequestHandler):
                 status = self.engine.test_source(kind, name)
                 page = "sources"
                 message = status
+                is_error = "unsuccessful" in status.casefold()
             elif action == "github":
                 owner, repository, branch = value("owner"), value("repository"), value("branch")
                 if not all(re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", k) for k in (owner, repository, branch)):
@@ -312,7 +314,10 @@ class UI(BaseHTTPRequestHandler):
         except (ValueError, RuntimeError) as exc:
             # Render only own controlled errors, not upstream URLs or secret-bearing exceptions.
             message = str(exc)[:140]
-        url = "?page=%s&message=%s" % (urllib.parse.quote(page), urllib.parse.quote(message))
+            is_error = True
+        url = "?page=%s&message=%s&level=%s" % (
+            urllib.parse.quote(page), urllib.parse.quote(message),
+            "error" if is_error else "info")
         self.send_response(303)
         self.send_header("Location", url)
         self.send_header("Cache-Control", "no-store")
@@ -342,11 +347,19 @@ class UI(BaseHTTPRequestHandler):
                      "Refreshing sources" if collection_active else ("Configured" if config["setup_complete"] else "Setup required"),
                      sports_enabled, epg_enabled)
         if not config["setup_complete"]:
-            head += ('<div class="alert" role="status">First-run setup: select sources, save optional API keys, '
-                     'test each provider and review the schedule. Publishing remains disabled unless '
-                     'you explicitly enable it and approve redistribution rights.</div>')
+            head += ('<section class="card" aria-label="First-run setup" style="margin-bottom:18px">'
+                     '<div class="page-heading"><div><h2>First-run setup</h2>'
+                     '<p>Three short stages. You can return to any stage later, and publishing is optional.</p>'
+                     '</div><span class="state warn">Setup incomplete</span></div>'
+                     '<div class="action-row">'
+                     '<a class="button-link secondary" href="?page=sources">1 · Select and test sources</a>'
+                     '<a class="button-link secondary" href="?page=scheduler">2 · Choose refresh times</a>'
+                     '<a class="button-link secondary" href="?page=publishing">3 · Optional GitHub token</a>'
+                     '</div><p class="help">Use Finish setup on the current page when ready. '
+                     'Credentials remain in the Home Assistant App private data volume.</p></section>')
         if notice:
-            head += '<div class="alert" role="status" aria-live="polite">%s</div>' % e(notice)
+            head += '<div class="alert %s" role="status" aria-live="polite">%s</div>' % (
+                "error" if query.get("level") == "error" else "", e(notice))
         head += ('<nav aria-label="Main navigation">' +
                  ''.join('<a %s href="?page=%s">%s</a>' % (
                      'class="active" aria-current="page"' if page == key else '',
