@@ -1,6 +1,6 @@
 # Current implementation and verification status
 
-**Reviewed 12 November 2026. Source baseline:** `579541fa9a8f7f0108e454f654221c01049b6e76` on `main`. This documentation revision changes no application code, schemas, fixtures, Home Assistant settings or repository visibility.
+**Reviewed 12 November 2026. Source baseline:** `579541fa9a8f7f0108e454f654221c01049b6e76` on `main`. This revision updates documentation and deterministic test infrastructure/fixtures; it changes no production application code, schemas, golden fixtures, Home Assistant settings or repository visibility.
 
 This is the current status reference. The master roadmap governs required scope; `FEED_CONTRACT_SLI_V1.md` and `schemas/` describe the implemented wire format. Dated audits retain their original baselines and findings; they are not current deployment receipts. See [document index](DOCUMENTATION_INDEX.md) for each document's role.
 
@@ -50,19 +50,15 @@ python3.12 -m compileall -q sportsliveinfo/src
 PYTHONPATH=sportsliveinfo/src python3.12 -m unittest discover -s tests -v
 ```
 
-**macOS, Python 3.12.15, 12 November 2026:** compilation passed; **86 tests attempted, 81 passed, 5 errors, 0 assertion failures**. This is not a green suite.
+**macOS, Python 3.12.15, 12 November 2026:** compilation passed; **88 tests passed**. The two feed-rights test inputs now go through the production taxonomy classifier and use a pinned clock. Three ingress tests share a transport helper: they use real loopback HTTP when permitted and dispatch through the real HTTP handler/parser using in-memory streams when the runner denies socket binds. Two additional tests cover the forced in-memory CSRF and origin behavior.
 
-| Tests | Observed result | Follow-up |
-|---|---|---|
-| `test_boolean_only_does_not_authorise_a_broadcast_claim`; `test_fused_event_mixed_with_unapproved_provider_is_not_public` in `test_forensic_hardening.PublicFeedRightsTests` | `KeyError: 'category_id'` from `feed.build_feed` Today grouping | Reconcile minimal test events and builder input requirements. Do not mark these rights regressions passed. Tests use the current date, so reproduce with a pinned clock as well. |
-| `test_shared_api_sports_key_and_source_options`; `test_today_and_filtered_events_pages` in `test_expansion.IngressExpansionTests`; `test_ingress_pages_and_form_csrf` in `test_progression.EngineProgressTests` | Localhost bind denied with `PermissionError: [Errno 1] Operation not permitted` | Rerun in an environment allowing loopback sockets; these are environment-blocked, not proven App failures or passes. |
-| Other 81 tests | Passed, including golden feed/hash fixtures, parser, storage, packaging and token onboarding checks | Offline checks do not establish live provider quality, HAOS operation or TV acceptance. |
+This runner denied loopback binds, so this run does **not** verify the real socket transport, actual Home Assistant Supervisor/Ingress behavior, Docker build, live provider quality/rights, or TV acceptance. Golden feed/hash fixtures passed unchanged. GitHub Actions evidence must be read separately from this local receipt; the previous run had no readable step logs.
 
-Historical 7-, 19-, 43- and 55-test receipts apply only to their recorded revisions. Do not use them as the current combined-suite result. Recent GitHub Actions runs inspected during this review were failures; no green baseline CI claim is made.
+Historical 7-, 19-, 43-, 55- and 86-test receipts apply only to their recorded revisions. Do not use them as the current suite result. No new live source, licence or device verification occurred.
 
 ## Next work and release gates
 
-1. Resolve the two feed/test input errors and rerun all 86 tests on Python 3.12 with loopback available; obtain readable CI evidence.
+1. Confirm readable GitHub Actions evidence for this revision and exercise the real loopback HTTP transport in a runner that permits socket binds.
 2. Build/install the private App on the real HAOS host, verify Ingress, settings, restart, restore and household resource impact.
 3. Independently validate selected EPG and sports endpoints, rights, quota resets, completeness and source lineage. Record measured coverage separately for both products.
 4. Finish approved broadcast evidence and the versioned, rights-cleared programme-supplement contract; preserve provider EPG and local manual/hidden choices.

@@ -40,7 +40,7 @@ Sports source tests make one quota-accounted request. EPG tests download and par
 
 The current `sli/1.0` output has events, taxonomy, channel/guide metadata, Today grouping and health, **no EPG programme rows**. The local suggestion evaluator in `supplement.py` does not implement a public programme supplement or a B1G Guide reader. Keep provider EPG primary and preserve local account, manual mapping and hidden choices. Provisional candidates are not verified broadcasts or playable streams.
 
-The review ran 86 Python 3.12 tests: **81 passed, two feed/test input errors, three localhost tests blocked by the runner**. No actual HAOS install, Docker build, live provider benchmark, source redistribution approval, public feed deployment or B1G one/ten-TV acceptance was established. Persistent Home Assistant notifications, monthly/provider-timezone budgets, ETag/304 and full Retry-After/backoff remain outstanding. See [current status](../docs/CURRENT_STATUS.md) for exact errors and release gates.
+The current Python 3.12.15 suite passes all 88 tests. HTTP-handler tests use an in-memory transport in this socket-restricted runner; real loopback is not verified. No actual HAOS install, Docker build, live provider benchmark, source redistribution approval, public feed deployment or B1G one/ten-TV acceptance was established. Persistent Home Assistant notifications, monthly/provider-timezone budgets, ETag/304 and full Retry-After/backoff remain outstanding. See [current status](../docs/CURRENT_STATUS.md) for exact errors and release gates.
 
 ## GitHub token: first-time setup (public read-only feed destination)
 

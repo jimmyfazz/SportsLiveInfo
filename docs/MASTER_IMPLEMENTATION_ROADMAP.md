@@ -6,7 +6,7 @@
 **Version:** plan 1.0, dated 12 November 2026  
 **Priority:** NORMATIVE BUILD PLAN. Supersedes earlier documents where they treat UK-only EPG, optional B1 consumption, or future-proofing of sports coverage as a lesser priority.  
 **Owner-selected deployment:** private HAOS App on a directly installed, always-on home mini PC; no Proxmox needed. Ten B1G televisions use rights-cleared read-only GitHub-hosted snapshots. No inbound home-network ports.  
-**Implementation status (reviewed 12 Nov 2026):** Experimental v0.3.0 App source, expanded EPG/sports candidates, UI, SQLite, scheduler and sli/1.0 writer exist. See [current status](CURRENT_STATUS.md): 86 tests attempted, 81 passed, two feed/test input errors and three environment-blocked localhost tests. HAOS/Docker acceptance, live accuracy/rights and B1G integration remain unverified. The phases below are requirements and acceptance gates, not a claim that the repository is empty or all phases passed.
+**Implementation status (reviewed 12 Nov 2026):** Experimental v0.3.0 App source, expanded EPG/sports candidates, UI, SQLite, scheduler and sli/1.0 writer exist. See [current status](CURRENT_STATUS.md): 88 offline tests passed on Python 3.12.15; HTTP handler tests use an in-memory transport where loopback binds are denied. HAOS/Docker acceptance, live accuracy/rights and B1G integration remain unverified. The phases below are requirements and acceptance gates, not a claim that the repository is empty or all phases passed.
 
 ## 0. Non-negotiable product definition
 

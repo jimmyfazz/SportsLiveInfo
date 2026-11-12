@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from sportsliveinfo import feed, providers
+from sportsliveinfo import feed, providers, taxonomy
 from sportsliveinfo.engine import Engine
 from sportsliveinfo.storage import Store
 
@@ -181,18 +181,26 @@ class XmltvAndNetworkTests(unittest.TestCase):
 
 class PublicFeedRightsTests(unittest.TestCase):
     def setUp(self):
+        self.now = datetime(2026, 11, 14, 14, tzinfo=timezone.utc)
         self.temp = tempfile.TemporaryDirectory()
         self.store = Store(Path(self.temp.name) / "feed.sqlite3")
         self.store.configure({"publication_approvals": ["jolpica"]})
+
+    def fixture(self, event_id, sources, **extra):
+        # The aggregate cache contains classified records, not raw adapter rows.
+        return taxonomy.classify(item(
+            event_id, "jolpica", sources, title="Alpha v Beta",
+            start_utc=(self.now + timedelta(hours=4)).isoformat(), **extra,
+        ))
 
     def tearDown(self):
         self.temp.cleanup()
 
     def test_fused_event_mixed_with_unapproved_provider_is_not_public(self):
-        mixed = item("fused:1", "jolpica", ["jolpica", "openf1"])
-        clean = item("clean:1", "jolpica", ["jolpica"])
+        mixed = self.fixture("fused:1", ["jolpica", "openf1"])
+        clean = self.fixture("clean:1", ["jolpica"])
         self.store.save_snapshot("sports", {"events": [mixed, clean]})
-        manifest, files = feed.build_feed(self.store)
+        manifest, files = feed.build_feed(self.store, now=self.now)
         rows = []
         for asset in manifest["assets"]:
             if asset["kind"].startswith("events:"):
@@ -201,10 +209,10 @@ class PublicFeedRightsTests(unittest.TestCase):
         self.assertIn("openf1", manifest["rights"]["events"]["omitted_unapproved_sources"])
 
     def test_boolean_only_does_not_authorise_a_broadcast_claim(self):
-        event = item("clean:2", "jolpica", ["jolpica"], broadcast_verified=True,
+        event = self.fixture("clean:2", ["jolpica"], broadcast_verified=True,
                      broadcasts=[{"canonical_channel_id": "gb.sky.sports.main_event"}])
         self.store.save_snapshot("sports", {"events": [event]})
-        manifest, files = feed.build_feed(self.store)
+        manifest, files = feed.build_feed(self.store, now=self.now)
         rows = [e for a in manifest["assets"] if a["kind"].startswith("events:")
                 for e in json.loads(files[a["path"]])["events"]]
         self.assertFalse(rows[0]["broadcast_verified"])

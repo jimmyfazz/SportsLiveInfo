@@ -1,19 +1,18 @@
 """v0.3 source expansion, sports taxonomy, fusion, today view and broadcast candidates."""
 import json
 import tempfile
-import threading
 import unittest
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
+
+from ingress_test_support import IngressTestClient
 
 from sportsliveinfo import linking, providers, taxonomy
 from sportsliveinfo.engine import Engine
 from sportsliveinfo.guide import analyze_guide, canonical_channel, channel_families, normalized_name
-from sportsliveinfo.server import UI
 from sportsliveinfo.storage import Store
 
 NOW = datetime(2026, 11, 14, 14, 0, tzinfo=timezone.utc)  # 14:00 GMT, a Saturday
@@ -368,25 +367,20 @@ class IngressExpansionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.store = Store(Path(self.temp.name) / "state.sqlite3")
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), UI)
-        self.server.store, self.server.engine, self.server.csrf = self.store, Engine(self.store), "csrf-test"
-        self.worker = threading.Thread(target=self.server.serve_forever, daemon=True)
-        self.worker.start()
-        self.base = "http://127.0.0.1:%d/" % self.server.server_address[1]
+        self.client = IngressTestClient(self.store, "csrf-test")
+        self.base = self.client.base
 
     def tearDown(self):
-        self.server.shutdown()
-        self.server.server_close()
-        self.worker.join(timeout=3)
+        self.client.close()
         self.temp.cleanup()
 
     def get(self, query):
-        with urllib.request.urlopen(self.base + query, timeout=3) as response:
+        with self.client.open(self.base + query, timeout=3) as response:
             return response.read().decode()
 
     def post(self, fields):
         body = urllib.parse.urlencode(dict(fields, csrf="csrf-test"), doseq=True).encode()
-        with urllib.request.urlopen(urllib.request.Request(self.base, body, method="POST"), timeout=3) as response:
+        with self.client.open(urllib.request.Request(self.base, body, method="POST"), timeout=3) as response:
             return response.read().decode()
 
     def test_shared_api_sports_key_and_source_options(self):

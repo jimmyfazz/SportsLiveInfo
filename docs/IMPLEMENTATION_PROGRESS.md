@@ -11,15 +11,15 @@
 
 **Baseline:** `main` at `579541fa9a8f7f0108e454f654221c01049b6e76`; documentation branch `docs/current-documentation-20261112`. This baseline already contains the v0.3.0 expansion, forensic hardening, token onboarding and packaging source. Older branch-specific sections below are historical receipts, not unmerged-work or current-green claims.
 
-**Work:** reconcile every Markdown document, add [current status](CURRENT_STATUS.md) and [document index](DOCUMENTATION_INDEX.md), correct installation and repository roles, current source counts, current test receipt, implemented feed limits and next acceptance gates. Runtime source, schemas/fixtures, HA settings and visibility unchanged.
+**Work:** reconcile every Markdown document, add [current status](CURRENT_STATUS.md) and [document index](DOCUMENTATION_INDEX.md), correct installation and repository roles, current source counts, feed limits and acceptance gates; repair deterministic feed-test inputs and make ingress tests exercise the real handler/parser under socket-restricted runners. Production runtime, schemas/golden fixtures, HA settings and visibility unchanged.
 
-**Verification:** complete source snapshot materialized from pinned GitHub files; Python 3.12.15 compilation passed. Full suite: **86 attempted, 81 passed, 5 errors**. Two rights-feed tests error on missing `category_id`; three HTTP tests are blocked by localhost bind permissions. This is a non-green baseline and is recorded rather than repaired in this docs-only task. The remaining 81 include golden fixture/hash tests. Exact names/results in CURRENT_STATUS.
+**Verification:** the original documentation pass recorded a failing 86-test baseline; the follow-up correction now passes **88/88 tests** on Python 3.12.15 and compileall passes. Rights-test events now use taxonomy classification and a pinned clock. Ingress tests share a fallback that invokes the real handler/parser in memory when loopback binds are denied. Golden fixture/hash tests pass unchanged. The local runner denied socket binds, so real loopback and GitHub Actions require separate evidence; details are in CURRENT_STATUS.
 
 **Owner-confirmed roles:** SportsLiveInfo is PRIVATE source/installation; LiveSports-EPG is PUBLIC daily feed, checked README-only. No rights-approved feed or device deployment established. HA connector in this session exposed no Supervisor/App tools; no exposed SportsLiveInfo entity was found, which does not establish installation absence. Existing owner authenticated remote administration is separate from the project's no-new-public-App-endpoint requirement.
 
 **Coverage/rights:** source counts are 16 sports entries (10 API-Sports), 27 EPG candidates across 15 markets, 24 taxonomy sports / 127 competitions, service tables in 8 markets / 41 families. Live completeness and terms were not reverified. Local programme suggestions exist; public `epg_supplements` contract and TV rendering do not.
 
-**Next:** reconcile feed/test input errors, repeat suite with sockets and current CI, then actual private HAOS and live source/rights validation. **Rollback:** revert this docs commit; no runtime migration. **Review:** documentation PR required; no claim of approval/merge before GitHub confirms it.
+**Next:** confirm current GitHub Actions evidence and real-loopback behavior, then validate private HAOS and live source/rights. **Rollback:** revert this documentation/test commit; no runtime migration. **Review:** PR #9 contains the documentation and test corrections.
 
 ## Historical implementation receipts
 

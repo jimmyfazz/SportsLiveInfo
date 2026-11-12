@@ -1,6 +1,6 @@
 # Forensic quality, integration and acceptance tests
 
-> **Current documentation context — reviewed 12 November 2026.** This is a benchmark/acceptance plan for both international EPG (UK/France first) and sports; tests are in flat tests/test_*.py. Current receipt: 86 attempted, 81 passed, two feed/test input errors and three environment-blocked localhost tests.
+> **Current documentation context — reviewed 12 November 2026.** This is a benchmark/acceptance plan for both international EPG (UK/France first) and sports; tests are in flat tests/test_*.py. Current receipt: 88 tests passed on Python 3.12.15. In this socket-restricted runner, HTTP handler tests use an in-memory transport; see CURRENT_STATUS for limits.
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 ## No invented coverage claims

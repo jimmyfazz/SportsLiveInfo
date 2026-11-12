@@ -5,7 +5,7 @@
 
 SportsLiveInfo is an experimental **v0.3.0 Home Assistant OS App** for two equally required products: international full-channel EPG and multi-sport event intelligence. It collects centrally on the owner's always-on home mini PC; the planned ten B1G TV clients read shared static data and resolve playable channels locally.
 
-**Current source and test status, reviewed 12 November 2026:** 16 sports adapter entries, 27 candidate EPG feeds, private coverage diagnostics, Live today/events UI, SQLite, scheduling and a rights-gated static feed writer exist. Python 3.12 validation attempted 86 tests: **81 passed, 2 feed/test input errors, 3 environment-blocked localhost tests**. Docker/actual HAOS operation, live provider accuracy, source rights and B1G device integration remain unverified. See [current status and evidence](docs/CURRENT_STATUS.md).
+**Current source and test status, reviewed 12 November 2026:** 16 sports adapter entries, 27 candidate EPG feeds, private coverage diagnostics, Live today/events UI, SQLite, scheduling and a rights-gated static feed writer exist. Python 3.12.15 validation: **88 tests passed**. HTTP-handler tests use an in-memory transport in this socket-restricted runner; see current status for limits. Docker/actual HAOS operation, live provider accuracy, source rights and B1G device integration remain unverified. See [current status and evidence](docs/CURRENT_STATUS.md).
 
 | Repository | Visibility | Purpose |
 |---|---|---|

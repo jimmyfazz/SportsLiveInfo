@@ -22,7 +22,7 @@ Legend: `[C]` Codex lead; `[L]` Claude Code lead; `[B]` both review; `[O]` owner
 | PUB-001 | `sli/1.0` builder/atomic writer/preview exist; target is PUBLIC `jimmyfazz/LiveSports-EPG`, checked README-only. Live rights-approved publication/deployment verification outstanding. |
 | B1-001–005 / RELEASE | Contracts and handover only in this source review; Android and one/ten-TV acceptance not verified. |
 
-**Immediate validation blocker:** 86 tests attempted on Python 3.12; 81 passed, two rights-feed tests error on missing `category_id`, three HTTP tests cannot bind localhost in this runner. See [exact receipt and next steps](CURRENT_STATUS.md). Historic all-TODO and old pass counts do not describe this baseline. Source/installation remains PRIVATE; daily feed PUBLIC.
+**Current validation:** all 88 offline tests pass on Python 3.12.15. HTTP handler tests use an in-memory transport because this runner denies loopback binds; CI and actual loopback validation remain follow-ups. See [receipt and next steps](CURRENT_STATUS.md). Historic all-TODO and old pass counts do not describe this baseline. Source/installation remains PRIVATE; daily feed PUBLIC.
 
 ## 0 — prerequisite contract, package, dev tooling (merge in order)
 

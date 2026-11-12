@@ -11,7 +11,7 @@
 
 `providers.EPG` contains 27 candidate feeds across 15 source markets, all opt-in. `guide.py` has service tables for eight markets and 41 diagnostic lineup families. [Current status](CURRENT_STATUS.md) records measured code counts and validation; [source expansion report](SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md) records the original expansion. SportsAPI.app, SportAPI.ai, specialist Tennis API and Boxerbook are research candidates, not implemented adapters in this snapshot. Do not confuse SportsAPI.app with API-Sports.
 
-The tables below retain dated research claims. Endpoint operation, supplier quotas/free eligibility and legal terms were **not newly reverified** in this documentation-only update. DOC-CONFIRMED refers to the original research, not current deployment approval. Even a working source is not automatically licensed for public redistribution.
+The tables below retain dated research claims. Endpoint operation, supplier quotas/free eligibility and legal terms were **not newly reverified** in this review and test correction. DOC-CONFIRMED refers to the original research, not current deployment approval. Even a working source is not automatically licensed for public redistribution.
 
 ## Fixture / event data
 

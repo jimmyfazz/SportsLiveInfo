@@ -76,7 +76,7 @@ F. Only mark P6 complete after **both EPG Guide and sport rail** acceptance repo
 
 ## 5. Current commands and future CLI targets
 
-Current source checks are `python3.12 -m compileall -q sportsliveinfo/src` and `PYTHONPATH=sportsliveinfo/src python3.12 -m unittest discover -s tests -v`. See [CURRENT_STATUS.md](CURRENT_STATUS.md) for the non-green baseline. Source is in `sportsliveinfo/src/sportsliveinfo/`; the ownership paths in §2 are target modular paths, not existing folders.
+Current source checks are `python3.12 -m compileall -q sportsliveinfo/src` and `PYTHONPATH=sportsliveinfo/src python3.12 -m unittest discover -s tests -v`. See [CURRENT_STATUS.md](CURRENT_STATUS.md) for the latest passing offline suite and remaining live acceptance gates. Source is in `sportsliveinfo/src/sportsliveinfo/`; the ownership paths in §2 are target modular paths, not existing folders.
 
 The following pip/pytest/general CLI commands remain future targets, not working setup instructions:
 

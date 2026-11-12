@@ -7,7 +7,7 @@
 
 | Next stage | Existing foundation | Required exit evidence |
 |---|---|---|
-| Stabilize validation | 86-test suite, parser/storage/UI/feed regressions and six schemas | Resolve two feed/test input errors, rerun three localhost-blocked tests, obtain current green Python 3.12 CI |
+| Stabilize validation | Parser/storage/UI/feed regressions, six schemas and deterministic HTTP-handler tests | 88 local tests pass; confirm current GitHub Actions evidence and exercise real loopback where available |
 | Private HAOS acceptance | App config/Dockerfile, Ingress and persistent SQLite | Install private App through local delivery; architecture builds, authenticated Ingress, restart, restore and measured HA resource impact |
 | Advance EPG and sports together | 27 EPG candidates, 16 sports adapters, identity/coverage/taxonomy/fusion | Per-source live endpoint/quota/rights checks; independent EPG horizon and sport recall scorecards |
 | Verify event/broadcaster and programme quality | Provisional links and local non-destructive suggestion evaluator | Reviewed independent evidence rule; preserve EPG-only/fixture-only uncertainty; no wrong-channel overlays |

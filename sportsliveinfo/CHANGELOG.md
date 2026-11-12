@@ -7,8 +7,15 @@
 
 - Reconciled all Markdown documents against source main `579541fa`; added a current-status authority and full document index, with historical audits explicitly labeled.
 - Corrected private source/installation versus public daily-feed roles and removed instructions to make the source public. The operator guide uses private local App delivery.
-- Recorded measured source inventory and actual Python 3.12 validation: 86 tests attempted, 81 passed, two feed/test input errors, three runner-blocked HTTP tests. Earlier 7/19/43/55 receipts below are historical.
+- Recorded measured source inventory and the initial Python 3.12 validation: 86 tests attempted, 81 passed, five errors (three loopback binds denied). This was superseded by the follow-up correction below; earlier 7/19/43/55 receipts remain historical.
 - Distinguished the local enrichment suggestion evaluator from an unimplemented public EPG programme contract, and source-implemented publisher from a deployed public feed. No runtime code, schema, fixture, HA setting, repository visibility or source-rights approval changed.
+
+## Validation correction — 12 November 2026
+
+- Fixed rights-feed test inputs to use production taxonomy classification and a pinned clock.
+- Added a shared ingress-test transport that uses loopback where available and dispatches through the real HTTP handler/parser with in-memory streams when socket binds are denied; added forced-memory CSRF and origin tests.
+- Python 3.12.15 compileall passed and all 88 tests passed. Real loopback transport remains unverified in this socket-restricted runner; see [current status](../docs/CURRENT_STATUS.md).
+- Production runtime, schemas, golden fixtures, HA settings and repository visibility are unchanged.
 
 ## 0.3.0 — 12 November 2026
 
