@@ -2,6 +2,8 @@
 
 **Status 2026-11-12:** research complete/documented, implementation not started. This plan is for next development work; no claims that these tasks are done.
 
+**Primary host decision:** owner chooses directly installed **Home Assistant on an always-on personal-home mini PC (no Proxmox)**. Build one portable collector plus local **HAOS App** wrapper if installation type confirmed. See [HOME_ASSISTANT_BARE_METAL_PRIMARY.md](HOME_ASSISTANT_BARE_METAL_PRIMARY.md). Public GitHub JSON publishing is a proposed outbound-only step **after** licence approval; 10 B1G clients never query provider APIs.
+
 ## Stage P0 — groundwork (highest priority)
 
 - [ ] Scaffold Python package with typed canonical Event, Participant, Venue, Broadcast, SourceEvidence and SourceHealth models.
@@ -32,7 +34,10 @@
 
 ## Stage P3 — operation and deployment
 
-- [ ] CI unit/integration tests and static type/lint, plus a **manual** scheduled refresh dry-run in private GitHub Actions within quota.
+- [ ] CI unit/integration tests and static type/lint; GitHub Actions may run tests, but routine production collection belongs on the personal-home HAOS mini PC.
+- [ ] Confirm HA installation type and available Apps; package/install a local HAOS App with Supervisor-managed restart, persistent storage, backup and log/health monitoring.
+- [ ] Outbound-only publisher: send a small, rights-approved JSON snapshot to a **separate proposed** public GitHub feed repository; no public ingress, no secrets in data.
+- [ ] Verify 10 B1G TVs consume one shared published snapshot with zero incremental sports-provider API calls.
 - [ ] Define schedule (7-day background, same-day refresh, near-start refresh) strictly within all provider limits.
 - [ ] Choose authorised data distribution path; verify licences before any public feed and no Pages from private GitHub Free.
 - [ ] Health manifest, failed-source warnings, stale data TTL, alerting, provenance inspection.
