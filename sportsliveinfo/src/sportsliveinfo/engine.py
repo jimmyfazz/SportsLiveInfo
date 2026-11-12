@@ -37,9 +37,9 @@ class Engine:
     def __init__(self, store):
         self.store = store
         self._busy = threading.Lock()
-        self._last_slot = None
         self._scheduler_stop = threading.Event()
         self._last_call = {}
+        self._pace_lock = threading.Lock()
 
     def collect(self):
         if not self._busy.acquire(blocking=False):
@@ -59,25 +59,38 @@ class Engine:
         guides = [n for n, on in conf["epg"].items() if on and n in providers.EPG]
         # Each sports provider is its own lane; EPG guides share one sequential
         # lane so several large XMLTV parses never run at once on the mini PC.
+        successes = 0
         with ThreadPoolExecutor(max_workers=max(1, min(6, len(sports) + 1)), thread_name_prefix="sli-lane") as pool:
             futures = [pool.submit(self._collect_sport, name, conf) for name in sports]
             if guides:
                 futures.append(pool.submit(lambda: [self._collect_epg(name) for name in guides]))
             for future in futures:
                 try:
-                    future.result()
-                except Exception as exc:  # A lane bug must not stop the others or the materialiser.
+                    result = future.result()
+                    if isinstance(result, list):
+                        successes += sum(bool(item) for item in result)
+                    else:
+                        successes += bool(result)
+                except Exception as exc:  # A crashed lane must not mask missing data.
                     LOGGER.error("Collector lane failed (%s)", type(exc).__name__)
                     self.store.job("collector", "lane_error", type(exc).__name__)
+        attempted = len(sports) + len(guides)
+        if not successes:
+            state = "failed" if attempted else "no_sources"
+            self.store.job("collector", state, "%d of %d enabled sources refreshed; last-good retained" %
+                           (successes, attempted))
+            return False
         self._materialize()
-        self.store.job("collector", "finished")
+        state = "finished" if successes == attempted else "degraded"
+        self.store.job("collector", state, "%d of %d sources refreshed; older last-good retained as needed" %
+                       (successes, attempted))
         github = conf["github"]
         if github.get("enabled") and github.get("auto_publish") and conf.get("publication_approvals"):
             try:
                 self.publish()
             except (ValueError, RuntimeError, OSError) as exc:
                 self.store.job("publisher", "failed", str(exc)[:140])
-        return True
+        return bool(successes)
 
     # ---- request planning -------------------------------------------------
     def _days(self, name, previous, today):
@@ -142,12 +155,16 @@ class Engine:
         return plan
 
     def _pace(self, name):
+        # Protect rate pacing across parallel provider lanes, including those
+        # using the same API-Sports key under different product endpoints.
+        family = providers.SPORT_FAMILY.get(name, name)
         gap = PACING.get(name)
-        if gap:
-            wait = self._last_call.get(name, 0) + gap - time.monotonic()
-            if wait > 0:
-                time.sleep(wait)
-        self._last_call[name] = time.monotonic()
+        with self._pace_lock:
+            if gap:
+                wait = self._last_call.get(family, 0) + gap - time.monotonic()
+                if wait > 0:
+                    time.sleep(wait)
+            self._last_call[family] = time.monotonic()
 
     def _request(self, name, item, limit):
         try:
@@ -170,7 +187,7 @@ class Engine:
         _, _, key_name, daily_limit = providers.SPORTS[name]
         if key_name and not conf["keys"].get(key_name):
             self.store.job(name, "needs_key", "Add a provider API key in Sources")
-            return
+            return False
         today = datetime.now(LONDON).date()
         previous = self.store.snapshot("sports:" + name)
         plan = self._plan(name, conf, today, previous)
@@ -195,20 +212,24 @@ class Engine:
         if not succeeded:
             self.store.job(name, "failed", "%s: source unavailable, invalid or over budget" % (errors[0] if errors else "NoRequest"))
             LOGGER.warning("Sports source %s failed (%s)", name, errors[0] if errors else "no request")
-            return
+            return False
         cutoff = datetime.now(timezone.utc) - timedelta(days=2)
-        kept = []
+        # A 200 OK with a partial free-plan response does NOT prove all other
+        # fixtures in that competition/day have disappeared. Keep unexpired
+        # old IDs, then allow new records for the same IDs to supersede them.
+        # This avoids deleting events when a source omits a competition/page.
+        by_id = {}
         for event in (previous["data"]["events"] if previous else []):
-            scope = event.get("fetch_scope") or self._legacy_scope(name, event)
-            if scope == "*" or scope in succeeded:
-                continue
             try:
                 if datetime.fromisoformat(event["start_utc"]) < cutoff:
                     continue
+                by_id[event["id"]] = event
             except (KeyError, ValueError, TypeError):
                 continue
-            kept.append(event)
-        events = kept + [e for s in succeeded for e in scopes[s]]
+        for scope in succeeded:
+            for event in scopes[scope]:
+                by_id[event["id"]] = event
+        events = list(by_id.values())
         # A successful zero-result response might be valid offseason or the
         # limits of free coverage. Never declare zero sport everywhere.
         self.store.save_snapshot("sports:" + name, {"events": events, "source_id": name, "complete": "unknown",
@@ -217,6 +238,7 @@ class Engine:
         state = "partial" if failed else ("ok" if events else "no_events_reported")
         self.store.job(name, state, "%d event records; %d/%d request scopes refreshed (provider coverage not guaranteed)" % (
             len(events), len(succeeded), len(succeeded) + len(failed)))
+        return True
 
     def _collect_epg(self, name):
         _, url = providers.EPG[name]
@@ -227,7 +249,7 @@ class Engine:
             parsed = providers.decode_xmltv(raw, name, max_programmes=max_programmes)
             if not parsed["programmes"]:
                 self.store.job(name, "empty", "Guide contains no valid programme rows; retaining old data")
-                return
+                return False
             # Enrichment/coverage report is local only and non-destructive;
             # no guessed EPG ID is ever exposed as an IPTV playable stream.
             quality = analyze_guide(parsed)
@@ -238,15 +260,32 @@ class Engine:
             # A guide with no programme in the next 24h is not a successful forward update.
             if not has_future:
                 self.store.job(name, "stale", "No guide programmes cover the next 24h; retaining last-good")
-                return
+                return False
+            # HTTP 200 does not imply a complete guide. Protect against a
+            # partial/truncated-but-parseable upstream rebuild.
+            previous = self.store.snapshot("epg:" + name)
+            if previous:
+                until = now + timedelta(days=1)
+                def forward_count(rows):
+                    return sum(1 for p in rows
+                               if datetime.fromisoformat(p["end_utc"]) > now
+                               and datetime.fromisoformat(p["start_utc"]) < until)
+                before = forward_count(previous["data"].get("programmes", []))
+                after = forward_count(parsed["programmes"])
+                if before >= 30 and after * 4 < before:
+                    self.store.job(name, "coverage_collapse",
+                                   "New guide lost over 75% of forward programme records; keeping last-good")
+                    return False
             self.store.save_snapshot("epg:" + name, parsed)
             self.store.save_snapshot("epg-quality:" + name, quality)
             self.store.job(name, "ok", "%d channels; %d programmes; %d invalid; %d with 24h guide; %d recognised services" % (
                 len(parsed["channels"]), len(parsed["programmes"]), parsed["invalid_programmes"],
                 quality["full_coverage_channels"]["24h"], len(quality["matched_canonical_channels"])))
+            return True
         except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, json.JSONDecodeError, ET.ParseError) as exc:
             self.store.job(name, "failed", type(exc).__name__ + ": source unavailable or invalid")
             LOGGER.warning("EPG source %s failed (%s)", name, type(exc).__name__)
+            return False
 
     # ---- materialisation --------------------------------------------------
     def _materialize(self, now=None):
@@ -356,9 +395,11 @@ class Engine:
                 continue
             local = datetime.now(LONDON)
             key = local.strftime("%Y-%m-%d %H:%M")
-            if local.strftime("%H:%M") in conf.get("schedule", []) and self._last_slot != key:
-                self._last_slot = key
-                self.start_collection()
+            if local.strftime("%H:%M") in conf.get("schedule", []):
+                if self.store.claim_scheduler_slot(key):
+                    if not self.start_collection():
+                        # Worker already running: allow a retry within this minute.
+                        self.store.release_scheduler_slot(key)
 
     def preview_feed(self, out_dir=None):
         """Build the full sli/1 feed locally (no upload) for inspection and B1G testing."""
