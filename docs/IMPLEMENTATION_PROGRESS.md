@@ -83,6 +83,12 @@ Additional localhost HTTP smoke (port 18199, temporary SQLite): GET initial setu
 
 Never make Home Assistant publicly accessible or forward router ports. TV clients must never write GitHub or carry publishing/provider credentials. TMDB/OMDb/film/series artwork APIs remain local to B1G. No one may claim that an installable app skeleton equals worldwide EPG/sports completeness or a verified live source. Update this page with actual new commit SHA, tests, coverage and device receipts after every PR.
 
+## GitHub token onboarding and source-to-manifest audit (12 November 2026)
+
+- In this follow-up development branch, the Home Assistant Publishing screen gains a direct GitHub fine-grained token creation walkthrough, explicit owner/repository selection, Content write permission explanation and a **separate read-only Test Connection** action. It never commits data, enables publishing, discloses the stored token or grants data-source rights. A GitHub API redirect with a publishing credential is rejected.
+- Full source-to-manifest audit: [findings and 32-task backlog](FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md). Most important pending gap: public `sli/1` is a sports-event/channel-identity feed, **not a full rights-cleared EPG programme supplement**. Proposed `epg_supplements/1` is not implemented; do not imply full Guide parity.
+- Added mocked GitHub onboarding/connection tests. **The exact combined suite has not been executed from this branch, CI has been failing and actual Home Assistant device install remains unverified.** The current stage is still experimental; publication is still disabled by default.
+
 ## Claude v0.3.0 integration and independent forensic hardening — 12 November 2026
 
 Claude's previously unmerged branch was located and examined across all five repository branches, then integrated on a separate repair branch without deleting its original commits. Scope includes 16 candidate sports adapters, 27 EPG candidates, 24-sport taxonomy, sli/1 JSON feed schemas/fixtures, source lineage and provisional event-to-broadcast matching. **Candidate providers are disabled by default and not live-verified.**
