@@ -66,6 +66,44 @@ class OperatorDashboardTests(unittest.TestCase):
         self.assertNotIn("never-show-secret", markup)
         self.assertIn("Key stored privately", markup)
 
+    def test_world_sports_event_pagination_cannot_hide_later_events(self):
+        records = [
+            {"id": str(i), "sport": "football", "category_id": "football.premier_league",
+             "category_label": "Premier League", "competition": "Premier League",
+             "title": "Fixture %d" % i, "start_utc": "2026-11-13T20:00:00+00:00",
+             "source_id": "fixture", "broadcast_verified": False, "broadcasts": []}
+            for i in range(235)
+        ]
+        self.store.save_snapshot("sports", {"events": records})
+        page1 = self.ui.events({})
+        page2 = self.ui.events({"p": "2"})
+        page3 = self.ui.events({"p": "3"})
+        self.assertIn("Page 1 of 3", page1)
+        self.assertIn("Next page", page1)
+        self.assertNotIn("Previous page", page1)
+        self.assertIn("Page 2 of 3", page2)
+        self.assertIn("Previous page", page2)
+        self.assertIn("Next page", page2)
+        self.assertEqual(page3.count("<tr><td>"), 35)
+        self.assertIn("Fixture 99", page3)
+        self.assertNotIn("Next page", page3)
+        self.assertEqual(self.ui.events({"p": "oops"}).count("Page 1 of 3"), 1)
+        self.assertIn("Page 3 of 3", self.ui.events({"p": "999999"}))
+
+    def test_uk_day_filter_uses_calendar_date_and_escapes_search(self):
+        self.store.save_snapshot("sports", {"events": [
+            {"id": "a", "title": "Evening Match", "sport": "football",
+             "competition": "Demo", "start_utc": "2026-07-03T23:30:00+00:00",
+             "source_id": "fixture", "broadcasts": [], "broadcast_verified": False}
+        ]})
+        page = self.ui.events({"date": "2026-07-04"})
+        self.assertIn("1 of 1 events", page)  # BST: 23:30 UTC is 00:30 next day
+        filtered = self.ui.events({"date": "2026-07-03"})
+        self.assertIn("0 of 1 events", filtered)
+        malicious = self.ui.events({"q": '<img src=x onerror=alert(1)>'})
+        self.assertIn("&lt;img src=x onerror=alert(1)&gt;", malicious)
+        self.assertNotIn('<img src=x onerror=alert(1)>', malicious)
+
     def test_guide_meter_clamped_and_xss_safe(self):
         self.store.save_snapshot("epg-quality:farleyflex", {
             "channels": 10,
