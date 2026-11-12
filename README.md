@@ -1,62 +1,62 @@
 # SportsLiveInfo
 
-**Private research and development repository — 12 November 2026**
+**Private project specification and development programme — 12 November 2026**  
+**Current status:** research, forensic code audit and detailed build plan exist. **No working SportsLiveInfo collector, Home Assistant App or B1G feed client has yet been implemented, installed or live-tested.** No public sports-data feed has been authorised or deployed.
 
-SportsLiveInfo is a planned **zero-subscription-cost UK sports-fixture and television-broadcast intelligence service**. It answers: **What sport is taking place on a specified date, who is playing, when and where does it take place, and which UK channel or platform is showing it live?**
+SportsLiveInfo is a **self-hosted, no-subscription-cost sports and international electronic programme guide (EPG) intelligence application**, planned as a Home Assistant OS App on the owner's always-on home mini PC.
 
-The objective is a reliable, normalised, explainable sports calendar, **not** an IPTV/streaming service, live score platform, betting product, or LLM-dependent system.
+## Two equally important products
 
-## Scope
+**Product E — Comprehensive international EPG:** UK (Sky Sports, TNT, Premier, BBC/ITV and other channels), France (general and sport channels), and further countries/channels discovered from the owner's own B1G subscription inventory. Import permitted sources and provider-native guide schedules; validate coverage, names and intervals; unify canonical broadcaster identity; improve generic programme descriptions where accurately verified. The full B1G Guide needs comprehensive multi-day programme data, **not just information for the Sports Today rail**.
 
-- Football: Premier League, Champions League, Europa League, World Cup, international matches and other major domestic/European competitions.
-- Formula One: Grand Prix, circuit/country and practice/qualifying/sprint/race sessions.
-- Tennis, rugby union and league, cricket, boxing (including heavyweight title events and PPV), plus future expansion.
-- UK local times, named competitors/teams, location, event status, broadcaster(s), coverage-start versus sporting-start, PPV versus subscription versus free-to-air, provenance and freshness.
-- Views for today, tomorrow, the next seven days, by sport, by broadcaster, and live now **only where live status is verified**.
-- Future optional integration with the B1 Android TV application's sports rail and existing channel/EPG matching.
+**Product S — Comprehensive sports event intelligence:** football (domestic, European, internationals, women’s); F1 and other motorsport; tennis; rugby union and league; cricket; boxing (including PPV); and expandable sports including darts, snooker, golf, MMA, basketball, NFL, cycling, etc. Collect participants, competition, venue/circuit, precise/estimated UK time, event status and **independently verified actual broadcaster**. B1G shows 10 Home sports cards with optional distinct PPV headline/11th card as relevant.
 
-**Confirmed read-only TV policy:** every B1G TV is a read-only client of the shared, rights-cleared JSON feed. No TV GitHub write access, tokens, or channel-list uploads. A user hiding a channel or category changes that TV's local effective playlist/EPG view immediately; the shared feed remains a superset. Optional channel inventory is imported manually/securely into Home Assistant by the owner. See [read-only B1G and inventory policy](docs/B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md).
+Both products have independent provider coverage, completeness benchmarks and acceptance gates. A programme airing now does not prove an event is live; a broadcaster's league rights do not prove a specific match is available on its channel.
 
-**Channel matching architecture (required):** [Universal channel identity and safe B1G EPG allocation](docs/CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md). SportsLiveInfo maintains stable UK/French/other broadcaster identities, source-specific EPG crosswalks, verified aliases and event-to-broadcast claims; each TV alone resolves those identities to its own account-scoped visible streams, honours manual mappings and avoids wrong-channel assignments. No TV GitHub write permissions or provider API keys.
+## Owner-confirmed operating topology
 
-## Core decision
+1. **Home Assistant** on the personal-home mini PC collects sport and EPG data with API keys configured **once** in a first-run Home Assistant Ingress wizard. Configure authorised sources, a scheduler, optional local safe inventory import and quiet diagnostic notifications.
+2. The collector maintains private local cache/state and publishes **only rights-cleared** versioned JSON over an **outbound HTTPS connection** to a proposed separate public static GitHub feed. The code repository **stays private**. A feed repo has **not** been created; publishing remains disabled until source terms and owner approval are established.
+3. **Ten B1G Android televisions read the same published feed anonymously over HTTPS.** TVs do not call sports API providers, upload channel lists, write to GitHub or hold GitHub tokens.
+4. Every TV locally matches canonical TV services to its **actual** IPTV playlist, respects hidden categories/channels, manual EPG mapping and local stream access, and retains existing EPG as a fallback.
+5. **No incoming internet access to Home Assistant, no router port forwarding, no public Home Assistant address.** Public GitHub is only a distribution channel for authorised static files.
 
-**Scope confirmed after B1G source audit (12 Nov 2026):** Priority 1 accurate UK sports **EPG programme corrections** (Sky Sports, TNT Sports, Premier Sports and relevant other broadcasters); Priority 2 daily **Sports Today event cards and verified playable channel identities**. Centralise sporting API credentials and permitted generic sports EPG collection once on HAOS, not 10 times on TVs. Keep TMDB, OMDb, VOD posters/hero art, IPTV account/provider EPG credentials, playlists, local channel mappings and playback in B1G. See the [forensic source audit](docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md). EPG publication to public GitHub is a distinct **unapproved licensing gate**; do not publish copied third-party programme data without rights.
+**Excluded:** central TMDB/OMDb, movie/series metadata, posters/hero artwork, IPTV stream URLs, playback proxy, subscription credentials or per-TV hidden-channel uploads. TMDB and OMDb remain optional local B1G integrations.
 
+## Authoritative build documents — Codex and Claude start here
 
-Use **independent fixture adapters + independent UK EPG/broadcaster adapters + deterministic normalisation and reconciliation**, producing one stable JSON contract. No paid APIs or paid LLMs are prerequisites. Never infer that a rights-holder shows every match; never fabricate a missing UK TV channel.
+| Order | Document | Purpose |
+|---|---|---|
+| 1 | **[Master implementation roadmap](docs/MASTER_IMPLEMENTATION_ROADMAP.md)** | Phased implementation, two-product scope, architecture decisions, exit gates |
+| 2 | **[Forensic audit and risk register](docs/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md)** | 34 findings with priorities, corrections and required proof |
+| 3 | **[International EPG and sporting sources](docs/INTERNATIONAL_EPG_AND_SPORTS_SOURCE_EXPANSION.md)** | Regions, guides, sports, official references, quotas and rights |
+| 4 | **[Feed contracts and publishing](docs/FEED_CONTRACTS_AND_PUBLICATION.md)** | Canonical JSON, service identities, licence gates, versioning, manifests and last-good |
+| 5 | **[Quality and security acceptance](docs/QUALITY_SECURITY_AND_ACCEPTANCE.md)** | Test suite, metrics, HAOS stability, privacy, resilience and release conditions |
+| 6 | **[Codex and Claude collaboration](docs/CODEX_CLAUDE_COLLABORATION.md)** | Parallel branches/worktrees, task ownership, PR order and terminal prompts |
+| 7 | [Agent instructions](AGENTS.md) | Non-negotiable development rules and read order |
 
-## Documentation index
+**Detailed supporting specifications:**
+- [Existing B1G EPG/API forensic audit](docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md) and [B1 integration](docs/B1_INTEGRATION.md)
+- [Universal channel identity and EPG allocation](docs/CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md)
+- [Subscription-driven UK/France/world EPG](docs/SUBSCRIPTION_DRIVEN_MULTIREGION_EPG.md)
+- [B1G read-only/inventory policy](docs/B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md)
+- [Codex local subscription inventory handover](docs/CODEX_B1G_SUBSCRIPTION_INVENTORY_HANDOVER.md)
+- [Primary bare-metal Home Assistant host](docs/HOME_ASSISTANT_BARE_METAL_PRIMARY.md)
+- [Mandatory first-run wizard, API entry, scheduler and notifications](docs/HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md)
+- [Source registry](docs/SOURCE_REGISTRY.md), [licensing and hosting](docs/LICENSING_AND_HOSTING.md), [original research](docs/RESEARCH_FINDINGS_2026-11-12.md)
 
-1. [Research findings and feasibility](docs/RESEARCH_FINDINGS_2026-11-12.md)
-2. [Free API and source registry](docs/SOURCE_REGISTRY.md)
-3. [UK EPG and broadcast matching](docs/UK_BROADCAST_MATCHING.md)
-4. [Architecture and operational design](docs/ARCHITECTURE.md)
-5. [Canonical data/API contract](docs/DATA_CONTRACT.md)
-6. [Licensing, sourcing and £0 hosting](docs/LICENSING_AND_HOSTING.md)
-7. [Implementation delivery plan](docs/DELIVERY_PLAN.md)
-8. [Forensic test and acceptance matrix](docs/TEST_PLAN.md)
-9. [Optional B1 Android integration](docs/B1_INTEGRATION.md)
-10. **[PRIMARY: Home Assistant mini PC directly installed — deployment decision](docs/HOME_ASSISTANT_BARE_METAL_PRIMARY.md)**
-11. [ALTERNATIVE ONLY: Home Assistant under Proxmox / LXC](docs/HOME_ASSISTANT_PROXMOX_HOSTING.md)
-12. **[MANDATORY: HA first-run setup wizard, individual API saves, GitHub schedule and non-intrusive notifications](docs/HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md)**
-13. **[FORENSIC B1G EPG + sporting rail audit, exact providers and credential scope](docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md)**
-14. [Instructions for coding agents](AGENTS.md)
+**Historical/reference documents:** `docs/ARCHITECTURE.md`, `docs/DATA_CONTRACT.md`, `docs/DELIVERY_PLAN.md`, `docs/TEST_PLAN.md`, `docs/UK_BROADCAST_MATCHING.md`, `docs/HOME_ASSISTANT_PROXMOX_HOSTING.md`. Where older docs say UK-only, optional B1 consumption, identical generic/start times or prioritize fixtures over EPG, the master roadmap and confirmed owner requirements take precedence.
 
-## Project status
+## Recommended first engineering milestones
 
-**Research documented; production aggregator NOT yet implemented.** No API key has been created, no provider accuracy benchmark has yet been run, no JSON feed has been deployed, and no broadcaster matching has been demonstrated end-to-end. Provider limits and terms are subject to change.
+- **P0:** Python package skeleton, tests and versioned canonical schemas; freeze contract and agree interface between agents.
+- **P1E (Claude):** bounded XMLTV, source-specific channel identities and UK+France EPG pipeline with source coverage tests.
+- **P1S (Codex):** canonical sports/event models and free-fixture providers with competition and source-completeness tests.
+- **P2:** independently expand both EPG regions and priority sports, benchmark against actual source/official data within permitted licences.
+- **P3–P4:** event/programme/broadcaster verification, first-run HAOS App wizard, scheduler, SQLite last-good, quiet notifications, rights gate.
+- **P5–P6:** authorised GitHub publisher, B1 read-only feed client, one TV then ten, security/HA resource/EPG+sport acceptance report.
+- **P7:** measured international and new-sport expansion without paid API dependency.
 
-## Deployment selected (12 November 2026)
+**Progress labels matter:** researched ≠ coded ≠ tested ≠ source-licence-approved ≠ deployed. No account setup or key is assumed completed, no blanket worldwide accuracy claim, and no public EPG redistribution without appropriate permission.
 
-**Primary host: the owner's always-on personal home mini PC running Home Assistant directly on hardware (not Proxmox).** Assuming its installation type is Home Assistant OS, build SportsLiveInfo as a private local Home Assistant App, an independently managed container. All ten personal B1G TVs will read the **same versioned JSON snapshot** from a proposed separate GitHub public feed, never query sporting-provider APIs themselves. The collector publishes over outbound HTTPS only; **no incoming access to the home computer or network**. Actual Home Assistant OS/App support must be confirmed before installation. See [primary deployment specification](docs/HOME_ASSISTANT_BARE_METAL_PRIMARY.md). Public distribution of provider-derived data is subject to a source-by-source licence gate; no public feed exists yet.
-
-## Priority
-
-Build the smallest legal, measurable vertical slice: football/F1 fixtures + canonical contract + local EPG XMLTV import + provenance-aware channel match + tests. Then expand sports and deploy scheduled collection.
-
-## Privacy / distribution
-
-This GitHub repository is currently private by choice. Keep it private during development. Private status does **not** waive provider licences; do not publish scraped broadcast datasets or credentials. GitHub Pages is not available from a private repository on GitHub Free; consult [hosting notes](docs/LICENSING_AND_HOSTING.md).
-
-External URLs, product limits and licence conditions below were checked or identified for verification on **12 November 2026**. They are research leads, not contractual warranties.
+The source plan is free-first, but supplier limits and programme-data rights are subject to change. Maintain dated verification; prefer false-positive avoidance over blindly allocating the wrong EPG or sport channel.
