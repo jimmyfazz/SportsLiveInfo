@@ -1,7 +1,7 @@
 # SportsLiveInfo
 
 **Private project specification and development programme — 12 November 2026**  
-**Current status:** research, forensic code audit and detailed build plan exist. **No working SportsLiveInfo collector, Home Assistant App or B1G feed client has yet been implemented, installed or live-tested.** No public sports-data feed has been authorised or deployed.
+**Current status (12 Nov 2026):** First installable **Home Assistant OS App v0.1.0** source is now under [`sportsliveinfo/`](sportsliveinfo/) with `repository.yaml`, Ingress setup, SQLite, bounded UK/FR EPG imports and F1/football provider adapters. Seven offline tests and a local first-run HTTP smoke test passed; **not yet installed or tested on Home Assistant OS**, and not yet a complete international EPG/sport provider or B1G client. No public-data feed has been authorised or deployed.
 
 SportsLiveInfo is a **self-hosted, no-subscription-cost sports and international electronic programme guide (EPG) intelligence application**, planned as a Home Assistant OS App on the owner's always-on home mini PC.
 
