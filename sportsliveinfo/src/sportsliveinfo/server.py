@@ -446,40 +446,141 @@ class UI(BaseHTTPRequestHandler):
         result += 'Event-to-channel matches remain explicitly unverified until independent broadcast evidence exists.</p>'
         return result
 
-    def sources(self, config):
-        body = '<h2>Sporting event APIs</h2><p>Keys are entered once on Home Assistant, never on the ten televisions. Each Save preserves keys for other providers; no-key services are clearly labelled. One API-Sports key serves every API-Sports sport (each sport has its own free daily allowance).</p><div class="grid">'
-        for name, (label, url, keyname, limit) in providers.SPORTS.items():
-            enabled = bool(config["sports"].get(name))
-            saved = bool(config["keys"].get(keyname)) if keyname else True
-            note = providers.SOURCE_NOTES.get(providers.SPORT_FAMILY[name], "")
-            content = '<input type="hidden" name="provider" value="%s"><label><input type="checkbox" name="enabled" value="on" %s> Enabled</label>' % (e(name), "checked" if enabled else "")
-            if note:
-                content += '<p class="help">%s</p>' % e(note)
-            if keyname:
-                content += '<p class="help">%s (%s) · configured safe daily budget: %d calls</p><label>API key (leave blank to keep saved key)</label><input type="password" name="key" autocomplete="new-password" placeholder="%s"><label><input type="checkbox" name="remove" value="on"> Remove saved key</label>' % ("Key saved" if saved else "No key configured", e(keyname), limit, "Saved — enter a replacement" if saved else "Enter provider key")
-            else:
-                content += '<p class="ok">No API key required · conservative daily budget: %d calls</p>' % limit
-            content += '<button type="submit">Save this provider</button>'
-            test_button = self._form("test_source", '<button class="secondary" type="submit">Test connection (uses 1 quota call)</button>',
-                '<input type="hidden" name="kind" value="sports"><input type="hidden" name="provider" value="%s">' % e(name))
-            body += '<section class="card"><h3>%s</h3><p class="help">Endpoint: %s</p>%s%s</section>' % (
-                e(label), e(urllib.parse.urlsplit(url).hostname), self._form("sports", content), test_button)
-        options = config.get("options", {})
-        chosen_sports, chosen_leagues = set(options.get("thesportsdb_sports", [])), set(options.get("openligadb_leagues", []))
-        option_form = '<h3>TheSportsDB sports (one call per sport per day)</h3><div class="formrow">'
-        option_form += ''.join('<label><input type="checkbox" name="tsdb" value="%s" %s> %s</label>' % (e(s), "checked" if s in chosen_sports else "", e(s)) for s in providers.THESPORTSDB_SPORTS)
-        option_form += '</div><h3>OpenLigaDB leagues</h3><div class="formrow">'
-        option_form += ''.join('<label><input type="checkbox" name="old" value="%s" %s> %s</label>' % (e(l), "checked" if l in chosen_leagues else "", e(l)) for l in providers.OPENLIGADB_LEAGUES)
-        option_form += '</div><button type="submit">Save source options</button>'
-        body += '</div><section class="card" style="margin-top:16px"><h2>Source options</h2>%s</section>' % self._form("options", option_form)
-        body += '<h2 style="margin-top:28px">International television EPG sources</h2><p>Sources marked "verify" use a URL pattern that must pass Test EPG first. Optional, private guide collection only. Public re-publication of third-party programme text is DISABLED until verified rights are available. Source quality, geography and licence restrictions vary.</p><div class="grid">'
-        for name, (label, url) in providers.EPG.items():
-            content = '<input type="hidden" name="provider" value="%s"><label><input type="checkbox" name="enabled" value="on" %s> Enable private guide collection</label><p class="warn help">Rights for public redistribution not established</p><button type="submit">Save this source</button>' % (e(name), "checked" if config["epg"].get(name) else "")
-            test_button = self._form("test_source", '<button class="secondary" type="submit">Test EPG (downloads guide)</button>',
-                '<input type="hidden" name="kind" value="epg"><input type="hidden" name="provider" value="%s">' % e(name))
-            body += '<section class="card"><h3>%s</h3><p class="help">Source: %s</p>%s%s</section>' % (
-                e(label), e(urllib.parse.urlsplit(url).hostname), self._form("epg", content), test_button)
-        return body + '</div>'
+    def sources(self, config, query=None):
+        """Operator-friendly provider catalogue; all controls remain independent HTML forms."""
+        query = query or {}
+        section = query.get("kind", "all")
+        if section not in ("all", "sports", "epg"):
+            section = "all"
+        latest = {}
+        for operation in self.store.recent_jobs(300):
+            if operation["provider"] not in latest:
+                latest[operation["provider"]] = operation
+
+        def status(name):
+            operation = latest.get(name)
+            if not operation:
+                return '<span class="state neutral">Not tested</span>'
+            value = operation["state"]
+            colour = ("ok" if value in ("ok", "test_ok", "no_events_reported") else
+                      "warn" if value in ("partial", "empty", "stale", "needs_key", "test_failed",
+                                          "coverage_collapse", "quota") else "critical")
+            return '<span class="state %s" title="%s">%s</span>' % (
+                colour, e(operation["time"]), e(value.replace("_", " ").title()))
+
+        sports_on = sum(bool(config["sports"].get(name)) for name in providers.SPORTS)
+        epg_on = sum(bool(config["epg"].get(name)) for name in providers.EPG)
+        body = ('<div class="page-heading"><div><h2>Source management</h2>'
+                '<p>Select only the services you need. Expand a provider family or region to configure '
+                'it; independent Save and Test controls never overwrite other providers.</p></div>'
+                '<span class="state neutral">%s sports · %s EPG enabled</span></div>') % (sports_on, epg_on)
+        body += '<div class="source-toolbar" aria-label="Source type filters">'
+        for key, label in (("all", "All sources"), ("sports", "Sports APIs"), ("epg", "Television EPG")):
+            body += '<a href="?page=sources&amp;kind=%s" class="%s" %s>%s</a>' % (
+                key, "active" if key == section else "", 'aria-current="page"' if key == section else "", e(label))
+        body += '</div>'
+        if section in ("all", "sports"):
+            body += ('<h2>Sporting event APIs</h2><p>Choose free no-key sources first, then add optional '
+                     'provider keys. A shared API-Sports key serves all of its sport-specific adapters; '
+                     'free plans may have restricted competitions and quotas.</p>')
+            families = {}
+            for name in providers.SPORTS:
+                families.setdefault(providers.SPORT_FAMILY.get(name, name), []).append(name)
+            for family, names in families.items():
+                heading = ("API-Sports · multiple sports, one saved key" if family == "api_sports" else
+                           providers.SPORTS[names[0]][0])
+                enabled_count = sum(bool(config["sports"].get(n)) for n in names)
+                open_state = enabled_count > 0 or (not config["setup_complete"] and family == "jolpica")
+                body += ('<details class="provider-group" %s><summary>%s '
+                         '<span class="pill">%d / %d enabled</span></summary><div class="grid">') % (
+                             "open" if open_state else "", e(heading), enabled_count, len(names))
+                for name in names:
+                    label, url, keyname, limit = providers.SPORTS[name]
+                    enabled = bool(config["sports"].get(name))
+                    saved = bool(config["keys"].get(keyname)) if keyname else True
+                    note = providers.SOURCE_NOTES.get(providers.SPORT_FAMILY.get(name, name), "")
+                    inner = ('<input type="hidden" name="provider" value="%s">'
+                             '<label><input type="checkbox" name="enabled" value="on" %s> '
+                             'Enable source</label>') % (e(name), "checked" if enabled else "")
+                    if note:
+                        inner += '<p class="help">%s</p>' % e(note)
+                    if keyname:
+                        inner += ('<span class="state %s">%s · %s</span>'
+                                  '<p class="help">Conservative budget: %d requests/day</p>'
+                                  '<label for="key-%s">Provider API key (optional until enabled)</label>'
+                                  '<input id="key-%s" type="password" name="key" autocomplete="new-password" '
+                                  'placeholder="%s"><label><input type="checkbox" name="remove" value="on"> '
+                                  'Remove saved key</label>') % (
+                                      "ok" if saved else "warn",
+                                      "Key stored privately" if saved else "Key required", e(keyname), limit,
+                                      e(name), e(name), "Saved — enter a replacement" if saved else "Enter provider key")
+                    else:
+                        inner += '<p class="ok help">No API key required · safe daily budget %d calls</p>' % limit
+                    inner += '<button type="submit">Save provider</button>'
+                    test = self._form("test_source", '<button class="secondary" type="submit">Test connection (uses quota)</button>',
+                                      '<input type="hidden" name="kind" value="sports">'
+                                      '<input type="hidden" name="provider" value="%s">' % e(name))
+                    body += ('<article class="card card-soft"><h3>%s</h3>%s'
+                             '<p class="help">Provider host: %s</p>%s%s</article>') % (
+                                 e(label), status(name), e(urllib.parse.urlsplit(url).hostname),
+                                 self._form("sports", inner), test)
+                body += '</div></details>'
+            options = config.get("options", {})
+            chosen_sports = set(options.get("thesportsdb_sports", []))
+            chosen_leagues = set(options.get("openligadb_leagues", []))
+            option_form = '<h3>TheSportsDB sports</h3><p class="help">Each selected sport may use a daily call.</p><div class="formrow">'
+            option_form += ''.join('<label><input type="checkbox" name="tsdb" value="%s" %s> %s</label>' % (
+                e(item), "checked" if item in chosen_sports else "", e(item)) for item in providers.THESPORTSDB_SPORTS)
+            option_form += '</div><h3>OpenLigaDB leagues</h3><div class="formrow">'
+            option_form += ''.join('<label><input type="checkbox" name="old" value="%s" %s> %s</label>' % (
+                e(item), "checked" if item in chosen_leagues else "", e(item)) for item in providers.OPENLIGADB_LEAGUES)
+            option_form += '</div><button type="submit">Save source options</button>'
+            body += '<details class="provider-group"><summary>Competition and sport selections</summary><div class="card">' + (
+                self._form("options", option_form)) + '</div></details>'
+        if section in ("all", "epg"):
+            body += ('<div class="section-space"><h2>International television EPG sources</h2>'
+                     '<p>EPG imports stay private on Home Assistant. Sources marked verify must pass '
+                     'a connection test before their reliability is assumed. Public redistribution of '
+                     'programme text is disabled unless rights are separately established.</p></div>')
+            regions = {}
+            for name, (label, _) in providers.EPG.items():
+                if (label.startswith("UK ") or label.startswith("Sports ")):
+                    region = "United Kingdom · sports and national guide"
+                elif label.startswith("France "):
+                    region = "France"
+                elif label.startswith("Ireland "):
+                    region = "Ireland"
+                else:
+                    region = label.split(" · ")[0]
+                regions.setdefault(region, []).append(name)
+            for region, names in regions.items():
+                enabled_count = sum(bool(config["epg"].get(n)) for n in names)
+                body += ('<details class="provider-group" %s><summary>%s '
+                         '<span class="pill">%d / %d enabled</span></summary><div class="grid">') % (
+                             "open" if enabled_count else "", e(region), enabled_count, len(names))
+                for name in names:
+                    label, url = providers.EPG[name]
+                    inner = ('<input type="hidden" name="provider" value="%s">'
+                             '<label><input type="checkbox" name="enabled" value="on" %s> '
+                             'Enable private collection</label>'
+                             '<p class="warn help">No public redistribution rights established</p>'
+                             '<button type="submit">Save EPG source</button>') % (
+                                 e(name), "checked" if config["epg"].get(name) else "")
+                    check = self._form("test_source", '<button class="secondary" type="submit">Test EPG (downloads guide)</button>',
+                                       '<input type="hidden" name="kind" value="epg">'
+                                       '<input type="hidden" name="provider" value="%s">' % e(name))
+                    quality = self.store.snapshot("epg-quality:" + name)
+                    coverage = ""
+                    if quality:
+                        q = quality["data"]
+                        coverage = '<p class="help">Most recent 24h full-guide coverage: %s / %s channels</p>' % (
+                            e(q.get("full_coverage_channels", {}).get("24h", 0)), e(q.get("channels", 0)))
+                    body += ('<article class="card card-soft"><h3>%s</h3>%s'
+                             '<p class="help">Guide host: %s</p>%s%s%s</article>') % (
+                                 e(label), status(name), e(urllib.parse.urlsplit(url).hostname),
+                                 coverage, self._form("epg", inner), check)
+                body += '</div></details>'
+        return body
 
     @staticmethod
     def _uk_time(event, fmt="%d %b %H:%M %Z"):
