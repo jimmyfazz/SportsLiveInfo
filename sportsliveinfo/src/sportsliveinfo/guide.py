@@ -66,7 +66,17 @@ SERVICES = {
         "nba tv": "us.nba.tv", "golf channel": "us.golf.channel",
     },
     "AU": {"fox footy": "au.fox.footy", "fox cricket": "au.fox.cricket", "fox league": "au.fox.league"},
-    "HK": {"now sports premier league": "hk.now.sports.premier_league"},
+    "HK": {
+        # Hong Kong Communications Authority, Now TV lineup as of December 2025.
+        "now sports premier league": "hk.now.sports.premier_league",
+        "now sports premier league tv": "hk.now.sports.premier_league",
+        "now sports prime": "hk.now.sports.prime",
+        "now sports plus": "hk.now.sports.plus",
+        **{f"now sports {number}": f"hk.now.sports.{number}" for number in range(1, 8)},
+        **{f"now sports premier league {number}": f"hk.now.sports.premier_league.{number}" for number in range(1, 8)},
+        **{f"now sports 4k{number}": f"hk.now.sports.4k{number}" for number in range(1, 4)},
+        **{f"bein sports {number}": f"hk.bein.sports.{number}" for number in range(1, 7)},
+    },
     "MY": {"astro premier league": "my.astro.premier_league"},
     "GE": {"setanta sports 1": "ge.setanta.sports.1", "setanta sports 2": "ge.setanta.sports.2"},
 }
@@ -146,7 +156,11 @@ CHANNEL_FAMILIES = [
 _FAMILY_PATTERNS = [(fid, label, re.compile(pattern)) for fid, label, pattern in CHANNEL_FAMILIES]
 
 QUALITY_SUFFIX = re.compile(r"\s+(?:hd|fhd|sd|uhd|4k|hevc|h265|h264|2160p|1080p|720p)$", re.I)
-COUNTRY_PREFIX = re.compile(r"^(?:uk|gb|fr|france|ie|irl|us|usa|ca|can|au|aus|nz|hk|hkg|my|mys|sg|ge|geo|pt|pl|gr|in|pk|ar|ara|arabic|mena|int|sports)\s*(?:[|:\-])\s*", re.I)
+COUNTRY_PREFIX = re.compile(r"^(uk|gb|fr|france|ie|irl|us|usa|ca|can|au|aus|nz|hk|hkg|my|mys|sg|ge|geo|pt|pl|gr|in|pk|ar|ara|arabic|mena|int|sports)\s*(?:[|:\-])\s*", re.I)
+COUNTRY_PREFIX_ALIASES = {
+    "uk": "gb", "france": "fr", "irl": "ie", "usa": "us", "can": "ca",
+    "aus": "au", "hkg": "hk", "mys": "my", "geo": "ge",
+}
 SPACES = re.compile(r"\s+")
 GENERIC_PROGRAMME = re.compile(r"^(?:live (?:football|sport|sports|rugby|cricket|tennis|boxing)|to be announced|tba|programme information|no information|sporting event|live event)$", re.I)
 
@@ -184,6 +198,11 @@ def canonical_channel(source_id, epg_id, display_name):
     market = COUNTRY_BY_SOURCE.get(source_id)
     if not market:
         return None
+    prefix = COUNTRY_PREFIX.match(str(display_name).strip())
+    if prefix:
+        region = prefix[1].casefold()
+        if region != "sports" and COUNTRY_PREFIX_ALIASES.get(region, region) != market.casefold():
+            return None
     return SERVICES.get(market, {}).get(normalized_name(display_name))
 
 

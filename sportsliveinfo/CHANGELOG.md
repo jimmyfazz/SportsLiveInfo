@@ -12,7 +12,8 @@
 - Display date-only and time-TBC fixtures without an exact start time and exclude them from time-based EPG matching.
 - Save keyless sports providers and private EPG guides in separate groups with Tick all controls.
 - Raise only the Freeview download and XML TV Fr expanded-size caps to accommodate their listed files.
-- Keep the same App slug and persistent SQLite path for in-place updates. The feed fixture changes only the producer version.
+- Add Hong Kong Now Sports and beIN channel identities and reject conflicting explicit country prefixes. Display non-UK markets on provisional channel matches.
+- Keep the same App slug and persistent SQLite path for in-place updates. The feed fixture updates the producer version and channel registry.
 
 ## Documentation reconciliation — 12 November 2026 (no runtime version change)
 

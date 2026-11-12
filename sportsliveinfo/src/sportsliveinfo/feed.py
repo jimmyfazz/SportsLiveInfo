@@ -141,7 +141,7 @@ def channels_document():
         "matching_rules": {
             "precedence": ["user manual mapping (always wins)", "provider tvg-id exact", "source_crosswalk exact id",
                            "service name in the guide's own market", "generic name index"],
-            "market_gate": "a service name match is valid only in a guide whose market equals the service market",
+            "market_gate": "a service name match requires the guide market to equal the service market and any explicit country prefix to agree",
             "never_auto_match": ["regional variants", "+1 timeshift", "Sky Sports+", "numbered channels with a different number"],
             "families_are_diagnostic_only": True,
         },

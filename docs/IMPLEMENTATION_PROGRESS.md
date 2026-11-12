@@ -11,7 +11,7 @@
 
 Baseline: private main `56ea1bee0611d1343f4a05f2d7983e146f415606`. The live v0.3.0 HAOS snapshot showed 1,223 sports events and eight EPG guides. This maintenance build fixes the fallback labels, zero rendering and misleading full-coverage rows using existing snapshots. It adds no provider requests, licence changes, schema changes or storage migrations.
 
-Verification: Python 3.12 compile and 94 tests, including regressions for dashboard rendering, collector status, EPG error handling and unconfirmed start times. The manifest golden fixture changes only producer version. The v0.3.1 Home Assistant update and persistence check are pending. Keep the existing local App installed for an in-place update, take an App backup first, and retain v0.3.0 App files and the backup for rollback.
+Verification: Python 3.12 compile and 95 tests, including regressions for dashboard rendering, collector status, EPG error handling and unconfirmed start times. The golden fixture includes the updated producer version and channel registry. The v0.3.1 Home Assistant update and persistence check are pending. Keep the existing local App installed for an in-place update, take an App backup first, and retain v0.3.0 App files and the backup for rollback.
 
 Follow-up: Overview displays the latest collector activity and live badges are explicitly as of the refresh. EPG diagnostics distinguish upstream HTTP status, network or timeout, size or record limits, local quota and invalid input without logging raw exception text. Events marked time TBC cannot create time-based EPG candidates or estimated live statuses.
 
@@ -22,6 +22,8 @@ Source setup now has separate bulk selections for keyless sports providers and p
 Source research, 12 November: [dp247's Freeview file](https://github.com/dp247/Freeview-EPG/blob/master/epg.xml) is listed at 20.7 MB, beyond the former 14 MB download cap. [XML TV Fr](https://xmltvfr.fr/xmltv/) lists the France-only guide at about 70 MiB expanded, beyond the former 65 MB cap. Targeted limits are now 30 MB download and 85 MB expanded, respectively. Parser and record safeguards remain enabled. Retest both on HAOS before claiming a successful import. The same publisher lists a smaller France TNT candidate for further testing.
 
 [EPGTalk](https://github.com/acidjesuz/EPGTalk) lists both configured filenames; keep them pending the new diagnostics. [iptv-org](https://github.com/iptv-org/epg) documents locally generated guides; the failing static Sky, French and Foxtel URLs remain unverified. Matt Huisman's [Foxtel](https://i.mjh.nz/Foxtel/) and [Kayo](https://i.mjh.nz/Kayo/) indexes list guide files but their forward coverage needs measuring before use. No new feed endpoints or redistribution permissions were added.
+
+Hong Kong channel identity: added 25 distinct Now Sports and beIN services from the [Hong Kong Communications Authority Now TV lineup](https://www.coms-auth.hk/filemanager/en/content_1788/info_doc.pdf) (December 2025). Numbered Premier League and 4K services stay distinct. Conflicting explicit geographic prefixes are rejected for market-scoped name matches; exact source ID crosswalks retain precedence. The additive channel registry and synthetic golden manifest were regenerated. Actual recognition counts on the two HAOS guides and B1G reader acceptance remain pending. No live guide or event records were added to GitHub.
 
 ## Current documentation reconciliation — 12 November 2026
 

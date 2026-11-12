@@ -373,7 +373,12 @@ class UI(BaseHTTPRequestHandler):
             return ", ".join(str(c.get("name", "")) for c in event.get("broadcasts", []) if isinstance(c, dict)) or "Verified"
         candidates = event.get("broadcast_candidates") or []
         if candidates:
-            return "EPG match (unverified): " + ", ".join(c.get("channel_name", "") for c in candidates[:3])
+            names = []
+            for candidate in candidates[:3]:
+                name = candidate.get("channel_name", "")
+                market = candidate.get("canonical_channel_id", "").partition(".")[0].upper()
+                names.append(f"{name} ({market})" if market and market != "GB" else name)
+            return "EPG match (unverified): " + ", ".join(names)
         return "Not verified"
 
     def _event_row(self, event, fmt="%d %b %H:%M %Z"):
@@ -433,7 +438,7 @@ class UI(BaseHTTPRequestHandler):
             e(query.get("q", "")))
         body += '<section class="card">%s<h3>%s of %s events</h3><p class="help">%s · Data is private on this Home Assistant instance.</p>' % (
             filters, e(len(shown)), e(len(events)), e(snapshot["updated_at"] if snapshot else "No sporting snapshot yet"))
-        body += '<table><tr><th>UK start time</th><th>Category and competition</th><th>Event and sources</th><th>UK channel</th></tr>'
+        body += '<table><tr><th>UK start time</th><th>Category and competition</th><th>Event and sources</th><th>Channel</th></tr>'
         body += ''.join(self._event_row(ev) for ev in shown[:200]) + '</table>'
         if len(shown) > 200:
             body += '<p class="help">Showing first 200 matching events; narrow the filter to see more.</p>'

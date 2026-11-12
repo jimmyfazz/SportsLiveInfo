@@ -162,6 +162,22 @@ class ChannelIdentityTests(unittest.TestCase):
         self.assertIsNone(canonical_channel("epgtalk_sports", "", "Sky Sports Main Event"), "multi-country guide has no market")
         self.assertEqual(normalized_name("SPORTS | beIN MAX 4"), "bein max 4")
 
+    def test_hong_kong_matches_keep_market_and_service_variants(self):
+        for source in ("epgshare_hk", "iptv_epg_hk"):
+            with self.subTest(source=source):
+                self.assertEqual(canonical_channel(source, "", "HKG | Now Sports 2 HD"), "hk.now.sports.2")
+                self.assertEqual(canonical_channel(source, "", "Now Sports Premier League TV"),
+                                 "hk.now.sports.premier_league")
+                self.assertEqual(canonical_channel(source, "", "Now Sports Premier League 2"),
+                                 "hk.now.sports.premier_league.2")
+                self.assertEqual(canonical_channel(source, "", "Now Sports 4K2"), "hk.now.sports.4k2")
+                self.assertEqual(canonical_channel(source, "", "beIN SPORTS 2 HD"), "hk.bein.sports.2")
+                self.assertIsNone(canonical_channel(source, "", "FR - beIN SPORTS 2 HD"))
+                self.assertIsNone(canonical_channel(source, "", "Now Sports 2 +1"))
+                self.assertIsNone(canonical_channel(source, "", "Now Sports 8"))
+        self.assertEqual(canonical_channel("iptv_epg_fr", "", "FR - beIN SPORTS 2 HD"), "fr.bein.sports.2")
+        self.assertIsNone(canonical_channel("iptv_epg_fr", "", "HK - beIN SPORTS 2 HD"))
+
     def test_lineup_families_from_owner_categories(self):
         self.assertIn("now_sports_hk", channel_families("Now Sports Premier League 2"))
         self.assertIn("peacock", channel_families("Peacock 05: NFL Sunday"))
