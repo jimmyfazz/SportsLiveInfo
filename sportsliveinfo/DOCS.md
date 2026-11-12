@@ -1,14 +1,16 @@
 # SportsLiveInfo — installation and use
 
-## Install from the Home Assistant Apps store
+## Install on Home Assistant OS (private-source testing)
 
-1. This GitHub repository **must be public** for Home Assistant to fetch it as an external app repository. Do not change its visibility until you review the existing private documentation and are ready to publish the code.
-2. On **Home Assistant OS**, go to **Settings → Apps → Install app → ⋮ → Repositories**, add `https://github.com/jimmyfazz/SportsLiveInfo`, then refresh the store.
-3. Select **SportsLiveInfo**, install it, enable **Start on boot**, and select **Start** then **Open web UI**. Build-on-device is used; an external GHCR image is not necessary.
-4. Complete the Ingress wizard: choose providers, enter free API keys when needed, enable lawful guide sources and set refresh times. Each Save keeps keys for unrelated providers.
-5. Return to Overview, select **Refresh both engines now**, and inspect **Diagnostics** for detailed source results. The local SQLite database is stored in `/data` and survives app restart or upgrade.
+The **SportsLiveInfo application source is private**. Entering its GitHub URL into Home Assistant's standard Apps repository installer does not establish that Supervisor can authenticate or clone it. The separate public `LiveSports-EPG` repository is a *data feed destination*, not an installable App.
 
-**This is an App, not a HACS custom integration.** Do not use Settings → Marketplace → custom HACS repository for installation; use the **Apps** repository manager. Ingress requires no router port-forwarding and this app config exposes **no host ports**.
+**Recommended private test route:** On a Mac authenticated to the private source, download the development branch ZIP, extract the inner `sportsliveinfo` app folder and copy it into Home Assistant OS's `local_apps/sportsliveinfo` folder using the Samba share (Finder → Cmd+K → `smb://homeassistant.local`) or authorised Terminal & SSH. In **Settings → Apps → Install app → Local apps**, install **SportsLiveInfo**, enable Start on boot and Open web UI. This keeps the source repository and credentials private.
+
+See **[Complete private HAOS installation and update checklist](../docs/PRIVATE_HAOS_TEST_INSTALL.md)** for detailed folder-layout checks, safe rebuilding and troubleshooting. The full local slug is `local_sportsliveinfo`. Do not expose port 8099 or forward Home Assistant through the router.
+
+If the project later has a **genuinely accessible public** installation repository or image, use **Settings → Apps → Install app → ⋮ → Repositories** with its Git URL; do **not** make the private development source public without a separate decision. This is an App, not a HACS/Marketplace integration.
+
+After the app starts, select sources and save optional API keys, configure refresh times, finish setup and manually refresh; review Diagnostics. Private SQLite state is held in the app's persistent `/data` volume and should survive a normal restart. Actual HAOS install and backup/restore are still unverified.
 
 ## What's new in development release v0.2.0
 
