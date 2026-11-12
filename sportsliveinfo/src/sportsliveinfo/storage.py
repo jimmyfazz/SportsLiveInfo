@@ -4,16 +4,22 @@ import os
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from . import providers
+
+# New sources are always added disabled: an upgrade never starts outbound
+# calls the owner has not chosen.
 DEFAULT = {
     "setup_complete": False,
-    "sports": {"jolpica": True, "openligadb": False, "football_data": False, "api_sports": False},
-    "epg": {"farleyflex": False, "fr_programmetv": False, "fr_telerama": False, "fr_xmltv": False},
+    "sports": {name: name == "jolpica" for name in providers.SPORTS},
+    "epg": {name: False for name in providers.EPG},
+    "options": {"thesportsdb_sports": list(providers.THESPORTSDB_SPORTS),
+                "openligadb_leagues": list(providers.OPENLIGADB_LEAGUES)},
     "keys": {},
     "schedule": ["04:00", "12:00", "17:00"],
-    "github": {"owner": "jimmyfazz", "repository": "", "branch": "main", "token": "", "enabled": False},
+    "github": {"owner": "jimmyfazz", "repository": "", "branch": "main", "token": "", "enabled": False, "auto_publish": False},
     "publication_approvals": [],
 }
 
@@ -40,6 +46,8 @@ class Store:
                 CREATE TABLE IF NOT EXISTS requests (
                   provider TEXT NOT NULL, utc_day TEXT NOT NULL, count INTEGER NOT NULL,
                   PRIMARY KEY(provider,utc_day));
+                CREATE TABLE IF NOT EXISTS scheduler_slots (
+                  slot TEXT PRIMARY KEY, claimed_at TEXT NOT NULL);
             """)
         if not self._get("config"):
             self._put("config", DEFAULT)
@@ -84,8 +92,33 @@ class Store:
             for key, value in update.items():
                 if key not in DEFAULT:
                     raise ValueError("Unknown configuration field")
-                if isinstance(config[key], dict) and isinstance(value, dict):
+                expected = DEFAULT[key]
+                if isinstance(expected, dict):
+                    if not isinstance(value, dict):
+                        raise ValueError("Configuration section must be a dictionary")
+                    if key in ("sports", "epg") and (
+                        any(k not in (providers.SPORTS if key == "sports" else providers.EPG) or type(v) is not bool
+                            for k, v in value.items())
+                    ):
+                        raise ValueError("Unknown provider or invalid enabled state")
+                    if key == "github" and any(k not in expected for k in value):
+                        raise ValueError("Unsupported publication setting")
                     config[key].update(value)
+                elif isinstance(expected, bool):
+                    if type(value) is not bool:
+                        raise ValueError("Expected boolean configuration")
+                    config[key] = value
+                elif isinstance(expected, list):
+                    if not isinstance(value, list) or len(value) > 100 or any(not isinstance(x, str) for x in value):
+                        raise ValueError("Invalid configuration list")
+                    if key == "schedule" and any(
+                        len(x) != 5 or x[2] != ":" or not x[:2].isdigit() or not x[3:].isdigit()
+                        or int(x[:2]) > 23 or int(x[3:]) > 59 for x in value
+                    ):
+                        raise ValueError("Invalid scheduler time")
+                    if key == "publication_approvals" and any(x not in providers.SPORTS for x in value):
+                        raise ValueError("Unknown publication source")
+                    config[key] = value
                 else:
                     config[key] = value
             self._put("config", config)
@@ -115,16 +148,45 @@ class Store:
             return [dict(x) for x in db.execute("SELECT time,provider,state,details FROM jobs ORDER BY id DESC LIMIT ?", (limit,))]
 
     def increment(self, provider, limit):
-        """Conservative call accounting: reserve a unit before attempting network IO."""
+        """Reserve before network IO; atomic even across separate Store instances/processes.
+
+        RLock alone does not serialize another process using the same SQLite file.
+        BEGIN IMMEDIATE avoids a SELECT-then-UPDATE quota overspend race.
+        """
+        if not isinstance(provider, str) or not provider or type(limit) is not int or limit <= 0:
+            raise ValueError("Invalid API quota")
         day = datetime.now(timezone.utc).date().isoformat()
         with self._lock, self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
             old = db.execute("SELECT count FROM requests WHERE provider=? AND utc_day=?", (provider, day)).fetchone()
             count = old[0] if old else 0
             if count >= limit:
                 raise RuntimeError("Configured daily call budget exhausted")
             db.execute("INSERT INTO requests(provider,utc_day,count) VALUES(?,?,1) ON CONFLICT(provider,utc_day) DO UPDATE SET count=count+1", (provider, day))
-            db.commit()
             return count + 1
+
+    def claim_scheduler_slot(self, slot):
+        """Claim local-time daily scheduler slot exactly once across restarts/workers."""
+        if not isinstance(slot, str) or len(slot) != 16:
+            raise ValueError("Invalid scheduler slot")
+        try:
+            datetime.strptime(slot, "%Y-%m-%d %H:%M")
+        except ValueError as exc:
+            raise ValueError("Invalid scheduler slot") from exc
+        with self._lock, self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            cursor = db.execute(
+                "INSERT OR IGNORE INTO scheduler_slots(slot,claimed_at) VALUES (?,?)",
+                (slot, utcnow()),
+            )
+            db.execute("DELETE FROM scheduler_slots WHERE claimed_at < ?",
+                       ((datetime.now(timezone.utc) - timedelta(days=35)).isoformat(),))
+            return cursor.rowcount == 1
+
+    def release_scheduler_slot(self, slot):
+        """Undo a slot claim when no collection was scheduled (e.g. collector busy)."""
+        with self._lock, self._db() as db:
+            db.execute("DELETE FROM scheduler_slots WHERE slot=?", (slot,))
 
     def usage(self):
         day = datetime.now(timezone.utc).date().isoformat()

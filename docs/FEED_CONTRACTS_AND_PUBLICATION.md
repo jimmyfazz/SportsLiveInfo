@@ -1,4 +1,7 @@
 # Versioned feed schemas, provenance, licence gates and crash-safe publishing
+
+> **Implemented contract:** the concrete, versioned feed is now [`FEED_CONTRACT_SLI_V1.md`](FEED_CONTRACT_SLI_V1.md) (`sli/1`, content-addressed `v1/` layout, atomic Git Data API publishing, schemas and golden fixtures). Where layout or versioning here differs, `sli/1` wins; rights and safety rules here still apply.
+
 **Normative design 1.0 — 12 Nov 2026.** Read with `MASTER_IMPLEMENTATION_ROADMAP.md`. Output is intended for a separately approved public feed after rights checks. **No public feed or Home Assistant WAN access is presently enabled.**
 
 ## 1. Consumers and transport

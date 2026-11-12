@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sli.manifest/1",
+  "title": "SportsLiveInfo feed manifest (v1/manifest.json)",
+  "description": "Entry point for read-only B1G clients. Readers MUST ignore unknown fields, unknown assets and unknown capabilities, and MUST refuse a format_major they do not support (keeping their last good feed).",
+  "type": "object",
+  "required": ["feed", "format", "format_major", "format_minor", "compatibility", "revision", "generated_at", "publisher", "timezone_reference", "window", "refresh", "capabilities", "assets", "coverage", "rights", "display_policy", "notices"],
+  "properties": {
+    "feed": {"const": "sportsliveinfo"},
+    "format": {"type": "string", "pattern": "^sli/[0-9]+\\.[0-9]+$"},
+    "format_major": {"type": "integer", "minimum": 1},
+    "format_minor": {"type": "integer", "minimum": 0},
+    "compatibility": {
+      "type": "object",
+      "required": ["reader_major", "min_reader_minor", "unknown_fields", "unknown_assets", "unknown_enum_fallback"],
+      "properties": {
+        "reader_major": {"type": "integer"},
+        "min_reader_minor": {"type": "integer"},
+        "unknown_fields": {"const": "ignore"},
+        "unknown_assets": {"const": "ignore"},
+        "unknown_enum_fallback": {"type": "object"}
+      }
+    },
+    "revision": {"type": "string", "pattern": "^[0-9a-f]{20}$"},
+    "previous_revision": {"type": ["string", "null"]},
+    "generated_at": {"type": "string"},
+    "publisher": {"type": "object", "required": ["app", "version"]},
+    "timezone_reference": {"const": "Europe/London"},
+    "window": {"type": "object", "required": ["from", "to"]},
+    "refresh": {
+      "type": "object",
+      "required": ["reader_poll_minutes", "stale_after_hours", "expires_at", "expected_interval_minutes"],
+      "properties": {
+        "reader_poll_minutes": {"type": "integer", "minimum": 5},
+        "stale_after_hours": {"type": "integer", "minimum": 1},
+        "expires_at": {"type": "string"},
+        "expected_interval_minutes": {"type": "integer"}
+      }
+    },
+    "capabilities": {"type": "array", "items": {"type": "string"}},
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "path", "sha256", "bytes", "schema", "content_type", "required"],
+        "properties": {
+          "kind": {"type": "string", "description": "taxonomy | channels | events:YYYY-MM-DD | today | health | (future kinds: ignore)"},
+          "path": {"type": "string", "pattern": "^v1/assets/[a-z_]+/[0-9a-f]{24}\\.json$"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "bytes": {"type": "integer", "minimum": 1},
+          "schema": {"type": "string"},
+          "content_type": {"const": "application/json"},
+          "required": {"type": "boolean"},
+          "date": {"type": "string"},
+          "records": {"type": "integer"}
+        }
+      }
+    },
+    "coverage": {"type": "object", "required": ["events", "today", "by_sport"]},
+    "rights": {
+      "type": "object",
+      "required": ["events", "epg_programmes", "attribution"],
+      "properties": {
+        "epg_programmes": {"const": "not_published"},
+        "attribution": {"type": "array", "items": {"type": "object", "required": ["source", "text", "licence"]}}
+      }
+    },
+    "display_policy": {"type": "object", "required": ["sports_today_body_cards", "ppv_pinned_extra_card", "featured_tags", "user_settings_override"]},
+    "notices": {"type": "array", "items": {"type": "string"}}
+  }
+}

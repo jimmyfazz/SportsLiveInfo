@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sli.taxonomy/1",
+  "title": "Sports and competition taxonomy",
+  "description": "Drives every label, order and grouping on the TV. New sports, competitions, tags and live states arrive here; readers render unknown ids with the generic 'other' fallback instead of dropping them.",
+  "type": "object",
+  "required": ["schema", "sports", "competitions", "national_categories", "other_category", "tags", "live_states", "start_precisions", "live_state_rule"],
+  "properties": {
+    "schema": {"const": "sli.taxonomy/1"},
+    "sports": {"type": "array", "items": {"type": "object", "required": ["id", "label", "order", "typical_minutes", "b1g_priority_group"],
+      "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "order": {"type": "integer"}, "typical_minutes": {"type": "integer", "minimum": 1}, "b1g_priority_group": {"type": "string"}}}},
+    "competitions": {"type": "array", "items": {"type": "object", "required": ["id", "sport", "label", "priority", "b1g_priority_group"],
+      "properties": {"id": {"type": "string"}, "sport": {"type": "string"}, "label": {"type": "string"}, "priority": {"type": "integer"}, "countries": {"type": ["array", "null"]}, "b1g_priority_group": {"type": "string"}}}},
+    "national_categories": {"type": "array", "items": {"type": "object", "required": ["id", "sport", "label", "priority", "nations"]}},
+    "other_category": {"type": "object", "required": ["id_pattern", "priority"]},
+    "tags": {"type": "object"},
+    "live_states": {"type": "array", "items": {"type": "object", "required": ["id", "label", "is_live"]}},
+    "start_precisions": {"type": "array", "items": {"type": "object", "required": ["id", "label"]}},
+    "live_state_rule": {"type": "string"}
+  }
+}

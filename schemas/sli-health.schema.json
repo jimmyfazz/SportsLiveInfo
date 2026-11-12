@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sli.health/1",
+  "title": "Source health and guide coverage measured on the SportsLiveInfo host",
+  "description": "Optional asset for B1G Settings > Sources diagnostics. Contains counts and states only.",
+  "type": "object",
+  "required": ["schema", "sources", "guides"],
+  "properties": {
+    "schema": {"const": "sli.health/1"},
+    "sources": {"type": "array", "items": {"type": "object", "required": ["id", "kind", "label", "state"]}},
+    "guides": {"type": "array", "items": {"type": "object", "required": ["id", "channels", "full_24h", "families"]}}
+  }
+}
