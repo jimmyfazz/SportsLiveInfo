@@ -173,7 +173,42 @@ class Engine:
         except RuntimeError as exc:
             raise QuotaExhausted(str(exc)) from None
         self._pace(name)
-        return item["decode"](providers.fetch(item["url"], item["headers"], max_bytes=item["max_bytes"]))
+        raw = providers.fetch(item["url"], item["headers"], max_bytes=item["max_bytes"])
+        # API-Sports responses can advertise multiple pages. Collect them
+        # completely (within quota), or reject the scope and retain last-good;
+        # never pass an incomplete free-plan page off as a full schedule.
+        if name.startswith("api_sports"):
+            payload = json.loads(raw)
+            paging = payload.get("paging", {}) if isinstance(payload, dict) else {}
+            if isinstance(paging, dict):
+                current, total = int(paging.get("current") or 1), int(paging.get("total") or 1)
+                if total > 20 or current != 1 or total < 1:
+                    raise ValueError("Unsupported or excessive provider pagination")
+                if total > 1:
+                    records = payload.get("response")
+                    if not isinstance(records, list):
+                        raise ValueError("Incomplete provider response")
+                    records = list(records)
+                    for page in range(2, total + 1):
+                        try:
+                            self.store.increment(name, limit)
+                        except RuntimeError as exc:
+                            raise QuotaExhausted(str(exc)) from None
+                        self._pace(name)
+                        separator = "&" if "?" in item["url"] else "?"
+                        page_url = item["url"] + separator + urllib.parse.urlencode({"page": page})
+                        more = json.loads(providers.fetch(page_url, item["headers"],
+                                                           max_bytes=item["max_bytes"]))
+                        if (not isinstance(more, dict) or more.get("errors")
+                                or not isinstance(more.get("response"), list)
+                                or int((more.get("paging") or {}).get("current") or 0) != page
+                                or int((more.get("paging") or {}).get("total") or 0) != total):
+                            raise ValueError("Incomplete or conflicting provider page")
+                        records.extend(more["response"])
+                    payload["response"] = records
+                    payload["paging"] = {"current": total, "total": total}
+                    raw = json.dumps(payload).encode()
+        return item["decode"](raw)
 
     @staticmethod
     def _legacy_scope(name, event):
