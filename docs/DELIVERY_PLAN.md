@@ -26,6 +26,18 @@ Reference [read-only feed and inventory policy](B1G_READ_ONLY_FEED_AND_INVENTORY
 - [ ] Confirm account switching and unhide immediately adjust local EPG/sports projection without a central publication event.
 - [ ] Confirm no GitHub publishing token, subscribed playlist, provider credentials, hidden preferences or channel-list auto-upload exists in B1G.
 
+## New P0 workstream — multi-source broadcaster identity and accurate EPG allocation
+
+Reference [channel identity / EPG allocation specification](CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md). This is now required for central UK/French/multi-country guide delivery, rather than just adding another XMLTV URL.
+
+- [ ] SportsLiveInfo canonical broadcaster registry, region/variant-aware alias catalogue, source-ID and XMLTV-ID crosswalk, evidence and versioned JSON schema.
+- [ ] B1G Kotlin indexed resolver consumes this catalogue but final `streamId` resolution remains account-local; user manual mapping, source binding and suppression win.
+- [ ] Strict guardrails for country/region, BBC variants, Sky Sports+ vs standard, numbered TNT/Canal+/beIN/RMC channels, +1 timeshifts, event-only 4K and aggregate sports channels.
+- [ ] Provenance-aware `match confidence` and unmatched-channel diagnostic suggestions (no guessed auto-mapping).
+- [ ] Independently verified `fixture -> EPG programme -> channel` link, separate from the identity lookup.
+- [ ] Preserve old EPG when alternate feed stale/conflicting and allow verified generic-to-detailed correction with non-identical but compatible broadcast/fixture windows.
+- [ ] Cover 50k-channel matching performance and held-out multi-country labelled accuracy benchmark with false-positive-negative suite.
+
 ## Stage P0 — groundwork (highest priority)
 
 - [ ] Scaffold Python package with typed canonical Event, Participant, Venue, Broadcast, SourceEvidence and SourceHealth models.
