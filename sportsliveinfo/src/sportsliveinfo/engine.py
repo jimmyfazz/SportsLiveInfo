@@ -465,6 +465,58 @@ class Engine:
         self.store.job("publisher", "preview", "Feed %s built locally: %d assets" % (manifest["revision"], len(manifest["assets"])))
         return manifest
 
+    def test_github_destination(self):
+        """Read-only check that the saved fine-grained token reaches its target.
+
+        A GET does not prove Contents:write. This intentionally never commits,
+        modifies repository settings, or attempts to publish unlicensed data.
+        """
+        target = self.store.config()["github"]
+        owner, repository, branch, token = (target.get(k, "") for k in
+                                            ("owner", "repository", "branch", "token"))
+        if not token:
+            raise ValueError("Save your GitHub token first, then run Test Connection")
+        if not all(isinstance(s, str) and s and len(s) <= 80
+                   and all(ch.isalnum() or ch in "._-" for ch in s)
+                   for s in (owner, repository, branch)):
+            raise ValueError("Save a valid GitHub owner, repository and branch first")
+        url = "https://api.github.com/repos/%s/%s" % (owner, repository)
+        headers = {"Authorization": "Bearer " + token,
+                   "Accept": "application/vnd.github+json",
+                   "User-Agent": "SportsLiveInfo/0.3"}
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=12) as response:
+                info = json.loads(response.read(64_000))
+            if info.get("full_name", "").casefold() != (owner + "/" + repository).casefold():
+                raise ValueError("GitHub returned a different repository")
+            if info.get("private") is not False:
+                raise ValueError("The feed destination must be a public repository")
+            perms = info.get("permissions")
+            if isinstance(perms, dict) and perms.get("push") is False:
+                raise ValueError("Token appears to lack repository write permission; select Contents: Read and write")
+            ref = urllib.request.Request(
+                url + "/git/ref/heads/" + urllib.parse.quote(branch, safe=""),
+                headers=headers)
+            with urllib.request.urlopen(ref, timeout=12) as response:
+                branch_info = json.loads(response.read(64_000))
+            if branch_info.get("ref") != "refs/heads/" + branch:
+                raise ValueError("GitHub did not confirm the requested feed branch")
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401:
+                raise ValueError("GitHub rejected the saved token (401); check or regenerate it") from None
+            if exc.code == 403:
+                raise ValueError("GitHub denied access (403); check token repository selection, permissions or expiry") from None
+            if exc.code == 404:
+                raise ValueError("Feed repository or branch was not found (404); check owner, repository and branch") from None
+            raise ValueError("GitHub connection returned HTTP %d" % exc.code) from None
+        except (TimeoutError, urllib.error.URLError, OSError):
+            raise ValueError("Could not reach GitHub; check internet access and try again") from None
+        except (TypeError, KeyError, json.JSONDecodeError):
+            raise ValueError("GitHub returned an unexpected response") from None
+        return ("GitHub token authenticated and public feed branch readable. "
+                "Read-only check passed; Contents:write is proven only by an authorised publication.")
+
     def publish(self):
         """Publish the sli/1 feed in ONE atomic commit; EPG programme text is never copied.
 
