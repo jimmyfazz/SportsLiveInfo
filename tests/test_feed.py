@@ -240,13 +240,18 @@ class FeedBehaviourTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256((out / asset["path"]).read_bytes()).hexdigest(), asset["sha256"])
         self.assertEqual(self.store._get("feed_preview")["revision"], manifest["revision"])
 
-    def test_auto_publish_after_collection_only_when_enabled(self):
+    def test_auto_publish_only_after_a_successful_collection(self):
         self.store.configure({"sports": {"jolpica": False}})
         with patch.object(Engine, "publish") as publish:
-            Engine(self.store).collect()
+            self.assertFalse(Engine(self.store).collect())
             publish.assert_not_called()
             self.store.configure({"github": {"auto_publish": True}})
-            Engine(self.store).collect()
+            self.assertFalse(Engine(self.store).collect())
+            publish.assert_not_called()
+            self.store.configure({"sports": {"jolpica": True}})
+            payload = json.dumps({"MRData": {"RaceTable": {"Races": []}}}).encode()
+            with patch("sportsliveinfo.providers.fetch", return_value=payload):
+                self.assertTrue(Engine(self.store).collect())
             publish.assert_called_once()
 
 
