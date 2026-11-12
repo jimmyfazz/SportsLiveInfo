@@ -60,7 +60,7 @@ class OperatorDashboardTests(unittest.TestCase):
         self.store.job("football_data", "test_failed", "Safe network error")
         markup = self.ui.sources(self.store.config(), {"kind": "sports"})
         self.assertIn("Test Failed", markup)
-        self.assertIn("Safe network error" not in markup, (True, False))
+        self.assertNotIn("Safe network error", markup)
         self.assertNotIn("never-show-secret", markup)
         self.assertIn("Key stored privately", markup)
 
