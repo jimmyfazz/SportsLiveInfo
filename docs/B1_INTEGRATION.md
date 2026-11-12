@@ -12,6 +12,10 @@ The user has prioritised **accurate detailed UK sporting TV EPG programmes AND t
 
 **Critical Android parity issues for B1 team:** partial API-Sports response can incorrectly remove football cards, team-pair matching is too weak, programme-in-progress is not proof of sport-live, and Android includes optional PPV card inside 10 while Mac allows 10 body + PPV headline 11. These are audit findings requiring separate tests/implementation.
 
+## Read-only shared feed, local per-TV visibility
+
+**Mandatory:** [B1G read-only and inventory policy](B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md). Every B1G device only reads public, licence-cleared sports/EPG JSON. The HAOS App alone holds any publishing credential. **Never build automatic GitHub writes from B1G.** The central feed can include a superset of channels; each TV applies its current account's `ChannelVisibilityStore.visibleLiveCategoriesForAccount` (hidden live categories and hidden live channels) and its `EpgResolver` manual mappings before rendering guide rows or playable Sports Today cards. Other TVs may have different hidden states. Any actual lineup discovery is an optional owner-triggered safe export and HAOS import, not a normal TV request.
+
 ## Proposed sports rail
 
 A "Live Sport Today" / "Upcoming Sport" rail where cards present sport icon, competition, teams/fighters/session and country, start in Europe/London, broadcaster and verified/unverified TV status. A card may show "UK channel not confirmed" rather than guessing.
