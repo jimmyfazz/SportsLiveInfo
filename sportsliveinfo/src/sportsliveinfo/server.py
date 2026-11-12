@@ -659,39 +659,68 @@ class UI(BaseHTTPRequestHandler):
         return body + '</section>'
 
     def guide(self):
-        body = '<h2>International EPG coverage</h2><p>Private UK and French source analysis: distinguish a real 24-hour programme schedule from a feed that merely responds successfully. Canonical IDs are conservative hints; actual IPTV stream mapping remains local to B1G.</p>'
-        any_source = False
+        body = ('<div class="page-heading"><div><h2>International EPG coverage</h2>'
+                '<p>Private per-source guide completeness, missing intervals and canonical channel '
+                'identity hints. This does not replace the B1G subscription EPG.</p></div>'
+                '<a class="button-link secondary" href="?page=sources&amp;kind=epg">Manage EPG sources</a></div>')
+        sources_found = 0
         for name, (label, _) in providers.EPG.items():
             snapshot = self.store.snapshot("epg-quality:" + name)
             if not snapshot:
                 continue
-            any_source = True
+            sources_found += 1
             q = snapshot["data"]
-            total = int(q.get("channels", 0))
+            total = max(0, int(q.get("channels") or 0))
             full = q.get("full_coverage_channels", {})
-            body += '<section class="card" style="margin-bottom:14px"><h3>%s (%s)</h3>' % (e(label), e(q.get("country", "unknown")))
-            body += '<p class="sub">Last analysis: %s · %s channels · %s valid programmes · %s generic titles · %s invalid programmes</p>' % (
-                e(q.get("analysed_at")), e(total), e(q.get("valid_programmes", 0)),
-                e(q.get("generic_programmes", 0)), e(q.get("invalid_programmes", 0)))
+            stamp, severity = freshness(snapshot)
+            body += ('<section class="card section-space"><div class="page-heading"><h3>%s (%s)</h3>'
+                     '<span class="state %s">%s</span></div>') % (
+                         e(label), e(q.get("country", "unknown")), severity, e(stamp))
+            body += ('<p class="sub">Last analysis: %s · %s channels · %s valid programmes · '
+                     '%s generic titles · %s invalid programmes</p>') % (
+                         e(q.get("analysed_at")), e(total), e(q.get("valid_programmes", 0)),
+                         e(q.get("generic_programmes", 0)), e(q.get("invalid_programmes", 0)))
             body += '<div class="grid">'
             for horizon in ("24h", "72h", "168h"):
-                body += '<div><div class="metric">%s / %s</div><div class="help">Channels with a full %s guide</div></div>' % (
-                    e(full.get(horizon, 0)), e(total), e(horizon))
+                count = max(0, min(total, int(full.get(horizon) or 0)))
+                percent = round(100 * count / total) if total else 0
+                body += ('<div><div class="metric">%d / %d</div>'
+                         '<div class="help">%s channels with a continuous full guide</div>'
+                         '<div class="progress-track" role="progressbar" aria-label="%s full-guide coverage" '
+                         'aria-valuemin="0" aria-valuemax="100" aria-valuenow="%d">'
+                         '<div class="progress-fill" style="width:%d%%"></div></div>'
+                         '<div class="help">%d%% of source channels</div></div>') % (
+                             count, total, e(horizon), e(horizon), percent, percent, percent)
+            body += '</div>'
             families = q.get("families", {})
             if families:
-                body += '</div><div class="divider"></div><h3>Lineup families in this guide</h3><table><tr><th>Family</th><th>Channels</th><th>Full 24h guide</th></tr>'
-                for row in sorted(families.values(), key=lambda r: -r["channels"]):
-                    body += '<tr><td>%s</td><td>%s</td><td>%s</td></tr>' % (e(row["label"]), e(row["channels"]), e(row["full_24h"]))
-                body += '</table><div>'
-            body += '</div><div class="divider"></div><h3>Channels needing attention (worst 24h gaps)</h3>'
-            body += '<table><tr><th>Channel</th><th>Recognised service</th><th>24h programme coverage</th></tr>'
-            for row in q.get("channels_needing_attention", []):
-                body += '<tr><td>%s</td><td>%s</td><td>%s h</td></tr>' % (
-                    e(row.get("name", "")), e(row.get("canonical_id") or "Needs matching"),
-                    e(row.get("coverage_hours", {}).get("24h", 0)))
-            body += '</table><p class="help">Programme text and channel identifiers remain private. Guide source redistribution is disabled until independently licensed.</p></section>'
-        if not any_source:
-            body += '<section class="card"><p>No successful EPG import yet. Enable an approved UK or French guide in Sources and run a refresh.</p></section>'
+                body += ('<details class="provider-group"><summary>Recognised channel families</summary>'
+                         '<div class="card"><table><thead><tr><th>Family</th><th>Channels</th>'
+                         '<th>Full 24h guide</th></tr></thead><tbody>')
+                for row in sorted(families.values(), key=lambda item: -item.get("channels", 0)):
+                    body += '<tr><td>%s</td><td>%s</td><td>%s</td></tr>' % (
+                        e(row.get("label", "")), e(row.get("channels", 0)), e(row.get("full_24h", 0)))
+                body += '</tbody></table></div></details>'
+            attention = q.get("channels_needing_attention", [])
+            body += ('<details class="provider-group"><summary>Channels needing attention '
+                     '<span class="pill">%d shown</span></summary><div class="card">') % len(attention)
+            if attention:
+                body += ('<table><thead><tr><th>Channel</th><th>Recognised service</th>'
+                         '<th>24h programme coverage</th></tr></thead><tbody>')
+                for row in attention:
+                    body += '<tr><td>%s</td><td>%s</td><td>%s h</td></tr>' % (
+                        e(row.get("name", "")), e(row.get("canonical_id") or "Needs matching"),
+                        e(row.get("coverage_hours", {}).get("24h", 0)))
+                body += '</tbody></table>'
+            else:
+                body += '<p class="help">No missing-channel details were reported by this analysis.</p>'
+            body += ('</div></details><p class="help">Channel identities and EPG programme text remain private. '
+                     'Public guide redistribution is disabled without verified rights.</p></section>')
+        if not sources_found:
+            body += ('<section class="card empty"><h3>No EPG coverage report yet</h3>'
+                     '<p>Enable a permitted source, test its connection and run a refresh. '
+                     'The last successful report will remain available during upstream failures.</p>'
+                     '<a class="button-link secondary" href="?page=sources&amp;kind=epg">Set up EPG sources</a></section>')
         return body
 
     def schedule(self, config):
@@ -757,14 +786,53 @@ class UI(BaseHTTPRequestHandler):
     def health(self):
         rows = self.store.recent_jobs(35)
         usage = self.store.usage()
-        body = '<h2>Provider health & diagnostics</h2><p>Errors are recorded locally without API keys, programme titles or private account URLs. Repeat failures remain in the history; Home Assistant persistent notifications require a separately reviewed, least-privilege integration.</p>'
-        body += '<section class="card"><h3>Requests reserved today (UTC)</h3><table><tr><th>Provider</th><th>Count</th></tr>'
-        for k, v in sorted(usage.items()):
-            body += '<tr><td>%s</td><td>%s</td></tr>' % (e(k), e(v))
-        body += '</table></section><section class="card" style="margin-top:16px"><h3>Last 35 operations</h3><table><tr><th>Time (UTC)</th><th>Source</th><th>Status</th><th>Details</th></tr>'
-        for row in rows:
-            body += '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>' % tuple(e(row[k]) for k in ("time", "provider", "state", "details"))
-        body += '</table></section>'
+        failures = {"failed", "test_failed", "lane_error", "coverage_collapse", "stale"}
+        warnings = {"partial", "empty", "needs_key", "degraded", "quota", "no_sources"}
+        failed = sum(1 for row in rows if row["state"] in failures)
+        warned = sum(1 for row in rows if row["state"] in warnings)
+        body = ('<div class="page-heading"><div><h2>Provider health &amp; diagnostics</h2>'
+                '<p>Local-only operational events, daily call reservations and failures. '
+                'No secrets, playlist URLs or private programme text are shown.</p></div>'
+                '<a class="button-link secondary" href="?page=sources">Manage providers</a></div>')
+        body += '<div class="kpi-grid">'
+        for label, value, desc in [
+            ("Recent operations", len(rows), "Last 35 saved history entries"),
+            ("Failed operations", failed, "Failures in the displayed history; not unique incidents"),
+            ("Attention needed", warned, "Warnings and partial responses in the displayed history"),
+            ("Calls reserved today", sum(usage.values()), "UTC-day request budget, including tests"),
+        ]:
+            body += ('<div class="card metric-card"><div class="sub">%s</div>'
+                     '<div class="metric">%d</div><p class="help">%s</p></div>') % (
+                         e(label), value, e(desc))
+        body += '</div>'
+        body += '<section class="card section-space"><h3>Most recent operations</h3>'
+        if not rows:
+            body += '<p>No activity recorded yet. Enable and test a provider to see its status.</p>'
+        else:
+            body += ('<table><thead><tr><th>Time (UTC)</th><th>Provider</th><th>Status</th>'
+                     '<th>Detail</th></tr></thead><tbody>')
+            for row in rows:
+                state = row.get("state", "")
+                level = ("critical" if state in failures else
+                         "warn" if state in warnings else
+                         "ok" if state in ("ok", "test_ok", "finished", "no_events_reported") else "neutral")
+                body += '<tr><td>%s</td><td>%s</td><td><span class="state %s">%s</span></td><td>%s</td></tr>' % (
+                    e(row.get("time")), e(row.get("provider")), level,
+                    e(state.replace("_", " ").title()), e(row.get("details")))
+            body += '</tbody></table>'
+        body += '</section>'
+        body += ('<details class="provider-group section-space"><summary>UTC-day quota reservations '
+                 '<span class="pill">%d providers</span></summary><div class="card">') % len(usage)
+        if usage:
+            body += '<table><thead><tr><th>Provider</th><th>Requests reserved</th></tr></thead><tbody>'
+            for key, count in sorted(usage.items()):
+                body += '<tr><td>%s</td><td>%s</td></tr>' % (e(key), e(count))
+            body += '</tbody></table>'
+        else:
+            body += '<p>No requests reserved today.</p>'
+        body += ('</div></details><p class="help section-space">Repeat failures are recorded in local history. '
+                 'Home Assistant persistent notifications are not enabled; they require a separate '
+                 'least-privilege integration review.</p>')
         return body
 
 
