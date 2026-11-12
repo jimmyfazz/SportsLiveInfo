@@ -36,6 +36,26 @@ class EpgSourcePreflightTests(unittest.TestCase):
         self.assertIsNone(self.store.snapshot("epg:farleyflex"))
         self.assertEqual(self.store.usage()["epg:farleyflex"], 1)
 
+    def test_stale_feed_skips_expensive_coverage_analysis(self):
+        now = datetime.now(timezone.utc)
+        raw = guide_for(now - timedelta(days=7), now - timedelta(days=6))
+        with patch("sportsliveinfo.providers.fetch", return_value=raw), patch(
+                "sportsliveinfo.engine.analyze_guide") as analyse:
+            refreshed = Engine(self.store)._collect_epg("farleyflex")
+        self.assertFalse(refreshed)
+        analyse.assert_not_called()
+        self.assertIsNone(self.store.snapshot("epg-quality:farleyflex"))
+        self.assertEqual(self.store.recent_jobs(1)[0]["state"], "stale")
+
+    def test_accepted_guide_persists_private_coverage_diagnostics(self):
+        now = datetime.now(timezone.utc)
+        raw = guide_for(now - timedelta(minutes=30), now + timedelta(hours=4))
+        with patch("sportsliveinfo.providers.fetch", return_value=raw):
+            refreshed = Engine(self.store)._collect_epg("farleyflex")
+        self.assertTrue(refreshed)
+        self.assertIsNotNone(self.store.snapshot("epg:farleyflex"))
+        self.assertIsNotNone(self.store.snapshot("epg-quality:farleyflex"))
+
     def test_current_guide_reports_forward_rows_without_saving_snapshot(self):
         now = datetime.now(timezone.utc)
         raw = guide_for(now + timedelta(minutes=10), now + timedelta(hours=2))
