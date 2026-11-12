@@ -30,7 +30,8 @@ Use **independent fixture adapters + independent UK EPG/broadcaster adapters + d
 7. [Implementation delivery plan](docs/DELIVERY_PLAN.md)
 8. [Forensic test and acceptance matrix](docs/TEST_PLAN.md)
 9. [Optional B1 Android integration](docs/B1_INTEGRATION.md)
-10. [Instructions for coding agents](AGENTS.md)
+10. [Home Assistant App or Proxmox LXC hosting decision](docs/HOME_ASSISTANT_PROXMOX_HOSTING.md)
+11. [Instructions for coding agents](AGENTS.md)
 
 ## Project status
 
