@@ -91,6 +91,12 @@ class OperatorDashboardTests(unittest.TestCase):
         self.assertIn("UTC-day quota reservations", markup)
         self.assertIn('class="state critical">Failed</span>', markup)
 
+    def test_publication_action_disabled_before_prerequisites(self):
+        markup = self.ui.publishing(self.store.config())
+        self.assertIn('type="submit" disabled>Publish feed now</button>', markup)
+        self.assertIn("Only select repositories", markup)
+        self.assertNotIn('type="submit" disabled>Build feed preview', markup)
+
     def test_freshness_indicates_stale_snapshot_without_guessing(self):
         now = datetime(2026, 11, 12, tzinfo=timezone.utc)
         self.assertEqual(freshness(None), ("Not collected", "warn"))
