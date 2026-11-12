@@ -32,6 +32,19 @@
 - [ ] Source conflict resolution, alias directory, duplicate detection, freshness and accuracy report.
 **Exit:** measured event completeness and UK broadcaster precision by sport, without invented accuracy percentages.
 
+## Stage P2.5 — mandatory HA App first-run setup UI
+
+Read [first-run wizard and notification specification](HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md) and its required tests. These are **release blockers** for the Home Assistant package.
+
+- [ ] HA Ingress initial setup wizard and main dashboard, no public inbound port.
+- [ ] Supplier registry-driven setup cards for all eligible providers: name/sports/signup/docs, key/no-key classification, masked field, individual Save and Test, status/quota and rights.
+- [ ] Save/resume first-run progress; explicit Finish; never redisplay after completion except owner-triggered Run Setup Again; add/replace/remove supplier credentials in normal Settings.
+- [ ] GitHub source versus separately proposed feed destination clearly separated; owner/repo/branch/path/token Save and Test; publication default OFF until clearance.
+- [ ] User-friendly `Europe/London` daily fetch/publish scheduler with individual Save, next-run preview, live quota accounting, catch-up/DST guards, change-only publication.
+- [ ] Persistent Home Assistant error notifications outside the wizard, classified/deduplicated/cooldown-limited, detailed impact/next-action with secure redaction; quiet normal operation and diagnostics history.
+- [ ] Validate no extra supplier API requests when 10 B1G TVs download the shared cache.
+**Exit:** all wizard + HA notification acceptance tests pass on supported HAOS, and ordinary Home Assistant automations remain unaffected.
+
 ## Stage P3 — operation and deployment
 
 - [ ] CI unit/integration tests and static type/lint; GitHub Actions may run tests, but routine production collection belongs on the personal-home HAOS mini PC.
