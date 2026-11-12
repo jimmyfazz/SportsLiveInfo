@@ -33,7 +33,9 @@ Both products have independent provider coverage, completeness benchmarks and ac
 | 4 | **[Feed contracts and publishing](docs/FEED_CONTRACTS_AND_PUBLICATION.md)** | Canonical JSON, service identities, licence gates, versioning, manifests and last-good |
 | 5 | **[Quality and security acceptance](docs/QUALITY_SECURITY_AND_ACCEPTANCE.md)** | Test suite, metrics, HAOS stability, privacy, resilience and release conditions |
 | 6 | **[Codex and Claude collaboration](docs/CODEX_CLAUDE_COLLABORATION.md)** | Parallel branches/worktrees, task ownership, PR order and terminal prompts |
-| 7 | [Agent instructions](AGENTS.md) | Non-negotiable development rules and read order |
+| 7 | **[PR-sized work-package backlog](docs/WORK_PACKAGE_BACKLOG.md)** | Concrete CORE/EPG/SPORT/HA/PUB/B1 tasks with owners, dependencies and acceptance tests |
+| 8 | **[Implementation status and agent handover](docs/IMPLEMENTATION_PROGRESS.md)** | Honest baseline and required test/PR receipts |
+| 9 | [Agent instructions](AGENTS.md) | Non-negotiable development rules and read order |
 
 **Detailed supporting specifications:**
 - [Existing B1G EPG/API forensic audit](docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md) and [B1 integration](docs/B1_INTEGRATION.md)
