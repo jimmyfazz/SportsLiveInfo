@@ -85,6 +85,35 @@ class DurableStateTests(unittest.TestCase):
         self.assertEqual(self.store.snapshot("epg:farleyflex"), old)
         self.assertEqual(self.store.recent_jobs()[0]["state"], "failed")
 
+    def test_api_sports_multiple_pages_use_quota_and_keep_all_rows(self):
+        engine = Engine(self.store)
+        engine._pace = lambda name: None
+        pages = [
+            json.dumps({"response": [{"id": 1}], "paging": {"current": 1, "total": 2}}).encode(),
+            json.dumps({"response": [{"id": 2}], "paging": {"current": 2, "total": 2}}).encode(),
+        ]
+        item = {"url": "https://v3.football.api-sports.io/fixtures?date=2026-11-12",
+                "headers": {"x-apisports-key": "redacted-test-key"},
+                "max_bytes": 1000,
+                "decode": lambda b: json.loads(b)["response"]}
+        with patch("sportsliveinfo.providers.fetch", side_effect=pages) as fetch:
+            rows = engine._request("api_sports", item, 4)
+        self.assertEqual([r["id"] for r in rows], [1, 2])
+        self.assertEqual(self.store.usage()["api_sports"], 2)
+        self.assertIn("page=2", fetch.call_args_list[1].args[0])
+
+    def test_api_sports_missing_later_page_never_claims_a_complete_day(self):
+        engine = Engine(self.store)
+        engine._pace = lambda name: None
+        one = json.dumps({"response": [{"id": 1}], "paging": {"current": 1, "total": 2}}).encode()
+        bad = json.dumps({"response": [], "paging": {"current": 2, "total": 3}}).encode()
+        item = {"url": "https://v3.football.api-sports.io/fixtures?date=2026-11-12",
+                "headers": {}, "max_bytes": 1000, "decode": lambda b: json.loads(b)["response"]}
+        with patch("sportsliveinfo.providers.fetch", side_effect=[one, bad]):
+            with self.assertRaises(ValueError):
+                engine._request("api_sports", item, 4)
+        self.assertEqual(self.store.usage()["api_sports"], 2)
+
     def test_successful_empty_provider_does_not_delete_known_fixture(self):
         self.store.configure({"setup_complete": True, "sports": {
             "jolpica": False, "openligadb": True}})
