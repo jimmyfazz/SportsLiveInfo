@@ -19,6 +19,7 @@ This audit covers `sportsliveinfo/src/sportsliveinfo/server.py`, storage/engine 
 | GUI-006, medium | Diagnostics required interpreting a raw event table; quota data could dominate page. | High-level failure/warning/request counters, status badges and collapsible quota ledger. | Check statuses against local jobs. |
 | GUI-007, high | Public publish button appeared active even without token, approvals or enabled publishing (backend already refused). | Visible independent prerequisites, disabled publish control until all are satisfied. | Confirm backend still refuses unapproved data. |
 | GUI-008, medium | Browser user experience relied on implicit click feedback. | Semantic `role=status` save/test notices, visual status colours with explicit text, labelled navigation. | Screen-reader inspection and keyboard-only manual test. |
+| GUI-009, high | First-run setup contained only a banner and a completion button at the end of long forms. | Persistent three-stage sources → scheduler → optional GitHub step shortcuts, with accessible setup group and separately styled validation errors. | Interrupt/resume setup on Home Assistant Ingress. |
 
 ## Behaviour deliberately unchanged
 1. No browser JavaScript, third-party UI assets, analytics or external CSS; the existing private Home Assistant Ingress/CSRF boundaries are retained.
