@@ -42,3 +42,9 @@ Not yet a worldwide-complete EPG/sports product or a verified B1G integration.
 - Public feed now rejects fused events contributed by unapproved sources; broadcaster claims need reviewed evidence, not a boolean alone.
 - Added conservative non-destructive programme enrichment suggestions. The original B1G EPG remains authoritative.
 - Added targeted regression tests; exact merged-branch Python suite and physical Home Assistant installation **not yet verified**. Keep experimental stage.
+
+### Home Assistant installer hardening — 12 November 2026
+
+- Add Supervisor-required Docker image labels (io.hass.version, io.hass.type and io.hass.arch) with version/architecture build arguments.
+- Add static App packaging tests for Ingress-only configuration, private admin panel, logo/icon and store repository layout.
+- Actual Docker build and Home Assistant OS install **still not executed**; experimental designation retained.
