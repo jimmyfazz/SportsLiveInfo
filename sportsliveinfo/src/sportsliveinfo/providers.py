@@ -112,6 +112,12 @@ ALLOW_HOSTS = {urllib.parse.urlparse(item[1]).hostname for item in list(EPG.valu
 class RedirectGuard(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         verify_url(newurl)
+        # Never forward provider credentials to a *different* allowed hostname.
+        # A host allowlist alone cannot prevent this cross-origin credential leak.
+        src = urllib.parse.urlsplit(req.full_url)
+        dst = urllib.parse.urlsplit(newurl)
+        if (src.hostname, src.port or 443) != (dst.hostname, dst.port or 443):
+            raise ValueError("Cross-origin provider redirect blocked")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -190,67 +196,101 @@ def _display_name(node, fallback):
     return fallback
 
 
-def decode_xmltv(raw, source, max_expanded=65_000_000, max_programmes=100_000):
-    """Reject unbounded downloads, XML entities and invalid intervals."""
-    if raw[:2] == b"\x1f\x8b":
-        with gzip.GzipFile(fileobj=io.BytesIO(raw)) as f:
-            payload = f.read(max_expanded + 1)
+class _LimitedXmlInput:
+    """Provide bounded bytes to ElementTree without expanding the entire gzip.
+
+    The rolling tail also detects DTD/ENTITY declarations split across chunk
+    boundaries. Peak decompression memory is bounded independently of the
+    compressed HTTP response size.
+    """
+
+    def __init__(self, stream, byte_limit):
+        self.stream = stream
+        self.byte_limit = byte_limit
+        self.total = 0
+        self.tail = b""
+
+    def read(self, size=-1):
+        size = 65536 if size is None or size < 0 else min(size, 65536)
+        payload = self.stream.read(min(size, self.byte_limit - self.total + 1))
+        self.total += len(payload)
+        if self.total > self.byte_limit:
+            raise ValueError("XMLTV decompressed past safety limit")
+        marker = (self.tail + payload).upper()
+        if b"<!DOCTYPE" in marker or b"<!ENTITY" in marker:
+            raise ValueError("XMLTV declarations and entities are not allowed")
+        self.tail = marker[-16:]
+        return payload
+
+
+def decode_xmltv(raw, source, max_expanded=65_000_000, max_programmes=100_000,
+                 max_channels=40_000):
+    """Stream bounded XMLTV/gzip with source-aware programme detail.
+
+    This is private source collection, never licence approval for redistribution.
+    """
+    if not isinstance(raw, bytes) or not raw:
+        raise ValueError("Empty XMLTV input")
+    if raw[:2] == b"\x5c\x78\x31\x66\x5c\x78\x38\x62":
+        stream = gzip.GzipFile(fileobj=io.BytesIO(raw))
     else:
-        payload = raw
-    if len(payload) > max_expanded:
-        raise ValueError("XMLTV decompressed past safety limit")
-    if b"<!DOCTYPE" in payload.upper() or b"<!ENTITY" in payload.upper():
-        raise ValueError("XMLTV declarations and entities are not allowed")
+        stream = io.BytesIO(raw)
     channels, icons, programmes, bad = {}, {}, [], 0
     root = None
-    for event, node in ET.iterparse(io.BytesIO(payload), events=("start", "end")):
-        if root is None:
-            root = node
-            if root.tag != "tv":
-                raise ValueError("Not an XMLTV programme guide")
-        if event != "end":
-            continue
-        if node.tag == "channel":
-            channel_id = node.get("id", "")[:180]
-            name = _display_name(node, channel_id)
-            if channel_id:
-                channels[channel_id] = name[:180]
-                icon = node.find("icon")
-                if icon is not None and (icon.get("src") or "").startswith("https://"):
-                    icons[channel_id] = icon.get("src")[:300]
-            node.clear()
-        elif node.tag == "programme":
-            if len(programmes) >= max_programmes:
-                raise ValueError("XMLTV programme count exceeded safety limit")
-            try:
-                start, end = xmltv_time(node.get("start")), xmltv_time(node.get("stop"))
-                title_node = node.find("title")
-                title = (title_node.text or "").strip() if title_node is not None else ""
-                if not title or end <= start:
-                    raise ValueError("Incomplete programme")
-                programmes.append({
-                    "channel_id": node.get("channel", "")[:180],
-                    "start_utc": start, "end_utc": end,
-                    "title": title[:240],
-                    "subtitle": (node.findtext("sub-title") or "").strip()[:240],
-                    "description": (node.findtext("desc") or "")[:1000],
-                    "categories": [c.text.strip()[:60] for c in node.findall("category") if c.text][:5],
-                    "is_live": node.find("live") is not None,
-                    "is_repeat": node.find("previously-shown") is not None,
-                    "is_premiere": node.find("premiere") is not None,
-                    "episode_num": (node.findtext("episode-num") or "").strip()[:40],
-                    "language": title_node.get("lang", "")[:12] if title_node is not None else "",
-                    "source_id": source,
-                })
-            except ValueError:
-                bad += 1
-            node.clear()
-            # Bounded memory: drop already-processed children of <tv>.
-            if root is not None and len(root) > 512:
-                root.clear()
+    with stream:
+        for event, node in ET.iterparse(_LimitedXmlInput(stream, max_expanded), events=("start", "end")):
+            if root is None:
+                root = node
+                if root.tag != "tv":
+                    raise ValueError("Not an XMLTV programme guide")
+            if event != "end":
+                continue
+            if node.tag == "channel":
+                if len(channels) >= max_channels:
+                    raise ValueError("XMLTV channel count exceeded safety limit")
+                channel_id = node.get("id", "")[:180]
+                name = _display_name(node, channel_id)
+                if channel_id:
+                    channels[channel_id] = name[:180]
+                    icon = node.find("icon")
+                    if icon is not None and (icon.get("src") or "").startswith("https://"):
+                        icons[channel_id] = icon.get("src")[:300]
+                node.clear()
+            elif node.tag == "programme":
+                if len(programmes) >= max_programmes:
+                    raise ValueError("XMLTV programme count exceeded safety limit")
+                try:
+                    start, end = xmltv_time(node.get("start")), xmltv_time(node.get("stop"))
+                    title_node = node.find("title")
+                    title = (title_node.text or "").strip() if title_node is not None else ""
+                    if not title or end <= start:
+                        raise ValueError("Incomplete programme")
+                    programmes.append({
+                        "channel_id": node.get("channel", "")[:180],
+                        "start_utc": start, "end_utc": end,
+                        "title": title[:240],
+                        "subtitle": (node.findtext("sub-title") or "").strip()[:240],
+                        "description": (node.findtext("desc") or "")[:1000],
+                        "categories": [cat.text.strip()[:60] for cat in node.findall("category")
+                                       if cat.text and cat.text.strip()][:5],
+                        "is_live": node.find("live") is not None,
+                        "is_repeat": node.find("previously-shown") is not None,
+                        "is_premiere": node.find("premiere") is not None,
+                        "episode_num": (node.findtext("episode-num") or "").strip()[:40],
+                        "language": title_node.get("lang", "")[:12] if title_node is not None else "",
+                        "source_id": source,
+                    })
+                except ValueError:
+                    bad += 1
+                node.clear()
+                # ElementTree retains sibling references; release them in
+                # bounded batches AFTER their complete end event.
+                if root is not None and len(root) > 512:
+                    root.clear()
     orphans = sum(1 for p in programmes if p["channel_id"] not in channels)
-    return {"source_id": source, "channels": channels, "channel_icons": icons, "programmes": programmes,
-            "invalid_programmes": bad, "orphaned_programmes": orphans, "source_redistribution_approved": False}
+    return {"source_id": source, "channels": channels, "channel_icons": icons,
+            "programmes": programmes, "invalid_programmes": bad,
+            "orphaned_programmes": orphans, "source_redistribution_approved": False}
 
 
 _F1_SESSIONS = {"race": "race", "FirstPractice": "practice1", "SecondPractice": "practice2", "ThirdPractice": "practice3",
