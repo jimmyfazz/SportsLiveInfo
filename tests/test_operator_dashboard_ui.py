@@ -66,6 +66,38 @@ class OperatorDashboardTests(unittest.TestCase):
         self.assertNotIn("never-show-secret", markup)
         self.assertIn("Key stored privately", markup)
 
+    def test_today_large_category_links_to_full_filtered_events(self):
+        rows = [{
+            "id": "demo:" + str(i), "source_id": "fixture", "sport": "football",
+            "category_id": "football.premier_league",
+            "category_label": "Premier League", "category_priority": 1,
+            "competition": "Premier League", "title": "Example Fixture " + str(i),
+            "start_utc": "2026-11-14T15:00:00+00:00", "broadcast_candidates": [],
+        } for i in range(70)]
+        self.store.save_snapshot("today", {
+            "date": "2026-11-14", "count": 70, "live_now": 0,
+            "generated_at": "2026-11-14T10:00:00+00:00", "featured": [],
+            "sports": [{"sport": "football", "label": "Football", "count": 70,
+                        "categories": [{"id": "football.premier_league",
+                                        "label": "Premier League", "count": 70, "events": rows}]}],
+        })
+        markup = self.ui.today()
+        self.assertIn("Showing the first 30 of 70 events.", markup)
+        self.assertEqual(markup.count("<tr><td>"), 30)
+        self.assertIn("page=events&amp;sport=football", markup)
+        self.assertIn("date=2026-11-14", markup)
+
+    def test_malformed_unverified_candidate_and_source_list_do_not_crash_gui(self):
+        self.store.save_snapshot("sports", {"events": [{
+            "id": "bad:1", "source_id": "example", "sources": "example",
+            "sport": "football", "title": "Bad payload",
+            "start_utc": "2026-11-14T15:00:00+00:00",
+            "broadcast_verified": False, "broadcast_candidates": ["bad-row", None],
+        }]})
+        markup = self.ui.events()
+        self.assertIn("Bad payload", markup)
+        self.assertIn("Not verified", markup)
+
     def test_world_sports_event_pagination_cannot_hide_later_events(self):
         records = [
             {"id": str(i), "sport": "football", "category_id": "football.premier_league",
