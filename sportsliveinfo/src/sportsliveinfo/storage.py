@@ -153,9 +153,12 @@ class Store:
             db.execute("DELETE FROM jobs WHERE id NOT IN (SELECT id FROM jobs ORDER BY id DESC LIMIT 300)")
             db.commit()
 
-    def recent_jobs(self, limit=20):
+    def recent_jobs(self, limit=20, *, provider=None):
+        query = "SELECT time,provider,state,details FROM jobs"
+        where = " WHERE provider=?" if provider is not None else ""
+        params = (provider, limit) if provider is not None else (limit,)
         with self._lock, self._db() as db:
-            return [dict(x) for x in db.execute("SELECT time,provider,state,details FROM jobs ORDER BY id DESC LIMIT ?", (limit,))]
+            return [dict(row) for row in db.execute(query + where + " ORDER BY id DESC LIMIT ?", params)]
 
     def increment(self, provider, limit):
         """Reserve before network IO; atomic even across separate Store instances/processes.

@@ -16,6 +16,7 @@ from .guide import canonical_channel
 from .providers import EPG_FAMILY, SPORT_FAMILY
 
 LONDON = ZoneInfo("Europe/London")
+UNCONFIRMED_START_PRECISIONS = frozenset({"date_only", "time_tbc"})
 PRECISION_RANK = {"scheduled": 0, "provisional": 1, "not_before": 2, "estimated": 3, "time_tbc": 4, "date_only": 5}
 SOURCE_PREFERENCE = ["football_data", "openligadb", "jolpica", "openf1", "cricketdata", "api_sports"]
 FEATURED_TAGS = {"team:england", "team:england_women", "team:scotland", "team:wales", "team:northern_ireland",
@@ -155,7 +156,7 @@ def live_state(event, now):
         start = _dt(event["start_utc"])
     except (KeyError, ValueError, TypeError):
         return "unknown"
-    if event.get("start_precision") == "date_only":
+    if event.get("start_precision") in UNCONFIRMED_START_PRECISIONS:
         return "time_tbc"
     end = _dt(event["end_utc"]) if event.get("end_utc") else start + timedelta(minutes=taxonomy.typical_minutes(event.get("sport")))
     if start <= now < end:
@@ -207,6 +208,7 @@ def _matches(event, row):
 
 def broadcast_candidates(events, epg_guides, now):
     """Return {event_id: (status, [candidate...])} for the given events."""
+    events = [event for event in events if event.get("start_precision") not in UNCONFIRMED_START_PRECISIONS]
     if not events or not epg_guides:
         return {}
     starts = [_dt(e["start_utc"]) for e in events]
@@ -242,7 +244,7 @@ def build_today(events, now, epg_guides=None):
                 todays.append(dict(event, live_state=live_state(event, now)))
         except (KeyError, ValueError, TypeError):
             continue
-    links = broadcast_candidates([e for e in todays if e.get("start_precision") != "date_only"], epg_guides or {}, now)
+    links = broadcast_candidates(todays, epg_guides or {}, now)
     for event in todays:
         status, candidates = links.get(event["id"], ("none", []))
         event["broadcast_status"] = status

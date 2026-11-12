@@ -7,6 +7,9 @@
 
 - Label mixed fallback competition groups accurately and show when the Live today list is truncated.
 - Display zero counts and distinguish incomplete programme coverage from missing channel identity.
+- Show latest collection activity and label live statuses as of the snapshot refresh.
+- Explain common EPG failures without logging raw provider exception text.
+- Display date-only and time-TBC fixtures without an exact start time and exclude them from time-based EPG matching.
 - Keep the same App slug and persistent SQLite path for in-place updates. The feed fixture changes only the producer version.
 
 ## Documentation reconciliation — 12 November 2026 (no runtime version change)

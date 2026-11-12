@@ -241,6 +241,14 @@ class TodayAndBroadcastTests(unittest.TestCase):
         today = linking.build_today([self.match], NOW, {"farleyflex": farley})
         self.assertFalse(today["sports"][0]["categories"][0]["events"][0]["broadcast_verified"])
 
+    def test_unconfirmed_start_cannot_produce_time_based_matches(self):
+        guide = _guide("farleyflex", "skysportsmainevent.uk", "Sky Sports Main Event",
+                       [dict(self.ko, title="Arsenal v Manchester City")])
+        for precision in ("date_only", "time_tbc"):
+            event = dict(self.match, start_precision=precision)
+            self.assertEqual(linking.broadcast_candidates([event], {"farleyflex": guide}, NOW), {})
+            self.assertEqual(linking.live_state(event, NOW), "time_tbc")
+
     def test_hard_negatives_highlights_repeats_wrong_team_and_unknown_channel(self):
         guides = {
             "farleyflex": _guide("farleyflex", "skysportsmainevent.uk", "Sky Sports Main Event", [
@@ -394,6 +402,29 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertNotIn("shared-secret", sources)
         self.assertIn("EPG Share HK1", sources)
         self.assertIn("Setanta", sources)
+
+    def test_overview_shows_collector_status_after_provider_activity(self):
+        self.store.configure({"setup_complete": True})
+        self.store.job("collector", "degraded", "8 of 19 sources refreshed")
+        for _ in range(36):
+            self.store.job("farleyflex", "test_ok")
+        page = self.get("?page=dashboard")
+        self.assertIn("Latest collection activity: <strong>Degraded</strong>", page)
+        self.assertIn("8 of 19 sources refreshed", page)
+        self.assertIn("live or probably live at refresh", page)
+
+    def test_epg_diagnostics_report_safe_failure_reasons(self):
+        engine = Engine(self.store)
+        with patch.object(providers, "fetch", side_effect=RuntimeError("HTTP 404 from upstream")):
+            self.assertFalse(engine._collect_epg("farleyflex"))
+        self.assertEqual(self.store.recent_jobs(1)[0]["details"], "Upstream returned HTTP 404")
+        with patch.object(providers, "fetch", side_effect=ValueError("private-url-with-token")):
+            self.assertIn("unsuccessful", engine.test_source("epg", "farleyflex"))
+        self.assertNotIn("private-url-with-token", self.get("?page=health"))
+        for _ in range(2):
+            self.store.increment("epg:farleyflex", 4)
+        self.assertIn("unsuccessful", engine.test_source("epg", "farleyflex"))
+        self.assertEqual(self.store.recent_jobs(1)[0]["details"], "Local daily request budget exhausted")
 
     def test_mixed_fallback_competitions_on_saved_snapshot(self):
         events = [taxonomy.classify(ev(id=str(i), sport="basketball", competition=competition,

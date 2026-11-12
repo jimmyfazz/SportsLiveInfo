@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -43,6 +44,24 @@ def _github_open(request, timeout=30):
 
 class QuotaExhausted(RuntimeError):
     pass
+
+
+def _guide_failure(exc):
+    """Translate known failures without storing raw exception text."""
+    detail = str(exc)
+    http = re.fullmatch(r"HTTP ([1-5][0-9]{2}) from upstream", detail)
+    if http:
+        return "Upstream returned HTTP " + http[1]
+    if detail == "Configured daily call budget exhausted":
+        return "Local daily request budget exhausted"
+    if detail == "Upstream network request failed" or isinstance(exc, TimeoutError):
+        return "Upstream connection failed or timed out"
+    if detail in ("Provider response exceeded configured size limit", "XMLTV decompressed past safety limit",
+                  "XMLTV channel count exceeded safety limit", "XMLTV programme count exceeded safety limit"):
+        return "Guide exceeded an import size or record limit"
+    if isinstance(exc, (ValueError, EOFError, ET.ParseError)):
+        return "Guide was empty, invalid or blocked by source safety checks"
+    return "Guide request or import failed"
 
 
 class Engine:
@@ -338,8 +357,9 @@ class Engine:
                 quality["full_coverage_channels"]["24h"], len(quality["matched_canonical_channels"])))
             return True
         except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, json.JSONDecodeError, ET.ParseError) as exc:
-            self.store.job(name, "failed", type(exc).__name__ + ": source unavailable or invalid")
-            LOGGER.warning("EPG source %s failed (%s)", name, type(exc).__name__)
+            reason = _guide_failure(exc)
+            self.store.job(name, "failed", reason)
+            LOGGER.warning("EPG source %s failed: %s", name, reason)
             return False
 
     # ---- materialisation --------------------------------------------------
@@ -416,15 +436,15 @@ class Engine:
         if kind == "epg" and name in providers.EPG:
             _, url = providers.EPG[name]
             max_bytes, max_programmes = providers.EPG_LIMITS.get(name, providers.DEFAULT_EPG_LIMIT)
-            self.store.increment("epg:" + name, 4)
             try:
+                self.store.increment("epg:" + name, 4)
                 guide = providers.decode_xmltv(providers.fetch(url, max_bytes=max_bytes), name, max_programmes=max_programmes)
                 if not guide["programmes"]:
                     raise ValueError("Empty EPG programme list")
                 self.store.job(name, "test_ok", "EPG parsed, %d programme records (no stored changes)" % len(guide["programmes"]))
                 return "%s EPG connection successful (%d programmes)" % (name, len(guide["programmes"]))
             except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, ET.ParseError) as exc:
-                self.store.job(name, "test_failed", type(exc).__name__ + ": guide unavailable or invalid")
+                self.store.job(name, "test_failed", _guide_failure(exc))
                 return "%s EPG test unsuccessful; see Diagnostics" % name
         raise ValueError("Unknown provider")
 

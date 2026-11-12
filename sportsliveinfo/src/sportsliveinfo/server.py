@@ -12,10 +12,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import __version__, providers, taxonomy
+from . import __version__, linking, providers, taxonomy
 
 LOGGER = logging.getLogger(__name__)
-LIVE_LABELS = {"live": "LIVE", "live_probable": "Probably live", "upcoming": "Upcoming", "finished": "Finished",
+LIVE_LABELS = {"live": "Live at refresh", "live_probable": "Probably live at refresh", "upcoming": "Upcoming", "finished": "Finished",
                "probably_finished": "Probably finished", "postponed": "Postponed", "cancelled": "Cancelled",
                "time_tbc": "Time TBC", "unknown": "Unknown"}
 
@@ -259,7 +259,7 @@ class UI(BaseHTTPRequestHandler):
         day = today["data"] if today else {}
         candidates = sum(e.get("broadcast_status", "none") != "none" for e in events)
         result = '<div class="grid">'
-        for title, value, desc in [("Events today", day.get("count", 0), "%s probably live now · %s featured (England, home nations, PPV)" % (day.get("live_now", 0), len(day.get("featured", [])))),
+        for title, value, desc in [("Events today", day.get("count", 0), "%s live or probably live at refresh · %s featured (England, home nations, PPV)" % (day.get("live_now", 0), len(day.get("featured", [])))),
                                     ("Sporting events (8 days)", len(events), "De-duplicated across enabled sources"),
                                     ("EPG source feeds", len(sources), "Private guide sources with last-good snapshots"),
                                     ("EPG channel candidates", candidates, "Unverified guide matches; no channel is fabricated from league rights"),
@@ -267,6 +267,12 @@ class UI(BaseHTTPRequestHandler):
             result += '<div class="card"><div class="sub">%s</div><div class="metric">%s</div><div class="help">%s</div></div>' % (e(title), e(value), e(desc))
         result += '</div><section class="card" style="margin-top:16px"><h2>Collection status</h2>'
         result += '<p>Sports snapshot: <strong>%s</strong><br>EPG snapshot: <strong>%s</strong></p>' % (e(sport["updated_at"] if sport else "No successful collection yet"), e(epg["updated_at"] if epg else "No successful collection yet"))
+        jobs = self.store.recent_jobs(1, provider="collector")
+        if jobs:
+            job = jobs[0]
+            result += '<p>Latest collection activity: <strong>%s</strong> · %s%s</p>' % (
+                e(job["state"].replace("_", " ").capitalize()), e(job["time"]),
+                " · " + e(job["details"]) if job["details"] else "")
         result += '<p class="warn">TV broadcaster confirmation is not yet implemented in the live adapters. All unverified sporting events are deliberately non-playable in the planned B1G feed.</p>'
         result += self._form("collect", '<button type="submit">Refresh both engines now</button>')
         result += '</section><div class="grid" style="margin-top:16px"><section class="card"><h2>Sports coverage</h2><p>%s</p></section><section class="card"><h2>EPG coverage</h2><p>%s</p></section></div>' % (
@@ -312,7 +318,7 @@ class UI(BaseHTTPRequestHandler):
     @staticmethod
     def _uk_time(event, fmt="%d %b %H:%M %Z"):
         try:
-            if event.get("start_precision") == "date_only":
+            if event.get("start_precision") in linking.UNCONFIRMED_START_PRECISIONS:
                 return datetime.fromisoformat(event["start_utc"]).astimezone(ZoneInfo("Europe/London")).strftime("%d %b") + " (time TBC)"
             return datetime.fromisoformat(event["start_utc"]).astimezone(ZoneInfo("Europe/London")).strftime(fmt)
         except (ValueError, KeyError, TypeError):
@@ -341,10 +347,10 @@ class UI(BaseHTTPRequestHandler):
     def today(self):
         snapshot = self.store.snapshot("today")
         day = snapshot["data"] if snapshot else {}
-        body = '<h2>Live action today</h2><p>Today\'s fixtures, races and sessions (UK day), grouped by sport and competition. "Probably live" is estimated from start time and typical duration unless the provider reports live status. Channel names shown are unverified EPG matches.</p>'
+        body = '<h2>Live action today</h2><p>Today\'s fixtures, races and sessions (UK day), grouped by sport and competition. "Probably live" is estimated from start time and typical duration unless the provider reports live status. Statuses reflect the snapshot time below. Channel names shown are unverified EPG matches.</p>'
         if not day.get("count"):
             return body + '<section class="card"><p>No events collected for today yet. Enable sources and run a refresh.</p></section>'
-        body += '<p class="sub">%s · %s events · %s probably live · generated %s</p>' % (
+        body += '<p class="sub">%s · %s events · %s live or probably live at refresh · generated %s</p>' % (
             e(day.get("date")), e(day.get("count")), e(day.get("live_now", 0)), e(day.get("generated_at")))
         table_head = '<table><tr><th>UK time</th><th>Category</th><th>Event</th><th>Channel</th></tr>'
         if day.get("featured"):
