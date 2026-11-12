@@ -2,6 +2,10 @@
 
 **Priority: HIGH.** This is an actionable instruction set for Codex operating on the owner's **local terminal**. Do not confuse repo code inspection with live authenticated subscription inventory. No account credentials, playlist URLs or tokens may be committed to GitHub.
 
+## Confirmed owner decision — no TV write operations
+
+All ten TVs are **strictly read-only** clients of the sports/EPG GitHub feed. **Do not build a per-device GitHub writer, GitHub token configuration, background playlist upload, channel-change push, hosted webhook, or automatic synchronisation of hidden preferences.** Hidden categories and channels are account-scoped locally in Android's `ChannelVisibilityStore`, which calls `EffectiveLiveCatalogue.project`; those choices must continue to govern EPG and Sports Today UI regardless of central superset contents. Optional channel discovery is a **manual owner-triggered safe export**, then **local HAOS import**. Consult [read-only B1G policy](B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md).
+
 ## Goal
 
 Extend private `jimmyfazz/SportsLiveInfo` Home Assistant OS App to serve **UK, French and other countries actually available in B1G subscription(s)**, plus accurate sporting rail cards with real channel information. Keep TV-side playable-stream and per-account EPG mappings local. Do NOT centralise movie/series TMDB/OMDb/poster/hero APIs.
