@@ -1,6 +1,8 @@
 # AGENTS.md — implementation guidance
 
-Read README.md and all docs before major changes; start with docs/DELIVERY_PLAN.md.
+Read README.md and all docs before major changes; start with docs/DELIVERY_PLAN.md and **docs/HOME_ASSISTANT_PROXMOX_HOSTING.md** for current deployment requirements: existing Proxmox/Home Assistant host, outbound-only GitHub publishing, 10 B1G TVs, per-provider quota isolation.
+
+**Critical architecture:** The collector is one standalone Python engine. Package it as a **Home Assistant OS App** when HAOS VM is confirmed, or independent Proxmox LXC/container; do not put collector, scraper, EPG parser, rate-limiter or GitHub publisher inside a Home Assistant custom integration. Thin HA health sensor integration is optional. No TV calls sporting-provider APIs; no public home-network ingress.
 
 ## Non-negotiable requirements
 
