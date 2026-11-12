@@ -3,6 +3,12 @@
 > **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](../docs/CURRENT_STATUS.md).
 
+## 0.3.1 — Home Assistant dashboard maintenance
+
+- Label mixed fallback competition groups accurately and show when the Live today list is truncated.
+- Display zero counts and distinguish incomplete programme coverage from missing channel identity.
+- Keep the same App slug and persistent SQLite path for in-place updates. The feed fixture changes only the producer version.
+
 ## Documentation reconciliation — 12 November 2026 (no runtime version change)
 
 - Reconciled all Markdown documents against source main `579541fa`; added a current-status authority and full document index, with historical audits explicitly labeled.

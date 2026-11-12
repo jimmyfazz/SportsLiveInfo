@@ -395,6 +395,37 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertIn("EPG Share HK1", sources)
         self.assertIn("Setanta", sources)
 
+    def test_mixed_fallback_competitions_on_saved_snapshot(self):
+        events = [taxonomy.classify(ev(id=str(i), sport="basketball", competition=competition,
+                                       title="Fixture " + str(i)))
+                  for i, competition in enumerate(("NCAA", "LNB"))]
+        self.store.save_snapshot("today", linking.build_today(events, NOW))
+        self.store.save_snapshot("sports", {"events": events})
+        page = self.get("?page=today")
+        self.assertIn("<strong>Other competitions</strong> <small>(2)</small>", page)
+        self.assertNotIn("<strong>LNB</strong>", page)
+        self.assertIn("Fixture 0", page)
+        self.assertIn("Fixture 1", page)
+        filtered = self.get("?page=events&sport=basketball&category=basketball.other")
+        self.assertEqual(filtered.count('value="basketball.other"'), 1)
+        self.assertIn("2 of 2 events", filtered)
+
+    def test_guide_displays_zero_and_excludes_full_coverage_from_gaps(self):
+        self.store.save_snapshot("epg-quality:farleyflex", {
+            "channels": 2, "full_coverage_channels": {"24h": 1, "72h": 0},
+            "unmatched_canonical_channels": 2,
+            "channels_needing_attention": [
+                {"name": "No schedule", "coverage_hours": {"24h": 0}},
+                {"name": "Full schedule", "coverage_hours": {"24h": 24}},
+            ],
+        })
+        page = self.get("?page=guide")
+        self.assertIn("0 / 2", page)
+        self.assertIn("0 h</td>", page)
+        self.assertIn("No schedule", page)
+        self.assertNotIn("Full schedule", page)
+        self.assertIn("Channels without a recognised service ID: 2 / 2", page)
+
     def test_today_and_filtered_events_pages(self):
         self.store.configure({"setup_complete": True})
         events = [taxonomy.classify(ev(id="e1", competition="Friendlies", participants=["England", "Japan"])),

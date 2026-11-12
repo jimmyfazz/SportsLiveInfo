@@ -40,7 +40,7 @@ a{color:#7be1eb}small{color:#a0b8cb}.footer{margin-top:30px;color:#829db1;font-s
 
 
 def e(value):
-    return html.escape(str(value or ""), quote=True)
+    return html.escape(str("" if value is None else value), quote=True)
 
 
 class UI(BaseHTTPRequestHandler):
@@ -353,8 +353,13 @@ class UI(BaseHTTPRequestHandler):
         for group in day.get("sports", []):
             body += '<section class="card" style="margin-bottom:14px"><h3>%s <span class="pill">%s</span></h3>' % (e(group["label"]), e(group["count"]))
             for category in group["categories"]:
-                body += '<p><strong>%s</strong> <small>(%s)</small></p>%s' % (e(category["label"]), e(category["count"]), table_head)
-                body += ''.join(self._event_row(ev, "%H:%M") for ev in category["events"][:60]) + '</table>'
+                label = "Other competitions" if category["id"] == group["sport"] + ".other" else category["label"]
+                rows = category["events"][:60]
+                body += '<p><strong>%s</strong> <small>(%s)</small></p>%s' % (e(label), e(category["count"]), table_head)
+                body += ''.join(self._event_row(ev, "%H:%M") for ev in rows) + '</table>'
+                if len(rows) < category["count"]:
+                    body += '<p class="help">Showing %s of %s events. See Sports events for more.</p>' % (
+                        e(len(rows)), e(category["count"]))
             body += '</section>'
         return body
 
@@ -365,7 +370,9 @@ class UI(BaseHTTPRequestHandler):
         events = data.get("events", [])
         sport, category, text = query.get("sport", ""), query.get("category", ""), query.get("q", "").casefold()
         sports_present = sorted({ev.get("sport", "") for ev in events}, key=taxonomy.sport_order)
-        categories_present = sorted({(ev.get("category_id", ""), ev.get("category_label", "")) for ev in events
+        categories_present = sorted({(ev.get("category_id", ""),
+                                      "Other competitions" if ev.get("category_id") == ev.get("sport", "") + ".other"
+                                      else ev.get("category_label", "")) for ev in events
                                      if not sport or ev.get("sport") == sport}, key=lambda c: c[1])
         shown = [ev for ev in events if (not sport or ev.get("sport") == sport)
                  and (not category or ev.get("category_id") == category)
@@ -386,7 +393,7 @@ class UI(BaseHTTPRequestHandler):
         return body + '</section>'
 
     def guide(self):
-        body = '<h2>International EPG coverage</h2><p>Private UK and French source analysis: distinguish a real 24-hour programme schedule from a feed that merely responds successfully. Canonical IDs are conservative hints; actual IPTV stream mapping remains local to B1G.</p>'
+        body = '<h2>International EPG coverage</h2><p>Private guide analysis: distinguish a real 24-hour programme schedule from a feed that merely responds successfully. Canonical IDs are conservative hints; actual IPTV stream mapping remains local to B1G.</p>'
         any_source = False
         for name, (label, _) in providers.EPG.items():
             snapshot = self.store.snapshot("epg-quality:" + name)
@@ -410,15 +417,25 @@ class UI(BaseHTTPRequestHandler):
                 for row in sorted(families.values(), key=lambda r: -r["channels"]):
                     body += '<tr><td>%s</td><td>%s</td><td>%s</td></tr>' % (e(row["label"]), e(row["channels"]), e(row["full_24h"]))
                 body += '</table><div>'
-            body += '</div><div class="divider"></div><h3>Channels needing attention (worst 24h gaps)</h3>'
-            body += '<table><tr><th>Channel</th><th>Recognised service</th><th>24h programme coverage</th></tr>'
-            for row in q.get("channels_needing_attention", []):
-                body += '<tr><td>%s</td><td>%s</td><td>%s h</td></tr>' % (
-                    e(row.get("name", "")), e(row.get("canonical_id") or "Needs matching"),
-                    e(row.get("coverage_hours", {}).get("24h", 0)))
-            body += '</table><p class="help">Programme text and channel identifiers remain private. Guide source redistribution is disabled until independently licensed.</p></section>'
+            body += '</div><div class="divider"></div><h3>24-hour schedule gaps</h3>'
+            # Match the full-coverage threshold used in the guide analysis.
+            gaps = [row for row in q.get("channels_needing_attention", [])
+                    if row.get("coverage_hours", {}).get("24h", 0) < 23.9]
+            if gaps:
+                body += '<table><tr><th>Channel</th><th>Recognised service</th><th>24h programme coverage</th></tr>'
+                for row in gaps:
+                    body += '<tr><td>%s</td><td>%s</td><td>%s h</td></tr>' % (
+                        e(row.get("name", "")), e(row.get("canonical_id") or "Needs matching"),
+                        e(row.get("coverage_hours", {}).get("24h", 0)))
+                body += '</table>'
+            elif full.get("24h") == total:
+                body += '<p>All channels meet the 24-hour coverage threshold.</p>'
+            unmatched = q.get("unmatched_canonical_channels")
+            if unmatched is not None:
+                body += '<p>Channels without a recognised service ID: %s / %s.</p>' % (e(unmatched), e(total))
+            body += '<p class="help">Programme text and channel identifiers remain private. Guide source redistribution is disabled until independently licensed.</p></section>'
         if not any_source:
-            body += '<section class="card"><p>No successful EPG import yet. Enable an approved UK or French guide in Sources and run a refresh.</p></section>'
+            body += '<section class="card"><p>No successful EPG import yet. Enable an approved guide in Sources and run a refresh.</p></section>'
         return body
 
     def schedule(self, config):
