@@ -421,8 +421,24 @@ class Engine:
                 guide = providers.decode_xmltv(providers.fetch(url, max_bytes=max_bytes), name, max_programmes=max_programmes)
                 if not guide["programmes"]:
                     raise ValueError("Empty EPG programme list")
-                self.store.job(name, "test_ok", "EPG parsed, %d programme records (no stored changes)" % len(guide["programmes"]))
-                return "%s EPG connection successful (%d programmes)" % (name, len(guide["programmes"]))
+                # An HTTP 200 and valid XMLTV syntax can still contain only expired
+                # rows. Do not mark that feed as usable for today's guide.
+                now = datetime.now(timezone.utc)
+                horizon = now + timedelta(hours=24)
+                forward = 0
+                for row in guide["programmes"]:
+                    try:
+                        if (datetime.fromisoformat(row["end_utc"]) > now
+                                and datetime.fromisoformat(row["start_utc"]) < horizon):
+                            forward += 1
+                    except (KeyError, TypeError, ValueError, OverflowError):
+                        continue
+                if not forward:
+                    raise ValueError("No current programmes in the next 24h")
+                self.store.job(name, "test_ok", "EPG parsed; %d current/forward of %d programmes (not stored)" % (
+                    forward, len(guide["programmes"])))
+                return "%s EPG connection successful (%d current programmes; coverage unverified)" % (
+                    name, forward)
             except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, ET.ParseError) as exc:
                 self.store.job(name, "test_failed", type(exc).__name__ + ": guide unavailable or invalid")
                 return "%s EPG test unsuccessful; see Diagnostics" % name
