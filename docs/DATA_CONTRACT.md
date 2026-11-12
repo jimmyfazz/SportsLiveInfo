@@ -1,5 +1,7 @@
 # Canonical JSON and API contract — proposal v0.1
 
+> **Historical example, superseded in implementation by** [FEED_CONTRACTS_AND_PUBLICATION.md](FEED_CONTRACTS_AND_PUBLICATION.md) and the frozen JSON Schema files that Codex and Claude will create. Programme, broadcaster, events and source identity are separate domains, UK/FR/international, not solely a sports-only v0.1 shape.
+
 **Not an implemented API.** Fixtures and broadcasts are distinct linked entities. All instants end in Z and are UTC. UK display dates/times use Europe/London. Unknown is null or explicit state, never an invented value.
 
 ## Proposed external read endpoints (future)
