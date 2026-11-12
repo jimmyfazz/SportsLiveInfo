@@ -1,7 +1,7 @@
 name: SportsLiveInfo
 slug: sportsliveinfo
-version: "0.1.0"
-description: International electronic programme guides and sports event collector
+version: "0.2.0"
+description: International television EPG and multi-sport event intelligence
 url: https://github.com/jimmyfazz/SportsLiveInfo
 arch:
   - amd64
@@ -11,6 +11,7 @@ boot: auto
 init: false
 ingress: true
 ingress_port: 8099
+stage: experimental
 panel_icon: mdi:television-guide
 panel_title: SportsLiveInfo
 panel_admin: true
