@@ -34,3 +34,11 @@
 - New SportsLiveInfo app icon and wordmark logo.
 
 Not yet a worldwide-complete EPG/sports product or a verified B1G integration.
+
+## Development integration hardening (unreleased / v0.3.0, 12 November 2026)
+
+- Integrated Claude's unmerged v0.3 candidate sports/EPG source expansion, taxonomy, sli/1 contract and test fixtures.
+- Fixed cross-process quota reservations, scheduler restarts, partial source data preservation, failed job reporting, API-Sports pages, XMLTV memory bounds, credential redirects and config validation.
+- Public feed now rejects fused events contributed by unapproved sources; broadcaster claims need reviewed evidence, not a boolean alone.
+- Added conservative non-destructive programme enrichment suggestions. The original B1G EPG remains authoritative.
+- Added targeted regression tests; exact merged-branch Python suite and physical Home Assistant installation **not yet verified**. Keep experimental stage.
