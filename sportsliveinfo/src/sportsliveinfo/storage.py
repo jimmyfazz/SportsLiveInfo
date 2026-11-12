@@ -19,7 +19,10 @@ DEFAULT = {
                 "openligadb_leagues": list(providers.OPENLIGADB_LEAGUES)},
     "keys": {},
     "schedule": ["04:00", "12:00", "17:00"],
-    "github": {"owner": "jimmyfazz", "repository": "", "branch": "main", "token": "", "enabled": False, "auto_publish": False},
+    # Separate public *data* destination, not the private Home Assistant App repository.
+    # Credentials and publication approval remain unset on installation.
+    "github": {"owner": "jimmyfazz", "repository": "LiveSports-EPG", "branch": "main",
+               "token": "", "enabled": False, "auto_publish": False},
     "publication_approvals": [],
 }
 
@@ -83,6 +86,13 @@ class Store:
                     config[key].update(value)
                 else:
                     config[key] = value
+        # Older installs saved an empty repository placeholder. Populate only
+        # that placeholder for the original owner; never change an explicitly
+        # configured alternative owner, repo, publishing flag, key or token.
+        target = config.get("github")
+        if (isinstance(target, dict) and target.get("owner") == "jimmyfazz"
+                and not target.get("repository")):
+            target["repository"] = DEFAULT["github"]["repository"]
         return config
 
     def configure(self, update):
