@@ -4,6 +4,20 @@
 
 **Primary host decision:** owner chooses directly installed **Home Assistant on an always-on personal-home mini PC (no Proxmox)**. Build one portable collector plus local **HAOS App** wrapper if installation type confirmed. See [HOME_ASSISTANT_BARE_METAL_PRIMARY.md](HOME_ASSISTANT_BARE_METAL_PRIMARY.md). Public GitHub JSON publishing is a proposed outbound-only step **after** licence approval; 10 B1G clients never query provider APIs.
 
+## Prioritisation correction — UK sports EPG is a first-class deliverable
+
+User specifically prioritises **accurate UK sports EPG programming and B1G sports cards that identify the correct channel**. The B1 source-specific audit is [here](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md). Do not treat EPG as a small auxiliary data point or push it to last phase.
+
+- [ ] Establish authorised, source-specific UK sports XMLTV registry (farleyflex, EPG Share UK1, Matt Huisman Sky, IPTV-org Sky, selected EPGTalk sources) and capture provider terms, source identity, SHA and programme-window quality.
+- [ ] Generate separate event JSON and **rights-gated** EPG correction/delta JSON; a public full-EPG copy is forbidden unless licensed.
+- [ ] Benchmark actual EPG quality vs current B1 generic provider records and official available listings, including Sky Sports, TNT and Premier channels.
+- [ ] Implement deterministic detailed-programme promotion where evidence/interval agree and preserve manual EPG mapping, opted-out sources and stale-data fallback.
+- [ ] Centralise only **sport fixture API keys** on HAOS; never TMDB, OMDb, VOD artwork/hero, provider account/EPG passwords, IPTV streams or per-account mappings.
+- [ ] Create staged B1 consumer plan: permission-gated feed reader, safe on-device channel binding, local cache, no per-device sports API lookups, current EPG fallback.
+- [ ] Audit/repair B1 Android free-fixture API filtering, source URL equality, 10/11-card parity and 'live now' semantics in separate B1 changes, with tests.
+- [ ] Refresh EPG by source version after its actual daily 06:00 UTC workflow (commits can be hours late), not only a fixed 05:00 GitHub upload.
+**Exit:** tested quality-improved Sky/TNT/Premier current/next EPG and today's event rail with verified channel selection, safe fallback and zero shared-API requests per TV; distribution rights passed before public publication.
+
 ## Stage P0 — groundwork (highest priority)
 
 - [ ] Scaffold Python package with typed canonical Event, Participant, Venue, Broadcast, SourceEvidence and SourceHealth models.
