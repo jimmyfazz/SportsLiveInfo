@@ -17,6 +17,9 @@ The objective is a reliable, normalised, explainable sports calendar, **not** an
 
 ## Core decision
 
+**Scope confirmed after B1G source audit (12 Nov 2026):** Priority 1 accurate UK sports **EPG programme corrections** (Sky Sports, TNT Sports, Premier Sports and relevant other broadcasters); Priority 2 daily **Sports Today event cards and verified playable channel identities**. Centralise sporting API credentials and permitted generic sports EPG collection once on HAOS, not 10 times on TVs. Keep TMDB, OMDb, VOD posters/hero art, IPTV account/provider EPG credentials, playlists, local channel mappings and playback in B1G. See the [forensic source audit](docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md). EPG publication to public GitHub is a distinct **unapproved licensing gate**; do not publish copied third-party programme data without rights.
+
+
 Use **independent fixture adapters + independent UK EPG/broadcaster adapters + deterministic normalisation and reconciliation**, producing one stable JSON contract. No paid APIs or paid LLMs are prerequisites. Never infer that a rights-holder shows every match; never fabricate a missing UK TV channel.
 
 ## Documentation index
@@ -33,7 +36,8 @@ Use **independent fixture adapters + independent UK EPG/broadcaster adapters + d
 10. **[PRIMARY: Home Assistant mini PC directly installed — deployment decision](docs/HOME_ASSISTANT_BARE_METAL_PRIMARY.md)**
 11. [ALTERNATIVE ONLY: Home Assistant under Proxmox / LXC](docs/HOME_ASSISTANT_PROXMOX_HOSTING.md)
 12. **[MANDATORY: HA first-run setup wizard, individual API saves, GitHub schedule and non-intrusive notifications](docs/HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md)**
-13. [Instructions for coding agents](AGENTS.md)
+13. **[FORENSIC B1G EPG + sporting rail audit, exact providers and credential scope](docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md)**
+14. [Instructions for coding agents](AGENTS.md)
 
 ## Project status
 
