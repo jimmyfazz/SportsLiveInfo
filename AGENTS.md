@@ -22,6 +22,10 @@ Important B1 corrective candidates from this audit: free-fixture API missing cov
 
 **Owner decision:** The ten B1G TVs are **read-only HTTPS consumers** of the central sports/EPG feed. They must never receive GitHub write credentials, send subscription inventory or hidden-category/channel changes to GitHub, or call sporting-provider APIs. Source finding: Android `ChannelVisibilityStore.visibleLiveCategoriesForAccount` applies account-scoped hidden live categories and channels through `EffectiveLiveCatalogue.project`. Preserve that filtering and current-account preferences locally; the central feed may be a union across multiple TVs but each TV must render only its own visible, playable channels. Optional owner-triggered, secret-free channel inventory **local export / HAOS import**, never background device-to-GitHub writes. See [mandatory read-only policy](docs/B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md).
 
+## Mandatory universal EPG channel identification
+
+**Read [docs/CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md](docs/CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md).** Build three distinct identity relationships: (1) canonical broadcaster and variant, (2) source-specific EPG ID crosswalk, (3) local B1G account+stream ID. Separately verify a sporting event is actually being broadcast on that channel; seasonal rights are insufficient. The HAOS app owns the crosswalk/aliases and event evidence; Kotlin B1G owns final channel-to-stream matching, manual source mapping, hidden-channel/category projection, confidence classification and no-wrong-channel fallbacks. Replace the hard-coded farleyflex URL dependency with verified source identity **without globally applying the aliases**. Preserve indexed performance, London/Paris timezone rules and all existing suppression semantics. No per-TV write access, and no copying third-party EPG programme metadata to public GitHub without rights clearance.
+
 ## Non-negotiable requirements
 
 1. Zero recurring subscription cost for the initial private prototype. Avoid paid data services and language-model inference. Provider adapters must be pluggable; never tie the whole app to one provider.
