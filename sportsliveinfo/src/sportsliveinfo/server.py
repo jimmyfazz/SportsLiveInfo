@@ -733,11 +733,24 @@ class UI(BaseHTTPRequestHandler):
 
     def publishing(self, config):
         github = config["github"]
+        approved = bool(config.get("publication_approvals"))
+        has_token = bool(github.get("token"))
+        ready = bool(github.get("enabled") and has_token and approved)
         form = '<label>GitHub owner</label><input name="owner" type="text" value="%s" required><label>Separate public feed repository name</label><input name="repository" type="text" value="%s" placeholder="LiveSports-EPG" required><label>Branch</label><input name="branch" type="text" value="%s" required><label>Fine-grained GitHub publishing token</label><input name="token" type="password" autocomplete="new-password" placeholder="%s"><label><input type="checkbox" name="remove" value="on"> Remove saved token</label>' % (e(github.get("owner")), e(github.get("repository")), e(github.get("branch")), "Saved — enter replacement only" if github.get("token") else "Token (only rights-cleared feed repository)")
         form += '<label><input type="checkbox" name="enabled" value="on" %s> Enable publishing</label>' % ("checked" if github.get("enabled") else "")
         form += '<label><input type="checkbox" name="auto_publish" value="on" %s> Publish automatically after every scheduled refresh</label><button type="submit">Save GitHub settings</button>' % ("checked" if github.get("auto_publish") else "")
         body = '<h2>Outbound GitHub distribution</h2><p>Only SportsLiveInfo on Home Assistant will write to GitHub. B1G TVs remain read-only; no incoming connections to Home Assistant are needed.</p><p>Confirmed public data repository: <a href="https://github.com/jimmyfazz/LiveSports-EPG" rel="noopener noreferrer" target="_blank">jimmyfazz/LiveSports-EPG</a>. This is the JSON output destination, not the Home Assistant App installation repository. No feed has been published yet.</p>'
-        body += '<div class="alert error">Public publishing requires documented permission to redistribute every selected source. No programme guide source has been cleared for public export; EPG copying is disabled. No sporting source has been approved by default.</div>'
+        body += '<div class="alert error" role="status">Public publishing requires documented permission to redistribute every selected source. No programme guide source has been cleared for public export; EPG copying is disabled. No sporting source has been approved by default.</div>'
+        body += ('<div class="kpi-grid section-space"><div class="card metric-card"><h3>Token</h3>'
+                 '<span class="state %s">%s</span></div>'
+                 '<div class="card metric-card"><h3>Publishing switch</h3>'
+                 '<span class="state %s">%s</span></div>'
+                 '<div class="card metric-card"><h3>Source approval</h3>'
+                 '<span class="state %s">%s</span></div></div>') % (
+                     "ok" if has_token else "warn", "Stored privately" if has_token else "Not configured",
+                     "warn" if github.get("enabled") else "neutral",
+                     "Enabled" if github.get("enabled") else "Disabled",
+                     "ok" if approved else "warn", "Sources approved" if approved else "None approved")
         body += (
             '<section class="card" style="margin-top:16px"><h2>Set up your GitHub publishing token</h2>'
             '<p>You only need one fine-grained personal access token on this Home Assistant installation. '
@@ -780,7 +793,10 @@ class UI(BaseHTTPRequestHandler):
         for note in preview.get("notices", []):
             body += '<p class="warn help">%s</p>' % e(note)
         body += self._form("preview_feed", '<button class="secondary" type="submit">Build feed preview (no upload)</button>')
-        body += self._form("publish", '<button type="submit">Publish feed now</button>') + '</section>'
+        if not ready:
+            body += '<p class="warn help">Publication is unavailable until a token, enabled publishing setting and rights-approved source are all present. Feed preview remains local.</p>'
+        body += self._form("publish", '<button type="submit" %s>Publish feed now</button>' % (
+            "" if ready else "disabled")) + '</section>'
         return body
 
     def health(self):
