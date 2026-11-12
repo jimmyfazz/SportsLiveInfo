@@ -7,6 +7,7 @@
 3. [International EPG and sports sources](docs/INTERNATIONAL_EPG_AND_SPORTS_SOURCE_EXPANSION.md) — factual/terms checks.
 4. [Feed contract/licence gate](docs/FEED_CONTRACTS_AND_PUBLICATION.md), [QA/security](docs/QUALITY_SECURITY_AND_ACCEPTANCE.md).
 5. [Codex and Claude collaboration](docs/CODEX_CLAUDE_COLLABORATION.md) — **exclusive worktrees and file owners**.
+   [PR-sized task backlog](docs/WORK_PACKAGE_BACKLOG.md) and [implementation progress/handover](docs/IMPLEMENTATION_PROGRESS.md) are mandatory operating records.
 6. [Primary HAOS architecture](docs/HOME_ASSISTANT_BARE_METAL_PRIMARY.md), [wizard and notification spec](docs/HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md).
 7. [B1 channel identity](docs/CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md), [subscription regions](docs/SUBSCRIPTION_DRIVEN_MULTIREGION_EPG.md), [B1 read-only](docs/B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md).
 
