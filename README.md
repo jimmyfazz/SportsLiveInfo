@@ -15,6 +15,8 @@ The objective is a reliable, normalised, explainable sports calendar, **not** an
 - Views for today, tomorrow, the next seven days, by sport, by broadcaster, and live now **only where live status is verified**.
 - Future optional integration with the B1 Android TV application's sports rail and existing channel/EPG matching.
 
+**Confirmed read-only TV policy:** every B1G TV is a read-only client of the shared, rights-cleared JSON feed. No TV GitHub write access, tokens, or channel-list uploads. A user hiding a channel or category changes that TV's local effective playlist/EPG view immediately; the shared feed remains a superset. Optional channel inventory is imported manually/securely into Home Assistant by the owner. See [read-only B1G and inventory policy](docs/B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md).
+
 ## Core decision
 
 **Scope confirmed after B1G source audit (12 Nov 2026):** Priority 1 accurate UK sports **EPG programme corrections** (Sky Sports, TNT Sports, Premier Sports and relevant other broadcasters); Priority 2 daily **Sports Today event cards and verified playable channel identities**. Centralise sporting API credentials and permitted generic sports EPG collection once on HAOS, not 10 times on TVs. Keep TMDB, OMDb, VOD posters/hero art, IPTV account/provider EPG credentials, playlists, local channel mappings and playback in B1G. See the [forensic source audit](docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md). EPG publication to public GitHub is a distinct **unapproved licensing gate**; do not publish copied third-party programme data without rights.
