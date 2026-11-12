@@ -2,7 +2,7 @@
 **Date:** 12 November 2026  
 **Repository:** private `jimmyfazz/SportsLiveInfo`  
 **Branch/PR:** `feat/haos-operator-dashboard-ux-20261112`, PR #7  
-**Status:** CODE IMPLEMENTED; GITHUB CI CHECK NOT VERIFIED; REAL HAOS/MOBILE VISUAL ACCEPTANCE NOT RUN.
+**Status:** CODE IMPLEMENTED (experimental v0.3.1); GITHUB CI CHECK NOT VERIFIED; REAL HAOS/MOBILE VISUAL ACCEPTANCE NOT RUN.
 
 ## Scope and source of truth
 This audit covers `sportsliveinfo/src/sportsliveinfo/server.py`, storage/engine interaction, the persistent source catalogues, GitHub fine-grained-token workflow and the current suite. The separate **public** `jimmyfazz/LiveSports-EPG` is a read-only destination and contains no Home Assistant GUI. None of these changes publish a feed or approve redistribution.
@@ -21,6 +21,10 @@ This audit covers `sportsliveinfo/src/sportsliveinfo/server.py`, storage/engine 
 | GUI-008, medium | Browser user experience relied on implicit click feedback. | Semantic `role=status` save/test notices, visual status colours with explicit text, labelled navigation. | Screen-reader inspection and keyboard-only manual test. |
 | GUI-009, high | First-run setup contained only a banner and a completion button at the end of long forms. | Persistent three-stage sources → scheduler → optional GitHub step shortcuts, with accessible setup group and separately styled validation errors. | Interrupt/resume setup on Home Assistant Ingress. |
 | SRC-010, high | EPG Test Connection accepted a syntactically valid but fully expired programme list, falsely implying usable guide coverage. | A non-destructive preflight now requires at least one programme overlapping the next 24h; returns an unsuccessful test and local diagnostic otherwise. | Synthetic current/expired XMLTV unit tests plus real expired-feed negative. |
+| GUI-011, high | Sports Events page silently omitted matches beyond the first 200, with no date filter. | Added stable server-side 100-row pagination, UK-local date, sport/competition/title filters and saved filter state in page links. | Synthetic 235-event pages, BST midnight boundary and XSS tests; browser interaction pending. |
+| HAOS-012, P0 | Private source URL could not be assumed accessible to Supervisor as an external Apps repository; no safe first-install path. | Documented authenticated Mac ZIP → HAOS `local_apps/sportsliveinfo`, rebuild and troubleshooting; no public source disclosure. | Actual HAOS `local_sportsliveinfo` installation, restart and restore required. |
+| PERF-013, P1 | Full EPG scoring was performed before rejecting stale or collapsed imports. | Defer private quality analysis until after source freshness and collapse checks. | Synthetic old/current XMLTV tests; real CPU/memory benchmark pending. |
+| RELEASE-014, P1 | App/config/Docker versions might diverge across development changes. | Align all to experimental v0.3.1 and add static consistency test. | Docker image label/build inspection pending. |
 
 ## Behaviour deliberately unchanged
 1. No browser JavaScript, third-party UI assets, analytics or external CSS; the existing private Home Assistant Ingress/CSRF boundaries are retained.
