@@ -297,9 +297,8 @@ class Engine:
             if not parsed["programmes"]:
                 self.store.job(name, "empty", "Guide contains no valid programme rows; retaining old data")
                 return False
-            # Enrichment/coverage report is local only and non-destructive;
-            # no guessed EPG ID is ever exposed as an IPTV playable stream.
-            quality = analyze_guide(parsed)
+            # Reject stale/partial feeds *before* expensive channel-by-channel
+            # coverage scoring; this avoids heavy CPU use for unusable XMLTV.
             now = datetime.now(timezone.utc)
             has_future = any(
                 datetime.fromisoformat(p["end_utc"]) > now and datetime.fromisoformat(p["start_utc"]) < now + timedelta(days=1)
@@ -331,6 +330,9 @@ class Engine:
                     self.store.job(name, "coverage_collapse",
                                    "New guide lost over 75% of forward programme records; keeping last-good")
                     return False
+            # Enrichment/coverage report is private, non-destructive and only
+            # computed for accepted data; never invent B1G stream identities.
+            quality = analyze_guide(parsed, now=now)
             self.store.save_snapshot("epg:" + name, parsed)
             self.store.save_snapshot("epg-quality:" + name, quality)
             self.store.job(name, "ok", "%d channels; %d programmes; %d invalid; %d with 24h guide; %d recognised services" % (
