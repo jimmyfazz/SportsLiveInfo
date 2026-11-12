@@ -1,0 +1,27 @@
+name: Home Assistant app source checks
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate Python modules
+        run: python -m compileall -q sportsliveinfo/src
+      - name: Run offline tests
+        env:
+          PYTHONPATH: sportsliveinfo/src
+        run: python -m unittest discover -s tests -v
+      - name: Validate Home Assistant app file layout
+        run: |
+          test -f repository.yaml
+          test -f sportsliveinfo/config.yaml
+          test -f sportsliveinfo/Dockerfile
+          test -f sportsliveinfo/icon.png
+          test -f sportsliveinfo/logo.png
