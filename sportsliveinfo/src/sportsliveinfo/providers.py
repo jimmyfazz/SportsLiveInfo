@@ -57,6 +57,8 @@ EPG_FAMILY = {
 EPG_FAMILY.update({"epgshare_" + cc.lower(): "epgshare" for cc in EPGSHARE_MARKETS})
 # (max download bytes, max programmes) per guide; broad national guides are large.
 EPG_LIMITS = {
+    # The publisher serves an uncompressed file of about 21 MB.
+    "uk_freeview": (30_000_000, 100_000),
     "epgshare_uk": (60_000_000, 300_000), "epgshare_fr": (40_000_000, 250_000),
     "epgshare_ie": (30_000_000, 200_000), "epgshare_us": (60_000_000, 300_000),
     "epgshare_hk": (30_000_000, 200_000), "epgshare_my": (30_000_000, 200_000),
@@ -66,6 +68,8 @@ EPG_LIMITS = {
 }
 EPG_LIMITS.update({"epgshare_" + cc.lower(): (40_000_000, 250_000) for cc in EPGSHARE_MARKETS})
 DEFAULT_EPG_LIMIT = (14_000_000, 100_000)
+# XML TV Fr lists an expanded France-only file of about 70 MiB.
+EPG_EXPANDED_LIMITS = {"fr_xmltv": 85_000_000}
 
 # name -> (label, base URL, shared key name or None, conservative daily call budget)
 SPORTS = {
@@ -223,7 +227,7 @@ class _LimitedXmlInput:
         return payload
 
 
-def decode_xmltv(raw, source, max_expanded=65_000_000, max_programmes=100_000,
+def decode_xmltv(raw, source, max_expanded=None, max_programmes=100_000,
                  max_channels=40_000):
     """Stream bounded XMLTV/gzip with source-aware programme detail.
 
@@ -235,6 +239,8 @@ def decode_xmltv(raw, source, max_expanded=65_000_000, max_programmes=100_000,
         stream = gzip.GzipFile(fileobj=io.BytesIO(raw))
     else:
         stream = io.BytesIO(raw)
+    if max_expanded is None:
+        max_expanded = EPG_EXPANDED_LIMITS.get(source, 65_000_000)
     channels, icons, programmes, bad = {}, {}, [], 0
     root = None
     with stream:

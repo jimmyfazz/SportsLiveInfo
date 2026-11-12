@@ -1,4 +1,6 @@
 """Private Home Assistant Ingress UI; no directly published Home Assistant port."""
+import base64
+import hashlib
 import html
 import json
 import logging
@@ -18,6 +20,23 @@ LOGGER = logging.getLogger(__name__)
 LIVE_LABELS = {"live": "Live at refresh", "live_probable": "Probably live at refresh", "upcoming": "Upcoming", "finished": "Finished",
                "probably_finished": "Probably finished", "postponed": "Postponed", "cancelled": "Cancelled",
                "time_tbc": "Time TBC", "unknown": "Unknown"}
+
+BULK_SELECTION_SCRIPT = """document.querySelectorAll("[data-select-all]").forEach(button => {
+    button.hidden = false;
+    button.addEventListener("click", () => {
+        button.form.querySelectorAll('input[name="selected"]').forEach(box => { box.checked = true; });
+    });
+});"""
+BULK_SELECTION_HASH = base64.b64encode(hashlib.sha256(BULK_SELECTION_SCRIPT.encode()).digest()).decode()
+
+
+def bulk_providers(group):
+    if group == "keyless_sports":
+        return "sports", {name: item[0] for name, item in providers.SPORTS.items() if item[2] is None}
+    if group == "epg":
+        return "epg", {name: item[0] for name, item in providers.EPG.items()}
+    raise ValueError("Unknown source group")
+
 
 CSS = """
 :root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:#081224;color:#e8f3ff}
@@ -65,7 +84,7 @@ class UI(BaseHTTPRequestHandler):
         self.send_header("X-Frame-Options", "SAMEORIGIN")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'self'")
+        self.send_header("Content-Security-Policy", f"default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-{BULK_SELECTION_HASH}'; form-action 'self'; base-uri 'none'; frame-ancestors 'self'")
         self.end_headers()
 
     @property
@@ -135,6 +154,14 @@ class UI(BaseHTTPRequestHandler):
                 if value("remove") == "on" and key_name:
                     self.store.configure({"keys": {key_name: ""}})
                 page = "sources"
+            elif action == "bulk_sources":
+                page = "sources"
+                section, allowed = bulk_providers(value("group"))
+                selected = set(form.get("selected", []))
+                if selected - allowed.keys():
+                    raise ValueError("Selection contains a provider outside this source group")
+                self.store.configure({section: {name: name in selected for name in allowed}})
+                message = "Source selections saved (%d enabled)" % len(selected)
             elif action == "options":
                 sports = [s for s in form.get("tsdb", []) if s in providers.THESPORTSDB_SPORTS]
                 leagues = [l for l in form.get("old", []) if l in providers.OPENLIGADB_LEAGUES]
@@ -280,24 +307,39 @@ class UI(BaseHTTPRequestHandler):
             e(", ".join(s["id"] + " (%s programmes)" % s["programmes"] for s in sources) or "No EPG source collected yet"))
         return result
 
+    def _bulk_sources(self, config, group, title, help_text):
+        section, options = bulk_providers(group)
+        content = '<p>%s</p>' % e(help_text)
+        content += "".join(
+            '<label><input type="checkbox" name="selected" value="%s"%s> %s</label>' % (
+                e(name), " checked" if config[section].get(name) else "", e(label))
+            for name, label in options.items()
+        )
+        content += ('<button type="button" class="secondary" data-select-all hidden>Tick all</button> '
+                    '<button type="submit">Save selected sources</button>')
+        form = self._form("bulk_sources", content, '<input type="hidden" name="group" value="%s">' % e(group))
+        return '<section class="card"><h3>%s</h3>%s</section>' % (e(title), form)
+
     def sources(self, config):
         body = '<h2>Sporting event APIs</h2><p>Keys are entered once on Home Assistant, never on the ten televisions. Each Save preserves keys for other providers; no-key services are clearly labelled. One API-Sports key serves every API-Sports sport (each sport has its own free daily allowance).</p><div class="grid">'
+        body += self._bulk_sources(config, "keyless_sports", "Sports providers without API keys",
+                                   "Choose sources individually or tick all, then save the group once.")
         for name, (label, url, keyname, limit) in providers.SPORTS.items():
-            enabled = bool(config["sports"].get(name))
-            saved = bool(config["keys"].get(keyname)) if keyname else True
             note = providers.SOURCE_NOTES.get(providers.SPORT_FAMILY[name], "")
-            content = '<input type="hidden" name="provider" value="%s"><label><input type="checkbox" name="enabled" value="on" %s> Enabled</label>' % (e(name), "checked" if enabled else "")
-            if note:
-                content += '<p class="help">%s</p>' % e(note)
+            content = '<p class="help">%s</p>' % e(note) if note else ""
             if keyname:
+                enabled = bool(config["sports"].get(name))
+                saved = bool(config["keys"].get(keyname))
+                content += '<input type="hidden" name="provider" value="%s"><label><input type="checkbox" name="enabled" value="on" %s> Enabled</label>' % (e(name), "checked" if enabled else "")
                 content += '<p class="help">%s (%s) · configured safe daily budget: %d calls</p><label>API key (leave blank to keep saved key)</label><input type="password" name="key" autocomplete="new-password" placeholder="%s"><label><input type="checkbox" name="remove" value="on"> Remove saved key</label>' % ("Key saved" if saved else "No key configured", e(keyname), limit, "Saved — enter a replacement" if saved else "Enter provider key")
+                content += '<button type="submit">Save this provider</button>'
+                content = self._form("sports", content)
             else:
                 content += '<p class="ok">No API key required · conservative daily budget: %d calls</p>' % limit
-            content += '<button type="submit">Save this provider</button>'
             test_button = self._form("test_source", '<button class="secondary" type="submit">Test connection (uses 1 quota call)</button>',
                 '<input type="hidden" name="kind" value="sports"><input type="hidden" name="provider" value="%s">' % e(name))
             body += '<section class="card"><h3>%s</h3><p class="help">Endpoint: %s</p>%s%s</section>' % (
-                e(label), e(urllib.parse.urlsplit(url).hostname), self._form("sports", content), test_button)
+                e(label), e(urllib.parse.urlsplit(url).hostname), content, test_button)
         options = config.get("options", {})
         chosen_sports, chosen_leagues = set(options.get("thesportsdb_sports", [])), set(options.get("openligadb_leagues", []))
         option_form = '<h3>TheSportsDB sports (one call per sport per day)</h3><div class="formrow">'
@@ -307,13 +349,14 @@ class UI(BaseHTTPRequestHandler):
         option_form += '</div><button type="submit">Save source options</button>'
         body += '</div><section class="card" style="margin-top:16px"><h2>Source options</h2>%s</section>' % self._form("options", option_form)
         body += '<h2 style="margin-top:28px">International television EPG sources</h2><p>Sources marked "verify" use a URL pattern that must pass Test EPG first. Optional, private guide collection only. Public re-publication of third-party programme text is DISABLED until verified rights are available. Source quality, geography and licence restrictions vary.</p><div class="grid">'
+        body += self._bulk_sources(config, "epg", "Private EPG guides",
+                                   "Test unfamiliar guides before enabling them. Saving makes no provider requests.")
         for name, (label, url) in providers.EPG.items():
-            content = '<input type="hidden" name="provider" value="%s"><label><input type="checkbox" name="enabled" value="on" %s> Enable private guide collection</label><p class="warn help">Rights for public redistribution not established</p><button type="submit">Save this source</button>' % (e(name), "checked" if config["epg"].get(name) else "")
             test_button = self._form("test_source", '<button class="secondary" type="submit">Test EPG (downloads guide)</button>',
                 '<input type="hidden" name="kind" value="epg"><input type="hidden" name="provider" value="%s">' % e(name))
-            body += '<section class="card"><h3>%s</h3><p class="help">Source: %s</p>%s%s</section>' % (
-                e(label), e(urllib.parse.urlsplit(url).hostname), self._form("epg", content), test_button)
-        return body + '</div>'
+            body += '<section class="card"><h3>%s</h3><p class="help">Source: %s</p>%s</section>' % (
+                e(label), e(urllib.parse.urlsplit(url).hostname), test_button)
+        return body + '</div><script>' + BULK_SELECTION_SCRIPT + '</script>'
 
     @staticmethod
     def _uk_time(event, fmt="%d %b %H:%M %Z"):

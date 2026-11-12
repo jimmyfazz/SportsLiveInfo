@@ -403,6 +403,31 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertIn("EPG Share HK1", sources)
         self.assertIn("Setanta", sources)
 
+    def test_bulk_source_saves_keep_keys_and_other_groups(self):
+        self.store.configure({"sports": {"football_data": True},
+                              "keys": {"football_data": "saved-key"},
+                              "epg": {"farleyflex": True}})
+        sources = self.get("?page=sources")
+        self.assertEqual(sources.count("data-select-all hidden"), 2)
+        self.assertNotIn("saved-key", sources)
+        self.post({"action": "bulk_sources", "group": "keyless_sports", "selected": ["openf1", "openligadb"]})
+        saved = self.store.config()
+        self.assertFalse(saved["sports"]["jolpica"])
+        self.assertTrue(saved["sports"]["openf1"])
+        self.assertTrue(saved["sports"]["openligadb"])
+        self.assertTrue(saved["sports"]["football_data"])
+        self.assertTrue(saved["epg"]["farleyflex"])
+        rejected = self.post({"action": "bulk_sources", "group": "keyless_sports", "selected": ["football_data"]})
+        self.assertIn("outside this source group", rejected)
+        self.assertEqual(self.store.config(), saved)
+        self.post({"action": "bulk_sources", "group": "epg", "selected": ["epgshare_fr"]})
+        result = self.store.config()
+        self.assertFalse(result["epg"]["farleyflex"])
+        self.assertTrue(result["epg"]["epgshare_fr"])
+        self.assertEqual(result["sports"], saved["sports"])
+        self.assertEqual(result["keys"], {"football_data": "saved-key"})
+        self.assertEqual(self.store.usage(), {})
+
     def test_overview_shows_collector_status_after_provider_activity(self):
         self.store.configure({"setup_complete": True})
         self.store.job("collector", "degraded", "8 of 19 sources refreshed")

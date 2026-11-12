@@ -11,11 +11,17 @@
 
 Baseline: private main `56ea1bee0611d1343f4a05f2d7983e146f415606`. The live v0.3.0 HAOS snapshot showed 1,223 sports events and eight EPG guides. This maintenance build fixes the fallback labels, zero rendering and misleading full-coverage rows using existing snapshots. It adds no provider requests, licence changes, schema changes or storage migrations.
 
-Verification: Python 3.12 compile and 93 tests, including regressions for dashboard rendering, collector status, EPG error handling and unconfirmed start times. The manifest golden fixture changes only producer version. The v0.3.1 Home Assistant update and persistence check are pending. Keep the existing local App installed for an in-place update, take an App backup first, and retain v0.3.0 App files and the backup for rollback.
+Verification: Python 3.12 compile and 94 tests, including regressions for dashboard rendering, collector status, EPG error handling and unconfirmed start times. The manifest golden fixture changes only producer version. The v0.3.1 Home Assistant update and persistence check are pending. Keep the existing local App installed for an in-place update, take an App backup first, and retain v0.3.0 App files and the backup for rollback.
 
 Follow-up: Overview displays the latest collector activity and live badges are explicitly as of the refresh. EPG diagnostics distinguish upstream HTTP status, network or timeout, size or record limits, local quota and invalid input without logging raw exception text. Events marked time TBC cannot create time-based EPG candidates or estimated live statuses.
 
 The 22:02–22:04 GMT v0.3.0 refresh reproduced generic failures across UK, France, US, Canada and Australia candidates. Both Hong Kong guides returned programmes but recognised zero canonical services. Next priorities are to measure repeat failure reasons using the new diagnostics, then add region-specific aliases against captured channel names and variants. Compare the clustered midnight starts against provider timestamps and schedules before treating them as missing times.
+
+Source setup now has separate bulk selections for keyless sports providers and private EPG guides. Tick all only changes the checkboxes; each group is saved independently in one transaction. Save leaves API keys, keyed provider switches and the other group intact. Provider tests remain individual and Save makes no network requests.
+
+Source research, 12 November: [dp247's Freeview file](https://github.com/dp247/Freeview-EPG/blob/master/epg.xml) is listed at 20.7 MB, beyond the former 14 MB download cap. [XML TV Fr](https://xmltvfr.fr/xmltv/) lists the France-only guide at about 70 MiB expanded, beyond the former 65 MB cap. Targeted limits are now 30 MB download and 85 MB expanded, respectively. Parser and record safeguards remain enabled. Retest both on HAOS before claiming a successful import. The same publisher lists a smaller France TNT candidate for further testing.
+
+[EPGTalk](https://github.com/acidjesuz/EPGTalk) lists both configured filenames; keep them pending the new diagnostics. [iptv-org](https://github.com/iptv-org/epg) documents locally generated guides; the failing static Sky, French and Foxtel URLs remain unverified. Matt Huisman's [Foxtel](https://i.mjh.nz/Foxtel/) and [Kayo](https://i.mjh.nz/Kayo/) indexes list guide files but their forward coverage needs measuring before use. No new feed endpoints or redistribution permissions were added.
 
 ## Current documentation reconciliation — 12 November 2026
 
