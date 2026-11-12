@@ -34,7 +34,7 @@ class GitHubOnboardingTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_no_token_never_attempts_network_or_publishing(self):
-        with patch("sportsliveinfo.engine.urllib.request.urlopen") as request:
+        with patch("sportsliveinfo.engine._github_open") as request:
             with self.assertRaisesRegex(ValueError, "Save your GitHub token"):
                 self.engine.test_github_destination()
             request.assert_not_called()
@@ -47,7 +47,7 @@ class GitHubOnboardingTests(unittest.TestCase):
                        "private": False, "permissions": {"push": True}}),
             _Response({"ref": "refs/heads/main"}),
         ]
-        with patch("sportsliveinfo.engine.urllib.request.urlopen", side_effect=payloads) as urlopen:
+        with patch("sportsliveinfo.engine._github_open", side_effect=payloads) as urlopen:
             result = self.engine.test_github_destination()
         self.assertIn("Read-only check passed", result)
         self.assertEqual(urlopen.call_count, 2)
@@ -67,14 +67,24 @@ class GitHubOnboardingTests(unittest.TestCase):
               "permissions": {"push": False}}, "write permission"),
         ]:
             with self.subTest(reason=reason), patch(
-                    "sportsliveinfo.engine.urllib.request.urlopen", return_value=_Response(payload)):
+                    "sportsliveinfo.engine._github_open", return_value=_Response(payload)):
                 with self.assertRaisesRegex(ValueError, reason):
                     self.engine.test_github_destination()
+
+    def test_redirect_guard_refuses_forwarding_bearer_token(self):
+        from sportsliveinfo.engine import _NoGitHubRedirect
+        from urllib.request import Request
+        request = Request("https://api.github.com/repos/jimmyfazz/LiveSports-EPG",
+                          headers={"Authorization": "Bearer dummy-secret"})
+        with self.assertRaisesRegex(ValueError, "refusing to forward"):
+            _NoGitHubRedirect().redirect_request(
+                request, None, 302, "redirected", {},
+                "https://example.com/steal-token")
 
     def test_bad_token_gives_sanitised_error(self):
         self.store.configure({"github": {"token": "dummy-secret"}})
         err = urllib.error.HTTPError("https://api.github.com/redacted", 401, "denied", {}, io.BytesIO())
-        with patch("sportsliveinfo.engine.urllib.request.urlopen", side_effect=err):
+        with patch("sportsliveinfo.engine._github_open", side_effect=err):
             with self.assertRaisesRegex(ValueError, "rejected the saved token") as issue:
                 self.engine.test_github_destination()
         self.assertNotIn("dummy-secret", str(issue.exception))
