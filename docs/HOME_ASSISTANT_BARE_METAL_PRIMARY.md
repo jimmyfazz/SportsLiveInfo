@@ -1,8 +1,11 @@
 # Primary deployment: dedicated home mini PC running Home Assistant OS
 
+> **Current documentation context — reviewed 12 November 2026.** The App package exists; actual installation type/architecture, build, Ingress and restore remain unverified. Use the private local App delivery procedure; no source-repository visibility change is needed.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Decision recorded 12 November 2026.** The owner has an always-on **personal-home mini PC with Home Assistant installed directly on the hardware**, ample disk and RAM. **No Proxmox on this machine.** This is the **preferred SportsLiveInfo host**. Proxmox LXC/VM, Synology and the office PC are fallback platforms only.
 
-**Implementation status:** architecture agreed; SportsLiveInfo collector, Home Assistant App and GitHub publishing are not yet built or installed. Exact Home Assistant installation type has not been verified. Direct installation on a mini PC strongly suggests HAOS, but do not assume: confirm in **Settings > System > Repairs > menu > System information** or **Settings > About** depending on HA version, looking for the installation type, or check whether **Settings > Apps** is present.
+**Implementation status:** Experimental v0.3.0 collector, App package, Ingress setup and publisher source exist. Actual image build/installation, host architecture and backup/restore remain unverified. The connected entity/device MCP tools could not inspect Supervisor. Confirm installation type and architecture in Home Assistant System information before installation; use the [private local installation guide](../sportsliveinfo/DOCS.md).
 
 ## 1. Installation-type gate
 
@@ -36,13 +39,13 @@
        B1G ON 10 TVs — same cached data, ~10–11 cards
        (no TV ever calls sporting provider directly)
 
-The project code remains in PRIVATE jimmyfazz/SportsLiveInfo. A separate public static JSON feed repo is **not yet created** and requires **source licensing clearance**; private/personal use on ten TVs does not itself authorise public redistribution. For source-restricted TV EPG data, use B1's own permitted local EPG for broadcaster matching rather than putting those records on public GitHub.
+The project code remains in PRIVATE jimmyfazz/SportsLiveInfo. The separate PUBLIC daily-feed repository is **jimmyfazz/LiveSports-EPG**, checked README-only on 12 November 2026; live data publication still requires **source licensing clearance**; private/personal use on ten TVs does not itself authorise public redistribution. For source-restricted TV EPG data, use B1's own permitted local EPG for broadcaster matching rather than putting those records on public GitHub.
 
 ## Mandatory first-run onboarding, settings and Home Assistant notifications
 
-**Implementation must follow [HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md](HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md).** On first launch, display a resumable embedded HA Ingress setup wizard with supplier links and individually saved/tested API keys, UK TV source setup, a separate GitHub feed destination/token, and UK-local collection/publication scheduler. Save each independently and **never automatically reopen first-run wizard once finished**; keep an everyday Settings/Health dashboard. Home Assistant persistent notifications should give actionable, comprehensive but non-intrusive errors outside the wizard, de-duplicated with stable IDs and rate limits. Publication remains OFF until source licensing is cleared. This is a required feature, not yet implemented.
+**Implementation must follow [HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md](HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md).** On first launch, display a resumable embedded HA Ingress setup wizard with supplier links and individually saved/tested API keys, UK TV source setup, a separate GitHub feed destination/token, and UK-local collection/publication scheduler. Save each independently and **never automatically reopen first-run wizard once finished**; keep an everyday Settings/Health dashboard. Home Assistant persistent notifications should give actionable, comprehensive but non-intrusive errors outside the wizard, de-duplicated with stable IDs and rate limits. Publication remains OFF until source licensing is cleared. The source implements basic Ingress setup, independent Save/Test, scheduling and local diagnostics. The complete specification, persistent notifications and actual HAOS acceptance remain open.
 
-## 3. Home Assistant App packaging and installation (planned)
+## 3. Home Assistant App packaging (source present; device acceptance open)
 
 Proposed tree:
 

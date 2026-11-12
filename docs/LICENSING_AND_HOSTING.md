@@ -1,5 +1,8 @@
 # Licensing, provenance, private development and £0 hosting
 
+> **Current documentation context — reviewed 12 November 2026.** The public daily-feed destination already exists; it was README-only at this review. No new supplier rights clearance occurred. Private source visibility and public data rights are separate decisions.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 ## Core rule: free != republishable
 
 An API may be free to request but contractually restricted for commercial use, app distribution, caching, bulk download, artwork, attribution or redistribution. **A private GitHub repository does not automatically permit restricted data use.** Never assume GPL/MIT on an EPG collector also licences the programme information it processes.
@@ -27,7 +30,7 @@ Store a record of approved terms, date, source URL, use category, allowed output
 - GitHub Free advertises **2,000 Actions minutes/month** for private repositories on standard hosted runners (account-wide usage matters): https://github.com/pricing and https://docs.github.com/en/actions/concepts/billing-and-usage. Check current billing display, configure safeguards and avoid excessive cron runs.
 - GitHub Actions can schedule as often as every 5 minutes but jobs can be late/dropped and should not be treated as hard realtime: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows.
 - **GitHub Pages is only available from public repositories on GitHub Free**. Private repo Pages requires eligible paid plan: https://docs.github.com/en/pages/getting-started-with-github-pages. Do not enable Pages or publish an open feed from this private repo.
-- Development alternative: a local JSON file or private CI artifact. For app integration later choose authenticated private distribution or a separately permitted public static feed on a public host; do not expose GitHub personal access tokens in Android.
+- Development alternative: a local JSON file or private CI artifact. The confirmed daily-data destination is the PUBLIC `jimmyfazz/LiveSports-EPG` repository, checked README-only; publish only after documented source rights, validation and owner authorization. The App installation source remains PRIVATE `jimmyfazz/SportsLiveInfo`. No GitHub personal access token belongs in Android.
 - GitHub Actions secret store for API keys; GitHub code/datasets must not include provider tokens, account credentials or personally identifiable identifiers.
 - A free-tier host can change quotas or suspend service. Document actual usage and avoid dependency on free hosting as a guaranteed SLA.
 

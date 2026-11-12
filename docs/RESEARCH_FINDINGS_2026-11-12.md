@@ -1,5 +1,8 @@
 # Forensic research findings — 12 November 2026
 
+> **Historical audit / receipt — reviewed 12 November 2026.** Preserved against its stated original revision. Findings, branch/merge positions, provider claims and pass counts below are historical, not freshly verified current facts. Current source is v0.3.0; the combined review attempted 86 tests (81 passed, five errors, three of those environment-blocked). Use CURRENT_STATUS for resolved/remaining work; no new live source, licence or device verification occurred.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 ## 1. Precisely defined purpose
 
 A daily UK-centric electronic sports schedule, not a live-scores or streaming platform. For any queried UK date return sport, competition, event/team or fighter names, venue/city/circuit/country where known, event/round/session, date and start time in UK local time, whether it is scheduled/in progress/completed/postponed, and the **actual UK live broadcaster**, possibly including channel number, coverage start time, platform and entitlement (FTA/subscription/PPV). Show source provenance and confidence. Support today's events, tomorrow and the next seven days.

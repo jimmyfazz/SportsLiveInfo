@@ -1,5 +1,8 @@
 # AGENTS.md — controlling instructions for Codex, Claude and other development agents
 
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](docs/CURRENT_STATUS.md).
+
 ## READ BEFORE CODE
 
 1. [Master implementation roadmap](docs/MASTER_IMPLEMENTATION_ROADMAP.md) — **normative phases and dual-product scope**.
@@ -56,4 +59,4 @@ Read [forensic publishing/token/EPG/sports manifest audit](docs/FORENSIC_AUDIT_T
 5. Outbound-only rights-approved asset/manifest delivery, versioned B1 consumer, local channel match with hidden/account state, ten-TV validation.
 6. Independent objective acceptance on EPG completeness and sport event accuracy.
 
-**Current development status (12 Nov 2026):** v0.1.0 installable Home Assistant OS App scaffold exists under `sportsliveinfo/` (Supervisor config, Dockerfile, Ingress dashboard and first-run settings, persistent SQLite, background quota-aware F1/football and UK/FR EPG adapters, private last-good and diagnostics). `PYTHONPATH=sportsliveinfo/src python -m unittest discover -s tests -v`: **7/7 passed locally**; direct localhost Ingress smoke test passed. **Actual HAOS install/image build, live provider accuracy, full broadcaster canonicalization, source rights clearance, HA notifications, B1G reader and ten-TV acceptance NOT YET VERIFIED/COMPLETE.** Continue work packages against this actual source, not an imagined empty skeleton. Do not claim completed international coverage.
+**Current development status (reviewed 12 Nov 2026):** Experimental **v0.3.0** source is present, including expanded sports/EPG candidates, SQLite, Ingress UI, scheduling, `sli/1.0` preview/publisher and suggestion-only EPG enrichment. Read [CURRENT_STATUS.md](docs/CURRENT_STATUS.md) first for the pinned baseline and exact evidence: **88 tests pass on Python 3.12.15**; socket tests use the in-memory HTTP-handler transport when loopback binds are denied. Do not reuse historical 7/19/43/55 counts as current. Actual HAOS/Docker acceptance, live accuracy, redistribution rights, verified broadcaster mapping, notifications and B1G device acceptance remain open. The source/installation repo stays private; the public daily-feed repo is `jimmyfazz/LiveSports-EPG`, checked README-only. Follow [private local installation](sportsliveinfo/DOCS.md). Existing authenticated owner HA remote access does not authorize public App exposure or TV connections to HA.

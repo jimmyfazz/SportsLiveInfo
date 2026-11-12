@@ -1,5 +1,8 @@
 # UK EPG and live-broadcast reconciliation
 
+> **Current documentation context — reviewed 12 November 2026.** The UK cases below remain useful requirements within the international product. Current linking creates provisional candidates; it does not independently certify a live transmission or playable local stream.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 ## Why this is separate from fixture retrieval
 
 **Fixture:** "Team A v Team B, Champions League, kick-off 20:00".

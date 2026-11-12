@@ -1,41 +1,46 @@
-# SportsLiveInfo — installation and use
+# SportsLiveInfo — private installation and operation
 
-## Install from the Home Assistant Apps store
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](../docs/CURRENT_STATUS.md).
 
-1. This GitHub repository **must be public** for Home Assistant to fetch it as an external app repository. Do not change its visibility until you review the existing private documentation and are ready to publish the code.
-2. On **Home Assistant OS**, go to **Settings → Apps → Install app → ⋮ → Repositories**, add `https://github.com/jimmyfazz/SportsLiveInfo`, then refresh the store.
-3. Select **SportsLiveInfo**, install it, enable **Start on boot**, and select **Start** then **Open web UI**. Build-on-device is used; an external GHCR image is not necessary.
-4. Complete the Ingress wizard: choose providers, enter free API keys when needed, enable lawful guide sources and set refresh times. Each Save keeps keys for unrelated providers.
-5. Return to Overview, select **Refresh both engines now**, and inspect **Diagnostics** for detailed source results. The local SQLite database is stored in `/data` and survives app restart or upgrade.
+**v0.3.0 · experimental · reviewed 12 November 2026.** Read [current status and test evidence](../docs/CURRENT_STATUS.md) before deployment. Source code, a package layout and offline checks exist; actual Docker/HAOS and TV acceptance remain open.
 
-**This is an App, not a HACS custom integration.** Do not use Settings → Marketplace → custom HACS repository for installation; use the **Apps** repository manager. Ingress requires no router port-forwarding and this app config exposes **no host ports**.
+## Two repositories
 
-## What's new in development release v0.2.0
+- **Private source/installation:** [jimmyfazz/SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo). Keep this private. Its `sportsliveinfo/` folder is the App build context.
+- **Public daily data feed:** [jimmyfazz/LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG). This is not an App installation repository. Only its README was present when checked on 12 November 2026.
 
-- **Independent Sports events page:** shows up to 100 locally collected fixture/race/session records with Europe/London start times. Broadcasts are explicitly unverified unless independently confirmed; the page does not claim any IPTV stream is playable.
-- **International EPG coverage dashboard:** private per-source GB/FR channel counts, generic programme entries, 24/72/168-hour complete coverage and the worst programme gaps. Channel identity suggestions are deliberately conservative; B1G still makes final per-account stream matches.
-- **No-key OpenLigaDB Bundesliga source:** opt-in community football fixture coverage, conservatively budgeted at four requests/day; source reuse/public redistribution rights must be assessed independently.
-- **Test connection buttons:** one actual quota-accounted call for each selected sports API; EPG test downloads and parses the full guide, but does not change stored source data.
-- **Safer collection:** a source with stale/no current EPG cannot wipe a good guide; a malformed/partial API-Sports page raises an error rather than returning a false empty day. In-day API-Sports refreshes reuse the prior seven-day cache instead of fetching seven days each time. Duplicate manual refreshes no longer queue silently. Existing user keys and source choices survive this version upgrade.
-- **Automated validation:** 19 offline/local tests, including real HTTP Ingress response/CSRF behaviour, source errors, conservative broadcaster matching, coverage windows and quotas. These are NOT equivalent to actual Home Assistant OS installation, provider quotas or real-device TV acceptance.
+## Private local installation on HAOS
 
-**Scope still outstanding:** universal full international guide source catalogue/licensing, actual B1G shared feed integration and stream mapping, official per-event broadcast verification, additional specialist sport sources, Home Assistant persistent notifications and legally approved static public publishing. These remain explicitly unimplemented. No public access to Home Assistant is needed or enabled.
+1. Confirm the host is Home Assistant OS and its architecture is amd64 or aarch64. An entity-only MCP connection cannot establish this.
+2. On your computer, authenticate to the private SportsLiveInfo repository with your existing GitHub access and obtain the reviewed source revision. Keep source-download credentials separate from the feed-publishing token; do not embed credentials in clone URLs or copied files.
+3. Copy the **contents of the repository's `sportsliveinfo/` folder** to `local_apps/sportsliveinfo/` on Home Assistant using an existing local file-transfer method. Terminal & SSH exposes this as `/local_apps/sportsliveinfo/`. The resulting folder must contain `config.yaml`, `Dockerfile`, `src/`, `icon.png`, `logo.png` and the App documentation. Do not copy only the Python source or nest the full repository inside the App folder.
+4. Open **Settings → Apps → Install app**, select **Check for updates**, and look under **Local apps** for SportsLiveInfo. Install, inspect the build log, then Start and Open web UI. Enable Start on boot after confirming startup.
+5. Choose permitted sources, save/test optional keys separately, set refresh times and finish setup. Use **Refresh both engines now** and Diagnostics to inspect source results. Publishing may remain disabled while local collection is tested.
+6. Verify settings survive restart and backup/restore before relying on it. Back up private `/data` before upgrades; retain the previous App source revision for rollback. A documentation update alone requires no App rebuild or version bump.
 
-## Currently working features
+This follows Home Assistant's [local App tutorial](https://contributors.home-assistant.io/apps/first-app/), checked 12 November 2026. It is an App, not a HACS integration. Do not make the source repository public for installation, place a private-source credential in the public feed, or assume an unauthenticated custom-repository URL can fetch private code. A separately implemented authenticated installation path would need its own validation.
 
-- Private, Ingress-only dashboard and one-time setup completion; restart-persistent settings and key entry.
-- UTC request budgets, provider health and last-good source snapshots in SQLite.
-- Sports: no-key Jolpica Formula 1 calendar (race weekends/sessions); football-data.org matches (optional account key), API-Sports fixtures (optional account key).
-- International EPG: explicit opt-in to farleyflex UK sports, and France programme-tv.net/Télérama/XMLTV France feeds. Bounded decompression/XML validation; stored privately and grouped by source.
-- Daily Europe/London refresh times; manual refresh; cached summaries and diagnostics.
-- Outbound GitHub writer implementation for event records; disabled until permission to publish source-derived data is independently recorded. **The current GUI deliberately does not issue blanket copyright permission.**
-- All TVs remain read-only consumers **after** an actual rights-cleared public feed and B1G reader are deployed; neither currently exists.
+## Features present in source
 
-## Important limitations in v0.2.0
+| Screen / component | Current behavior |
+|---|---|
+| Sources / setup | Individual source selection and Save/Test; optional key settings for API-Sports, football-data.org and CricketData.org; keyless providers identified |
+| Live today / events | Classified and fused fixtures, UK times, featured groups, filters and explicitly provisional EPG channel candidates |
+| EPG coverage | Private source programmes, canonical identity hints, 24/72/168-hour gaps and family/service diagnostics |
+| Schedule | Europe/London daily refresh slots, durable claims, manual-refresh overlap protection; defaults 04:00, 12:00 and 17:00 |
+| Diagnostics | Last-good snapshots, source errors, daily UTC request counts and bounded recent job history |
+| Publishing | Local preview, masked fine-grained token setup, separate GET-only connection check and optional atomic static-feed publication |
 
-This is an **experimental development version**, not an assertion of complete EPG accuracy. It does not yet contain the complete international broadcaster identity/crosswalk, quality-based EPG correction, all sporting source adapters, independently verified TV broadcast matching, 10-TV B1G consumer, official rights approvals, HA persistent notifications or a publicly deployed static JSON feed. It must not be treated as a complete replacement for B1G's existing provider EPG. EPG entries are source-specific, not conclusively mapped to an IPTV stream. Sporting event records omit TV channels unless independently verified, avoiding guessed playback links.
+There are 16 sports adapter entries and 27 EPG candidates across 15 markets. The 24-sport/127-competition taxonomy is classification data, not a promise of actual source coverage. Ten API-Sports adapters share one saved key setting. OpenLigaDB's configured budget is 12/day; all configured budgets are local limits, not verified supplier allowances. Jolpica is initially selected; collection waits for setup completion. New adapters and all EPG candidates are opt-in.
 
-Guide source terms have **not** been verified for external redistribution; original content remains private in `/data`. Do not enable public GitHub publishing until licence/permission review passes. Some data-provider free tiers may restrict caching or republishing.
+Sports source tests make one quota-accounted request. EPG tests download and parse a bounded guide. Tests may update diagnostics/quota usage but do not replace source snapshots or authorize publishing. A successful test is not a completeness or rights check.
+
+## Important limits
+
+The current `sli/1.0` output has events, taxonomy, channel/guide metadata, Today grouping and health, **no EPG programme rows**. The local suggestion evaluator in `supplement.py` does not implement a public programme supplement or a B1G Guide reader. Keep provider EPG primary and preserve local account, manual mapping and hidden choices. Provisional candidates are not verified broadcasts or playable streams.
+
+The current Python 3.12.15 suite passes all 88 tests. HTTP-handler tests use an in-memory transport in this socket-restricted runner; real loopback is not verified. No actual HAOS install, Docker build, live provider benchmark, source redistribution approval, public feed deployment or B1G one/ten-TV acceptance was established. Persistent Home Assistant notifications, monthly/provider-timezone budgets, ETag/304 and full Retry-After/backoff remain outstanding. See [current status](../docs/CURRENT_STATUS.md) for exact errors and release gates.
 
 ## GitHub token: first-time setup (public read-only feed destination)
 
@@ -55,15 +60,12 @@ The **public data repository** is [LiveSports-EPG](https://github.com/jimmyfazz/
 
 ## Keys, data and security
 
-- API-Sports, football-data.org and GitHub token values are stored in the app's private `/data/sportsliveinfo.sqlite3` file; masked in the web UI. Home Assistant backup files containing `/data` must be treated as sensitive.
-- No keys or real IPTV provider account details are published, no TV needs GitHub write access, and no Home Assistant router port is opened.
-- Native ingress proxy only: UI accepts internal Home Assistant Ingress requests from `172.30.32.2` and localhost (development only), and POST requests require a persisted CSRF token.
-- The confirmed separate **public data feed** repository is [jimmyfazz/LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG). The Publishing screen defaults to owner `jimmyfazz`, repository `LiveSports-EPG`, branch `main`. Its GitHub token must be fine-grained and restricted to **this feed repository only** with Contents read/write. Publishing and auto-publishing are OFF by default and cannot proceed without approved source rights. The **private code/App** repository `jimmyfazz/SportsLiveInfo` is different; only that source repo (when made public or distributed through a separate approved public App repository) can be installed in the Home Assistant Apps store. Adding `LiveSports-EPG` as a Home Assistant Apps repository will not install the application.
-- The app stores up to 300 recent redacted job results. If a guide is malformed/oversized, previous last-good data remains intact.
-- This release does not yet send persistent notifications into Home Assistant Core, to avoid broad access permissions until a least-privilege design is reviewed.
+- API keys, the publishing token, settings and snapshots remain in `/data/sportsliveinfo.sqlite3`. Masked HTML is not encryption at rest; protect App storage and backups and rotate expiring keys.
+- The default GitHub destination is owner `jimmyfazz`, repository `LiveSports-EPG`, branch `main`; both publishing switches default OFF. The fine-grained publisher token must be restricted to that public feed repository. It is not a private-source installation credential.
+- The UI uses an internal listener on port 8099, trusted peer checks and CSRF. App config exposes no host ports. Use Home Assistant Ingress; do not forward a WAN port or publish the App endpoint. Existing owner remote administration remains separate.
+- The database retains 300 recent job results; diagnostics must stay free of secrets. Source failures preserve last-good data. No persistent notifications are currently sent to HA Core.
+- TVs must only read the eventual public feed; no GitHub write credentials, source API keys, private accounts or stream URLs belong in that feed. TMDB/OMDb and VOD artwork remain in B1G.
 
-## Build and platform
+## Build and updates
 
-This app supports **amd64 and aarch64** Home Assistant OS installations. It uses a pinned Python 3.12 minor-family Alpine base and Python standard library only. HAOS Supervisor builds the container from the app's Dockerfile at install time. If your Home Assistant installation is Container/Core rather than HAOS/Supervised, it does not have the Apps store and this installation method is not supported.
-
-Official documentation: https://contributors.home-assistant.io/apps/guides/repository/ and https://contributors.home-assistant.io/apps/reference/configuration/.
+The Dockerfile uses `python:3.12-alpine`, a floating minor-family tag rather than a digest-pinned image, and standard-library application code. It declares amd64/aarch64 support and Supervisor labels, but real architecture builds remain unverified. For a code upgrade, refresh the private local App files and follow the installed Supervisor's rebuild/update flow; preserve `/data` and verify the chosen revision. No release readiness is implied by this documentation refresh.

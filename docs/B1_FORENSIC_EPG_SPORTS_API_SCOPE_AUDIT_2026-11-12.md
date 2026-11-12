@@ -1,4 +1,8 @@
 # Forensic B1G EPG, Sports Today, API-credential and centralisation audit
+
+> **Historical audit / receipt — reviewed 12 November 2026.** Preserved against its stated original revision. Findings, branch/merge positions, provider claims and pass counts below are historical, not freshly verified current facts. Current source is v0.3.0; the combined review attempted 86 tests (81 passed, five errors, three of those environment-blocked). Use CURRENT_STATUS for resolved/remaining work; no new live source, licence or device verification occurred.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Date:** 12 November 2026  
 **Source baseline:** jimmyfazz/B1 main at `9d77ebe7478dfb24f0ee9bceb2e20a149bb53180`; third-party farleyflex/epg-guide inspected independently.  
 **Requested deployment:** directly installed Home Assistant mini PC, SportsLiveInfo as a local HAOS App; 10 B1G TVs; outbound-only publication to a separately approved public GitHub feed.  
@@ -172,7 +176,7 @@ No TV should query sporting fixture APIs when central mode is active; TV downloa
 - **P1 OPS-01** — Source-SHA based post-generation refresh and source-health counters; quota and licence gates.
 - **P2 QA-01** — 7-day official EPG comparator, ten-TV emulator/device acceptance and corruption/restore tests.
 
-**Decision:** Scope SportsLiveInfo to sporting fixture APIs + UK sports EPG information only. Keep film/series artwork and TMDB/OMDb in B1G. The B1G Android application remains authoritative for each user's playlists, available channels and playback. Documentation only; no B1G code changes have been made by this audit.
+**Original audit scope (superseded):** sporting fixture APIs + UK sports EPG. **Current required scope:** full international EPG (UK/France first) and worldwide sports events, equally mandatory. Keep film/series artwork and TMDB/OMDb in B1G. The B1G Android application remains authoritative for each user's playlists, available channels and playback. Documentation only; no B1G code changes have been made by this audit.
 
 ## 10. Verified code/research references
 

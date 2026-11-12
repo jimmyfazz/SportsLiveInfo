@@ -1,5 +1,8 @@
 # Proposed system architecture
 
+> **Current documentation context — reviewed 12 November 2026.** The exploratory layout below is historical. Current modules are in `sportsliveinfo/src/sportsliveinfo/`; the collector is an always-on HAOS App, not a serverless UK-only tool. The current publisher is `sli/1.0`, with no EPG programme rows.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 > **Legacy exploratory design.** Read [MASTER_IMPLEMENTATION_ROADMAP.md](MASTER_IMPLEMENTATION_ROADMAP.md) for the current architecture: dual independent full **international EPG** + **sports events** pipelines, common source/canonical identities, HAOS mini-PC local App, 10 read-only B1G clients, rights-gated outbound static feed. Legacy 'no mandatory always-on server' and UK-only language below no longer applies.
 
 ## Principle

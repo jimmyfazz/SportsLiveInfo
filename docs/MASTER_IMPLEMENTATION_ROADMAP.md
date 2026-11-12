@@ -1,8 +1,12 @@
 # SportsLiveInfo — authoritative master architecture, construction sequence and rollout
+
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Version:** plan 1.0, dated 12 November 2026  
 **Priority:** NORMATIVE BUILD PLAN. Supersedes earlier documents where they treat UK-only EPG, optional B1 consumption, or future-proofing of sports coverage as a lesser priority.  
 **Owner-selected deployment:** private HAOS App on a directly installed, always-on home mini PC; no Proxmox needed. Ten B1G televisions use rights-cleared read-only GitHub-hosted snapshots. No inbound home-network ports.  
-**Implementation status (updated 12 Nov 2026):** First installable **HAOS App v0.1.0 foundation** added under `sportsliveinfo/`, including `repository.yaml`, Dockerfile, Ingress UI, Python/SQLite, limited F1/football sports adapters and bounded UK/France XMLTV source imports, with seven offline tests and localhost HTTP smoke passing. **Not yet installed/built on HAOS, live verified, broadcaster-linked, rights-approved or B1G integrated; both full engines remain incomplete.** The phased plan below still governs continued construction.
+**Implementation status (reviewed 12 Nov 2026):** Experimental v0.3.0 App source, expanded EPG/sports candidates, UI, SQLite, scheduler and sli/1.0 writer exist. See [current status](CURRENT_STATUS.md): 88 offline tests passed on Python 3.12.15; HTTP handler tests use an in-memory transport where loopback binds are denied. HAOS/Docker acceptance, live accuracy/rights and B1G integration remain unverified. The phases below are requirements and acceptance gates, not a claim that the repository is empty or all phases passed.
 
 ## 0. Non-negotiable product definition
 
@@ -82,7 +86,7 @@ One Home Assistant App, one SQLite/local cache and provider quota/scheduler coor
 
 **Security:** HAOS wizard and diagnostics available via Home Assistant Ingress only; no WAN port forwarding, server token on TV, provider credential in public JSON or TV-to-GitHub writes.
 
-## 2. Repository structure to create (not current reality)
+## 2. Target modular structure (future refactor, not current paths)
 
     SportsLiveInfo/
       AGENTS.md
@@ -192,7 +196,7 @@ One Home Assistant App, one SQLite/local cache and provider quota/scheduler coor
         QUALITY_SECURITY_AND_ACCEPTANCE.md
         CODEX_CLAUDE_COLLABORATION.md
 
-This is a **target tree, not a claim that code exists**. Build Python and test contracts first, then UI and integrations. Avoid heavyweight frontend tooling if a simple web interface suffices.
+This is a **target modular tree**, not the current checkout. Actual modules live under `sportsliveinfo/src/sportsliveinfo/`, with flat `tests/test_*.py`, six `schemas/` contracts and an existing standard-library UI. Extend them; a modular refactor and `pyproject.toml` remain future work. Current commands and evidence are in [CURRENT_STATUS.md](CURRENT_STATUS.md).
 
 ## 3. Technical architectural decisions
 

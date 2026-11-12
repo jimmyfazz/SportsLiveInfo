@@ -1,9 +1,12 @@
 # Universal channel identity, source-aware EPG allocation and safe local B1G binding
 
+> **Current documentation context — reviewed 12 November 2026.** Partial service tables, source crosswalk and matching fixtures exist. A complete independently verified identity catalogue and account-local Android binding remain acceptance work.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Decision/specification date:** 12 November 2026  
 **Owner requirement:** Enhance UK, French and subscription-driven multi-country EPG and Sports Today accuracy for ten B1G televisions. **SportsLiveInfo maintains shared canonical broadcaster/EPG intelligence. B1G alone maps to each device's actual playable IPTV channels**, while honouring hidden channels, local manual overrides and account state. TV devices are strictly **read-only** clients of the centrally published rights-cleared feed.
 
-**Implementation status:** specification only; no SportsLiveInfo-to-B1G integration implemented or benchmarked. Baseline source read in B1G: `EpgResolver.kt`, `EpgChannelNameIndex.kt`, `EpgChannelMatcher.kt`, `BroadcasterEpgAliases.kt`, `EpgChannelMappingStore.kt`, `EpgScheduleMerger.kt`, `ChannelVisibilityStore.kt`, `ManualEpgSourcePolicy.kt`, Android Home Sports Today and macOS parity code. These findings must be rechecked against HEAD before edits.
+**Implementation status:** partial central implementation in `guide.py`, `feed.py` and synthetic matching fixtures: service tables, source crosswalk, normalization and diagnostic families exist. Complete identity/evidence acceptance and SportsLiveInfo-to-B1G device integration remain unverified. Baseline source read in B1G: `EpgResolver.kt`, `EpgChannelNameIndex.kt`, `EpgChannelMatcher.kt`, `BroadcasterEpgAliases.kt`, `EpgChannelMappingStore.kt`, `EpgScheduleMerger.kt`, `ChannelVisibilityStore.kt`, `ManualEpgSourcePolicy.kt`, Android Home Sports Today and macOS parity code. These findings must be rechecked against HEAD before edits.
 
 ## 1. Three mappings — do not conflate them
 
