@@ -32,7 +32,8 @@ Use **independent fixture adapters + independent UK EPG/broadcaster adapters + d
 9. [Optional B1 Android integration](docs/B1_INTEGRATION.md)
 10. **[PRIMARY: Home Assistant mini PC directly installed — deployment decision](docs/HOME_ASSISTANT_BARE_METAL_PRIMARY.md)**
 11. [ALTERNATIVE ONLY: Home Assistant under Proxmox / LXC](docs/HOME_ASSISTANT_PROXMOX_HOSTING.md)
-12. [Instructions for coding agents](AGENTS.md)
+12. **[MANDATORY: HA first-run setup wizard, individual API saves, GitHub schedule and non-intrusive notifications](docs/HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md)**
+13. [Instructions for coding agents](AGENTS.md)
 
 ## Project status
 
