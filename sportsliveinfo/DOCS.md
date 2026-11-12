@@ -37,6 +37,22 @@ This is an **experimental development version**, not an assertion of complete EP
 
 Guide source terms have **not** been verified for external redistribution; original content remains private in `/data`. Do not enable public GitHub publishing until licence/permission review passes. Some data-provider free tiers may restrict caching or republishing.
 
+## GitHub token: first-time setup (public read-only feed destination)
+
+The **Publishing** tab now includes this guide and a nonpublishing **Test saved GitHub connection** button. You do **not** need a token to use the app's local EPG/sports dashboards; this is only for uploading *rights-approved* JSON snapshots to the public output repository.
+
+1. Sign into GitHub as `jimmyfazz`, then open **[Generate a fine-grained token](https://github.com/settings/personal-access-tokens/new)** under Settings → Developer settings → Personal access tokens → Fine-grained tokens. Avoid a broad classic `repo` token.
+2. Choose a clear name, e.g. `SportsLiveInfo Publisher`, and an expiry, e.g. **90 days**. Record the renewal date; the token will stop working after expiration or revocation.
+3. Set **Resource owner = jimmyfazz**. Under **Repository access**, choose **Only select repositories**, then select **LiveSports-EPG** (and no other repository).
+4. Under **Repository permissions**, select **Contents: Read and write**. Leave unnecessary permissions disabled/default; click **Generate token** and copy it directly into Home Assistant.
+5. In SportsLiveInfo → **Publishing**, confirm owner `jimmyfazz`, repository `LiveSports-EPG`, branch `main`; paste the token into the masked input and click **Save GitHub settings**. Saving does not alter other provider API keys or automatically enable publishing.
+6. Click **Test saved GitHub connection**. This issues only authenticated GET requests against the repository and branch; it cannot verify `Contents:write` with certainty without an actual authorised publication. Fix any 401/403/404 message and repeat.
+7. Keep **Enable publishing** and **Publish automatically** OFF until there are correctly collected events, approved public redistribution rights and a reviewed feed preview. Enabling the switch is not evidence of source permission. After a permitted upload, verify the public manifest/asset checksums anonymously.
+
+The **public data repository** is [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG); the **Home Assistant App installation/source repository** is the separate `SportsLiveInfo` repository, currently private. Publishing is outbound-only: no incoming Home Assistant access, port forwarding, TV GitHub tokens or TV uploads.
+
+**Security:** Never put this token in chat, Issues, code, logs, screenshots or the public data repository. Saved credentials remain private to the HAOS App volume; Home Assistant backups containing `/data` must be protected. To rotate an expiring token, generate a replacement and use the same masked input to save it. Official instructions: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens.
+
 ## Keys, data and security
 
 - API-Sports, football-data.org and GitHub token values are stored in the app's private `/data/sportsliveinfo.sqlite3` file; masked in the web UI. Home Assistant backup files containing `/data` must be treated as sensitive.

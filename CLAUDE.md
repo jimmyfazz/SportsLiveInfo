@@ -2,6 +2,10 @@
 
 **Read this first.** This file is intentionally concise; the detailed and binding rules are in [AGENTS.md](AGENTS.md). Do not rely on older UK-only, "B1 optional", or sports-only architecture notes.
 
+## Current additional audit and required follow-up
+
+See [12 Nov GitHub onboarding and deep EPG/sports/manifest audit](docs/FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md). Critical: the current `sli/1` public output does **not** carry enhanced EPG programme listings; B1G's provider Guide must remain primary and any future licensed supplement must be non-destructive and user-account-aware. The separate public data repo is `jimmyfazz/LiveSports-EPG`. Do not confuse token connection test with write or licensing approval. Source verification, cross-language fixtures and Android reader remain outstanding.
+
 ## Scope
 
 Build **two full equal-priority engines**, not a quick proof-of-concept sports rail alone:

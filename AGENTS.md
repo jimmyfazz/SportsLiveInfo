@@ -13,6 +13,10 @@
 
 Later owner decisions override historical UK-only or optional-B1 language in older files. **Products E (international EPG) and S (multi-sport events) are independently comprehensive, equally mandatory deliverables.** A correct 10-card rail does not complete the EPG; a good EPG does not complete events.
 
+## New priority: operator setup and supplementary EPG contract (12 Nov 2026)
+
+Read [forensic publishing/token/EPG/sports manifest audit](docs/FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md) before changing token setup, the `sli/1` exporter or B1G channel mapping. Publishing now has an in-app fine-grained token walkthrough and GET-only test. A test of the saved token is **not** authorisation to publish and cannot fully prove write permission. `sli/1` still sends **no EPG programme rows**; a proposed additive, rights-cleared `epg_supplements` contract and B1G's non-destructive local rendering are needed. Do not claim full EPG delivery based on the channel catalogue. Never republish third-party programme titles/descriptions without approval.
+
 ## Locked decisions
 
 - Private `jimmyfazz/SportsLiveInfo` source repo; deploy on owner's continuously powered personal mini PC with **Home Assistant OS expected directly on hardware** (verify installation type/CPU architecture). Proxmox is an alternative only.
