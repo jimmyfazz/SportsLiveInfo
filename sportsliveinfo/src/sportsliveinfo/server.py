@@ -51,7 +51,12 @@ class UI(BaseHTTPRequestHandler):
         LOGGER.info("Ingress %s %s", self.command, self.client_address[0])
 
     def _allowed(self):
-        return os.environ.get("SLI_DEV") == "1" or self.client_address[0] in ("172.30.32.2", "127.0.0.1", "::1")
+        # Home Assistant Ingress is the sole production entry point; use an
+        # explicit admin-configured proxy IP set, never a spoofable HTTP header.
+        peers = os.environ.get("SLI_INGRESS_TRUSTED_IPS", "172.30.32.2,127.0.0.1,::1")
+        trusted = {address.strip() for address in peers.split(",") if address.strip()}
+        return (os.environ.get("SLI_DEV") == "1"
+                or self.client_address[0] in trusted)
 
     def _headers(self, code=200, content_type="text/html; charset=utf-8"):
         self.send_response(code)
@@ -98,7 +103,11 @@ class UI(BaseHTTPRequestHandler):
         if not self._allowed():
             self._headers(403)
             return
-        size = int(self.headers.get("Content-Length", "0"))
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+        except (TypeError, ValueError):
+            self._headers(400)
+            return
         if size < 0 or size > 12_000:
             self._headers(413)
             return
