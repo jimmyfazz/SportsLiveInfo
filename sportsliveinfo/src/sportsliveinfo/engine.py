@@ -25,7 +25,8 @@ LONDON = ZoneInfo("Europe/London")
 # Minimum seconds between calls to one provider (published per-minute limits).
 PACING = {"thesportsdb": 2.1, "football_data": 6.5, **{n: 6.1 for n in providers.SPORTS if n.startswith("api_sports")}}
 DAY_HORIZON = {**{n: 7 for n in providers.SPORTS if n.startswith("api_sports")}, "thesportsdb": 3}
-SAFE_ERRORS = (ValueError, RuntimeError, TimeoutError, OSError, json.JSONDecodeError)
+SAFE_ERRORS = (ValueError, RuntimeError, TimeoutError, OSError, EOFError,
+               json.JSONDecodeError, TypeError, KeyError, OverflowError, ET.ParseError)
 FEED_RETAIN = 10  # published manifests (and the assets they reference) kept for slow/offline TVs
 
 
@@ -267,9 +268,17 @@ class Engine:
             if previous:
                 until = now + timedelta(days=1)
                 def forward_count(rows):
-                    return sum(1 for p in rows
-                               if datetime.fromisoformat(p["end_utc"]) > now
-                               and datetime.fromisoformat(p["start_utc"]) < until)
+                    count = 0
+                    for programme in rows:
+                        try:
+                            if (datetime.fromisoformat(programme["end_utc"]) > now
+                                    and datetime.fromisoformat(programme["start_utc"]) < until):
+                                count += 1
+                        except (KeyError, ValueError, TypeError, OverflowError):
+                            # Ignore corrupt/legacy old entries; never crash
+                            # the entire guide refresh during an upgrade.
+                            continue
+                    return count
                 before = forward_count(previous["data"].get("programmes", []))
                 after = forward_count(parsed["programmes"])
                 if before >= 30 and after * 4 < before:
