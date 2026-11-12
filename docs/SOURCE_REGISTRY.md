@@ -23,6 +23,26 @@
 
 **Boxerbook current provider discrepancy caution:** separate pricing and developer pages are subject to change; treat [terms](https://boxerbook.com/terms) and current account agreement as authoritative before implementation.
 
+## B1G code-verified existing sports/EPG source map (12 Nov 2026)
+
+Full audit with precise code paths: [B1 forensic EPG and credentials](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md).
+
+| Existing B1G input | Role and actual source | Key needed | Aggregator action |
+|---|---|---|---|
+| [farleyflex/epg-guide](https://github.com/farleyflex/epg-guide) | B1G's enhanced UK Sky Sports/TNT/Premier detailed XMLTV; generated via iptv-org from mytelly and other source guides; 5-day data | No | Important *reference* for EPG parsing/quality; central download only if terms allow, **no public re-hosting** without cleared programme rights |
+| [EPG Share UK1](https://epgshare01.online/epgshare01/epg_ripper_UK1.xml.gz) | Android automatic permitted UK gap-fill | No key visible in B1 source | Candidate for source benchmark and optional permitted ingest; rights unverified |
+| [Matt Huisman Sky UK](https://i.mjh.nz/SkyUK/epg.xml.gz) | Android automatic UK backup | No key visible in B1 source | Candidate for guide coverage benchmark; rights unverified |
+| [IPTV-org Sky UK](https://iptv-org.github.io/epg/guides/uk/sky.com.epg.xml.gz) | Android automatic UK backup | No key visible in B1 source | Candidate for guide coverage benchmark; data rights unverified |
+| [EPGTalk UK National](https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/UK_guide.xml.gz) | Android manually selected EPG | No key visible | Candidate/user-opt-in only, no automatic replication without permission |
+| [EPGTalk Sports](https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz) | Android manually selected EPG | No key visible | Candidate/user-opt-in only, rights unverified |
+| [API-Sports football v3](https://v3.football.api-sports.io/) | Android and Mac opt-in date-scoped football schedule validation | **Yes**, user currently enters key per B1G device | Move credential and fixture polling to HAOS for 10-TV sharing, subject to provider terms |
+| [TheSportsDB](https://www.thesportsdb.com/docs/api) public test key 123 | Existing B1G crests and standings; not primary EPG provider | No owner signup input normally | Keep in B1G for now; per-device existing cache; do not redistribute artwork |
+| TMDB and OMDb | Existing B1G VOD movie/series metadata, ratings, poster/hero enrichment | **Yes**, optional device keys | **Exclude from SportsLiveInfo**; leave in B1G |
+
+**Important:** farleyflex upstream GitHub Action scheduled at 06:00 UTC, but inspected EPG commits on Nov 9–11 landed between 13:05 and 14:33 UTC; check the new source SHA/commit time rather than assuming a 05:00 UK download is latest. Its published channel catalogue includes additional variants not covered by B1's 17 conservative aliases; verify channel identity and programme content before using Sky Sports+ or TNT 5–8.
+
+**Legal status:** URL readability and source project's public GitHub code licence are not licence grants to republish original provider programme texts. A separate public GitHub feed must not contain unapproved XMLTV programme data. The B1 app may retain its own permitted direct source subscription as fallback.
+
 ## UK broadcaster and EPG candidates
 
 | Source | What it is useful for | Legal and technical status |
