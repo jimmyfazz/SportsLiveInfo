@@ -17,6 +17,12 @@ After completing setup the welcome wizard **must not appear automatically again*
 
 On errors at any future time, use discreet **Home Assistant notifications outside the wizard**, a clear dashboard health section, and detailed local logs. Do **not** interrupt television playback, Home Assistant automations or the owner with repetitive pop-ups, mobile push by default, or spurious "no sport today" failures.
 
+## Scope clarification — avoid irrelevant API key fields
+
+A forensic review of the B1G repository confirmed that Android exposes **API-Sports**, **TMDB** and **OMDb** as optional user-entered third-party API keys. This Home Assistant App wizard is for **sport fixtures + UK sports EPG only**: offer API-Sports and additional enabled sports-specific APIs, authorised keyless XMLTV source configuration and the separate GitHub publication token. **Never solicit TMDB or OMDb credentials, IPTV account/server passwords, M3U provider tokens, VOD poster/hero artwork keys or TheSportsDB public test key in this wizard.** TheSportsDB crests/standings remain a B1G local feature for now.
+
+In the UK TV step, expose curated source entries for farleyflex and other inspected UK sports EPG sources with latest source version/last programme window, verification/redistribution status and **optional** enablement if lawful. Farleyflex generates via a 06:00 UTC scheduled workflow, but recent actual commits landed hours later; provide a **check for new upstream source revision** schedule after 06:00 UTC rather than assuming the 05:00 feed already contains today's latest update. Public EPG publishing defaults OFF until source programme-data rights cleared. See [forensic source audit](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md).
+
 ## 1. Actual Home Assistant mechanism — not a literal OS boot splash
 
 Implement as a **Home Assistant App with a small embedded web UI via Ingress** (Home Assistant's own authenticated UI). Do not require inbound ports or a second login. The relevant App configuration is `ingress: true`, `panel_admin: true`, `panel_title: SportsLiveInfo`, with the internal `ingress_port` matching the local web service. Routes/assets must work under the dynamically allocated ingress base path (relative URLs, correct X-Ingress-Path handling); server allows Supervisor ingress origin only. Source: https://contributors.home-assistant.io/apps/guides/ingress/
