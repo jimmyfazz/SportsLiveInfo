@@ -4,6 +4,10 @@ Read README.md and all docs before major changes; start with docs/DELIVERY_PLAN.
 
 **Critical architecture:** The collector is one standalone Python engine. **Primary packaging: Home Assistant OS local App on the physical personal-home mini PC**, if HAOS confirmed. Do not put collector, scraper, EPG parser, rate-limiter or GitHub publisher inside a Home Assistant Core custom integration. Thin HA health sensors are optional. No TV calls sporting-provider APIs; no public home-network ingress. Private repository stays private, proposed separate public feed must be rights-cleared before publication.
 
+## Required Home Assistant UI and notifications
+
+**Mandatory:** Read [docs/HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md](docs/HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md) before App/UI implementation. Build **HA Ingress** first-run wizard (not a literal OS splash): individual supplier cards with correct signup URLs, masked API key, per-source **Save** and **Test Connection**; providers without keys clearly labelled; non-publishable sources gated; separate GitHub feed-repo/token Save/Test; GMT/BST-aware fetch and publication scheduler Save; wizard auto-opens only on first run, resumable, manually reopened later. Operational dashboard + quiet Home Assistant persistent notifications with dedup, comprehensive remediation, severity/cooldown and redaction. Treat the wizard, scheduling, and HA notifications as *acceptance-critical*, not optional design polish. HA Core API notification access via `homeassistant_api: true` is powerful; security-review or use a least-privilege companion integration. Never allow UI form field changes to erase unrelated saved keys.
+
 ## Non-negotiable requirements
 
 1. Zero recurring subscription cost for the initial private prototype. Avoid paid data services and language-model inference. Provider adapters must be pluggable; never tie the whole app to one provider.
