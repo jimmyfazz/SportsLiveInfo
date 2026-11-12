@@ -231,7 +231,7 @@ def decode_xmltv(raw, source, max_expanded=65_000_000, max_programmes=100_000,
     """
     if not isinstance(raw, bytes) or not raw:
         raise ValueError("Empty XMLTV input")
-    if raw[:2] == b"\x5c\x78\x31\x66\x5c\x78\x38\x62":
+    if raw[:2] == b"\x1f\x8b":
         stream = gzip.GzipFile(fileobj=io.BytesIO(raw))
     else:
         stream = io.BytesIO(raw)
