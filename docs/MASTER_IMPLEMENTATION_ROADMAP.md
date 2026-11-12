@@ -2,7 +2,7 @@
 **Version:** plan 1.0, dated 12 November 2026  
 **Priority:** NORMATIVE BUILD PLAN. Supersedes earlier documents where they treat UK-only EPG, optional B1 consumption, or future-proofing of sports coverage as a lesser priority.  
 **Owner-selected deployment:** private HAOS App on a directly installed, always-on home mini PC; no Proxmox needed. Ten B1G televisions use rights-cleared read-only GitHub-hosted snapshots. No inbound home-network ports.  
-**Implementation status:** specification and work programme; no deployed service, verified feeds, live integration or finished code.
+**Implementation status (updated 12 Nov 2026):** First installable **HAOS App v0.1.0 foundation** added under `sportsliveinfo/`, including `repository.yaml`, Dockerfile, Ingress UI, Python/SQLite, limited F1/football sports adapters and bounded UK/France XMLTV source imports, with seven offline tests and localhost HTTP smoke passing. **Not yet installed/built on HAOS, live verified, broadcaster-linked, rights-approved or B1G integrated; both full engines remain incomplete.** The phased plan below still governs continued construction.
 
 ## 0. Non-negotiable product definition
 
