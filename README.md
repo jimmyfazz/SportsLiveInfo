@@ -23,6 +23,12 @@ Both products have independent provider coverage, completeness benchmarks and ac
 
 **Excluded:** central TMDB/OMDb, movie/series metadata, posters/hero artwork, IPTV stream URLs, playback proxy, subscription credentials or per-TV hidden-channel uploads. TMDB and OMDb remain optional local B1G integrations.
 
+## Home Assistant private-source test installation
+
+The application source repository is private; the public `LiveSports-EPG` repository **cannot** install the App. Until a separately approved public installation package exists, use the official Home Assistant OS `local_apps` development path. On an authenticated Mac download the desired source branch, copy its inner `sportsliveinfo` folder to `local_apps/sportsliveinfo`, then install **SportsLiveInfo** under **Settings → Apps → Install app → Local apps**.
+
+See [Private HAOS install and update checklist](docs/PRIVATE_HAOS_TEST_INSTALL.md) and [Home Assistant operator GUI audit](docs/HAOS_GUI_OPERATOR_AUDIT_2026-11-12.md). These instructions are source-grounded but **not yet tested on the owner's actual HAOS mini PC**.
+
 ## Latest operator and data-contract audit (12 November 2026)
 
 [GitHub token onboarding and forensic EPG/sports/manifest audit](docs/FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md) identifies the difference between the existing `sli/1` event/identity feed and a future **rights-approved programme enrichment** feed. Home Assistant's Publishing page now includes a fine-grained token walkthrough and a non-publishing test of the saved `LiveSports-EPG` connection. This does **not** enable publishing, approve source licences, or expose Home Assistant publicly. The EPG programme supplement remains a planned, not implemented, separate asset.
