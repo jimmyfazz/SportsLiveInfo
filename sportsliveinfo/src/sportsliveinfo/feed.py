@@ -151,7 +151,14 @@ def channels_document():
 
 def _event_public(event):
     row = {k: event[k] for k in EVENT_FIELDS if k in event and event[k] not in (None, "", [])}
-    row["broadcast_verified"] = bool(event.get("broadcast_verified"))
+    # A cached event must not become a "verified broadcaster" merely
+    # because an untrusted source sets a boolean. A reviewed, versioned
+    # evidence rule must be attached before publishing clickable TV claims.
+    row["broadcast_verified"] = (
+        bool(event.get("broadcast_verified"))
+        and event.get("broadcast_verification_rule") == "approved_v1"
+        and bool(event.get("broadcast_evidence"))
+    )
     if row["broadcast_verified"]:
         row["broadcasts"] = [{k: b[k] for k in ("canonical_channel_id", "name", "coverage_start_utc", "transmission") if k in b}
                              for b in event.get("broadcasts", []) if isinstance(b, dict)]
@@ -166,8 +173,19 @@ def build_feed(store, now=None, previous_revision=None):
     approved = set(conf.get("publication_approvals", []))
     snap = store.snapshot("sports")
     all_events = snap["data"]["events"] if snap else []
-    events = [_event_public(e) for e in all_events if e.get("source_id") in approved]
-    omitted = sorted({e.get("source_id") for e in all_events if e.get("source_id") not in approved})
+    # In a fused fixture, the primary source may be approved while another
+    # source supplied a participant/time/status. Until field-level lineage is
+    # implemented, fail closed unless *every* contributor is approved.
+    def licensed(event):
+        origin = event.get("source_id")
+        contributors = event.get("sources") or [origin]
+        return (isinstance(origin, str) and origin in approved
+                and isinstance(contributors, list) and bool(contributors)
+                and all(isinstance(src, str) and src in approved for src in contributors))
+    events = [_event_public(e) for e in all_events if licensed(e)]
+    omitted = sorted({src for e in all_events if not licensed(e)
+                      for src in (e.get("sources") or [e.get("source_id")])
+                      if isinstance(src, str)})
     by_day = {}
     for event in events:
         day = datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date().isoformat()
