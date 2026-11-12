@@ -256,7 +256,7 @@ def broadcast_candidates(events, epg_guides, now):
         # Both lists follow the original programme order. Sorting their short
         # merged set preserves historical per-channel source ordering.
         candidates_at_time = sorted(
-            hourly.get(event_hour, ()) + long_programmes, key=lambda item: item[0])
+            hourly.get(event_hour, []) + long_programmes, key=lambda item: item[0])
         for _, row in candidates_at_time:
             if not _matches(event, row):
                 continue
