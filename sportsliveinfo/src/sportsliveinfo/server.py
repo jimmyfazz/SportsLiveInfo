@@ -67,7 +67,7 @@ nav a.active{background:#214c54;color:#e3fff4;box-shadow:inset 0 -2px 0 var(--ac
 .state.neutral{background:#21384b;border-color:#395267;color:#d4e0eb}
 .warn{color:var(--amber)}.ok{color:var(--lime)}.critical{color:var(--red)}
 label{display:block;margin:12px 0 6px;font-size:13px;font-weight:600;color:#e2f0f8}
-input[type=text],input[type=password],input[type=search],select{
+input[type=text],input[type=password],input[type=search],input[type=date],select{
   width:100%;min-width:0;background:#071727;border:1px solid #426276;color:var(--text);
   padding:11px 13px;border-radius:9px;font:inherit}
 input[type=checkbox]{accent-color:var(--lime);width:18px;height:18px;vertical-align:middle}
@@ -79,7 +79,7 @@ button.secondary,.button-link.secondary{background:#284b5d;color:#eff8fd;border:
 button:disabled{opacity:.5;cursor:not-allowed}
 form{margin:0 0 12px}
 .formrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.formrow>select,.formrow>input[type=text]{flex:1 1 170px}
+.formrow>select,.formrow>input[type=text],.formrow>input[type=date]{flex:1 1 150px}
 .divider{height:1px;background:var(--border);margin:18px 0}
 .alert{padding:13px 16px;border-radius:10px;border-left:4px solid var(--accent);background:#123746;margin-bottom:17px}
 .alert.error{border-color:var(--red);background:#3b2b34}
@@ -645,30 +645,100 @@ class UI(BaseHTTPRequestHandler):
         return body
 
     def events(self, query=None):
+        """Server-side event filtering and pagination; no client-side event data cache."""
         query = query or {}
         snapshot = self.store.snapshot("sports")
         data = snapshot["data"] if snapshot else {}
         events = data.get("events", [])
-        sport, category, text = query.get("sport", ""), query.get("category", ""), query.get("q", "").casefold()
-        sports_present = sorted({ev.get("sport", "") for ev in events}, key=taxonomy.sport_order)
-        categories_present = sorted({(ev.get("category_id", ""), ev.get("category_label", "")) for ev in events
-                                     if not sport or ev.get("sport") == sport}, key=lambda c: c[1])
-        shown = [ev for ev in events if (not sport or ev.get("sport") == sport)
+        sport = query.get("sport", "")
+        category = query.get("category", "")
+        text = query.get("q", "").strip()
+        day = query.get("date", "")
+        if day:
+            try:
+                datetime.strptime(day, "%Y-%m-%d")
+            except (TypeError, ValueError):
+                day = ""
+
+        def uk_day(event):
+            try:
+                stamp = datetime.fromisoformat(event["start_utc"])
+                if stamp.tzinfo is None:
+                    return ""
+                return stamp.astimezone(ZoneInfo("Europe/London")).date().isoformat()
+            except (KeyError, TypeError, ValueError, OverflowError):
+                return ""
+
+        sports_present = sorted(
+            {ev.get("sport", "") for ev in events}, key=taxonomy.sport_order)
+        categories_present = sorted(
+            {(ev.get("category_id", ""), ev.get("category_label", "")) for ev in events
+             if not sport or ev.get("sport") == sport}, key=lambda c: c[1])
+        shown = [ev for ev in events
+                 if (not sport or ev.get("sport") == sport)
                  and (not category or ev.get("category_id") == category)
-                 and (not text or text in ("%s %s" % (ev.get("title", ""), ev.get("competition", ""))).casefold())]
-        body = '<h2>Sporting events</h2><p>Independent sports fixtures, races and sessions for the next eight UK days, de-duplicated across sources. This view does not claim a broadcaster unless a separately verified source has supplied one.</p>'
-        filters = '<form method="get"><input type="hidden" name="page" value="events"><div class="formrow"><select name="sport"><option value="">All sports</option>%s</select><select name="category"><option value="">All competitions</option>%s</select><input type="text" name="q" value="%s" placeholder="Team or competition"><button type="submit">Filter</button></div></form>' % (
-            "".join('<option value="%s" %s>%s</option>' % (e(s), "selected" if s == sport else "", e(taxonomy.SPORTS.get(s, ("Other",))[0])) for s in sports_present),
-            "".join('<option value="%s" %s>%s</option>' % (e(c), "selected" if c == category else "", e(label)) for c, label in categories_present),
-            e(query.get("q", "")))
-        body += '<section class="card">%s<h3>%s of %s events</h3><p class="help">%s · Data is private on this Home Assistant instance.</p>' % (
-            filters, e(len(shown)), e(len(events)), e(snapshot["updated_at"] if snapshot else "No sporting snapshot yet"))
-        body += '<table><tr><th>UK start time</th><th>Category and competition</th><th>Event and sources</th><th>UK channel</th></tr>'
-        body += ''.join(self._event_row(ev) for ev in shown[:200]) + '</table>'
-        if len(shown) > 200:
-            body += '<p class="help">Showing first 200 matching events; narrow the filter to see more.</p>'
-        if not events:
-            body += '<p>No events have been collected yet. Configure sources and run a refresh.</p>'
+                 and (not day or uk_day(ev) == day)
+                 and (not text or text.casefold() in (
+                     "%s %s" % (ev.get("title", ""), ev.get("competition", ""))).casefold())]
+        shown.sort(key=lambda ev: (str(ev.get("start_utc") or ""), str(ev.get("title") or ""),
+                                   str(ev.get("id") or "")))
+        per_page = 100
+        pages = max(1, (len(shown) + per_page - 1) // per_page)
+        requested = query.get("p", "1")
+        page_no = max(1, min(pages, int(requested))) if requested.isdecimal() else 1
+        start = (page_no - 1) * per_page
+        subset = shown[start:start + per_page]
+        body = ('<div class="page-heading"><div><h2>Sporting events</h2>'
+                '<p>Filter the next eight UK calendar days of source-reported fixtures, races and sessions. '
+                'Unverified EPG channel suggestions are not confirmed broadcasts.</p></div>'
+                '<span class="state neutral">%d matching events</span></div>') % len(shown)
+        filters = ('<form method="get"><input type="hidden" name="page" value="events">'
+                   '<div class="formrow">'
+                   '<label for="events-sport">Sport</label><select id="events-sport" name="sport">'
+                   '<option value="">All sports</option>%s</select>'
+                   '<label for="events-category">Competition</label><select id="events-category" name="category">'
+                   '<option value="">All competitions</option>%s</select>'
+                   '<label for="events-date">UK date</label>'
+                   '<input id="events-date" type="date" name="date" value="%s">'
+                   '<label for="events-search">Search</label>'
+                   '<input id="events-search" type="search" name="q" value="%s" '
+                   'placeholder="Team or competition">'
+                   '<button type="submit">Apply filters</button></div></form>') % (
+                       "".join('<option value="%s" %s>%s</option>' % (
+                           e(value), "selected" if value == sport else "",
+                           e(taxonomy.SPORTS.get(value, ("Other",))[0])) for value in sports_present),
+                       "".join('<option value="%s" %s>%s</option>' % (
+                           e(value), "selected" if value == category else "", e(label))
+                           for value, label in categories_present),
+                       e(day), e(text))
+        body += ('<section class="card">%s<h3>%d of %d events</h3>'
+                 '<p class="help">Snapshot UTC: %s · Private local data · Page %d of %d</p>') % (
+                     filters, len(shown), len(events),
+                     e(snapshot["updated_at"] if snapshot else "No sporting snapshot yet"), page_no, pages)
+        if subset:
+            body += ('<table><thead><tr><th>UK start time</th><th>Category and competition</th>'
+                     '<th>Event and sources</th><th>UK channel</th></tr></thead><tbody>')
+            body += ''.join(self._event_row(ev) for ev in subset) + '</tbody></table>'
+        elif not events:
+            body += ('<div class="empty"><p>No events have been collected yet. '
+                     'Configure sources and run a refresh first.</p>'
+                     '<a href="?page=sources&amp;kind=sports">Configure sporting sources</a></div>')
+        else:
+            body += ('<p class="empty">No events match these filters. '
+                     '<a href="?page=events">Clear filters</a> to see the full list.</p>')
+        if pages > 1:
+            base_query = {"page": "events", "sport": sport, "category": category,
+                          "date": day, "q": text}
+            body += '<nav aria-label="Event result pages" class="source-toolbar">'
+            if page_no > 1:
+                body += '<a href="?%s">Previous page</a>' % e(urllib.parse.urlencode(
+                    dict(base_query, p=page_no - 1)))
+            body += '<span class="state neutral">Page %d / %d · up to %d per page</span>' % (
+                page_no, pages, per_page)
+            if page_no < pages:
+                body += '<a href="?%s">Next page</a>' % e(urllib.parse.urlencode(
+                    dict(base_query, p=page_no + 1)))
+            body += '</nav>'
         return body + '</section>'
 
     def guide(self):
