@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.1 — 12 November 2026 (experimental, pending HAOS acceptance)
+
+- Responsive Home Assistant Ingress operator UI: accessible navigation, visible numerical zeros, collection readiness and live-status indicators, source freshness and guided first-run shortcuts.
+- Sports/EPG source catalogue grouped by family and region; independently saved keys, per-source test states and optional provider filters.
+- Sports event search now supports 100-row server-side pages, UK calendar dates (including BST boundary) and competition/title filters; no silent 200-row truncation.
+- Private guide coverage now has accessible percentage bars, expandable channel-family and missing-coverage lists; diagnostics show source failures and quota reservations.
+- GitHub token instructions are progressively revealed, with explicit publication prerequisites and a disabled publish action until enabled, token and approved source are all present.
+- EPG source preflight rejects a parseable but expired guide; stale/collapsed source imports skip expensive quality scoring while retaining last-good.
+- Added first-run local `local_apps` installation instructions for the still-private source repository and offline regression tests.
+- **Release gate:** code and tests are committed, but the private repository's GitHub Actions jobs report failure without executed steps/log access. No actual HAOS install, Docker build or desktop/mobile visual test has passed. Do not treat this as install-accepted or as clearance to redistribute unlicensed data.
+
+
 ## 0.3.0 — 12 November 2026
 
 - Sports sources 4 → 16: new OpenF1, TheSportsDB (free public key; darts, snooker, golf, rugby, cricket, fighting and more), CricketData.org (Test matches per playing day) and API-Sports rugby, basketball (NBA/WNBA), ice hockey, NFL, baseball, AFL, handball, volleyball and MMA. One API-Sports key now serves every API-Sports sport. OpenLigaDB covers Bundesliga 1–3; Jolpica fetches next season from October.

@@ -1,7 +1,7 @@
 # SportsLiveInfo
 
 **Private project specification and development programme — 12 November 2026**  
-**Current status (12 Nov 2026):** Experimental **Home Assistant OS App v0.2.0** code is under [`sportsliveinfo/`](sportsliveinfo/) with Ingress, SQLite, UK/France private EPG coverage diagnostics, a sports-events viewer, F1, football-data.org, API-Sports and optional no-key OpenLigaDB. **19 local tests passed**, including real localhost Ingress/CSRF checks. **Not yet installed or tested on actual HAOS; not yet a comprehensive EPG/sport provider or B1G client**. No public-data feed has been approved or deployed.
+**Current status (12 Nov 2026):** Experimental **Home Assistant OS App v0.3.1 development branch** is under [`sportsliveinfo/`](sportsliveinfo/), with international sports/EPG source catalogues, private Ingress operator UI, SQLite, conservative source validation and a rights-gated `sli/1` feed preview. Previous v0.3.0 source had locally reported fixture/unit-test passes, but **the exact current v0.3.1 code has not passed executable CI, real Home Assistant OS installation, or browser acceptance testing**. GitHub Actions currently fails before exposing usable job logs. Comprehensive international source accuracy, legal redistribution and B1G Android feed consumption remain unverified/incomplete; public feed publishing is disabled.
 
 SportsLiveInfo is a **self-hosted, no-subscription-cost sports and international electronic programme guide (EPG) intelligence application**, planned as a Home Assistant OS App on the owner's always-on home mini PC.
 
@@ -22,6 +22,12 @@ Both products have independent provider coverage, completeness benchmarks and ac
 5. **No incoming internet access to Home Assistant, no router port forwarding, no public Home Assistant address.** Public GitHub is only a distribution channel for authorised static files.
 
 **Excluded:** central TMDB/OMDb, movie/series metadata, posters/hero artwork, IPTV stream URLs, playback proxy, subscription credentials or per-TV hidden-channel uploads. TMDB and OMDb remain optional local B1G integrations.
+
+## Home Assistant private-source test installation
+
+The application source repository is private; the public `LiveSports-EPG` repository **cannot** install the App. Until a separately approved public installation package exists, use the official Home Assistant OS `local_apps` development path. On an authenticated Mac download the desired source branch, copy its inner `sportsliveinfo` folder to `local_apps/sportsliveinfo`, then install **SportsLiveInfo** under **Settings → Apps → Install app → Local apps**.
+
+See [Private HAOS install and update checklist](docs/PRIVATE_HAOS_TEST_INSTALL.md) and [Home Assistant operator GUI audit](docs/HAOS_GUI_OPERATOR_AUDIT_2026-11-12.md). These instructions are source-grounded but **not yet tested on the owner's actual HAOS mini PC**.
 
 ## Latest operator and data-contract audit (12 November 2026)
 

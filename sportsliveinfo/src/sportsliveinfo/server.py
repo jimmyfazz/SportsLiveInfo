@@ -20,27 +20,129 @@ LIVE_LABELS = {"live": "LIVE", "live_probable": "Probably live", "upcoming": "Up
                "time_tbc": "Time TBC", "unknown": "Unknown"}
 
 CSS = """
-:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:#081224;color:#e8f3ff}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 90% -30%,#103b54,transparent 55%),#081224}
-main{max-width:1140px;margin:auto;padding:24px 24px 50px}header{display:flex;align-items:center;gap:17px;margin-bottom:23px}header img{width:68px;height:68px;object-fit:contain}
-h1{font-size:27px;letter-spacing:-.7px;margin:0}h2{font-size:18px;margin:0 0 16px}h3{font-size:16px;margin:0 0 8px}
-p{line-height:1.55;margin:8px 0 15px;color:#b2c3d6}.sub{font-size:13px;color:#a5b8cc}
-nav{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:24px}nav a{color:#d1e6f5;border:1px solid #29465b;border-radius:11px;padding:10px 14px;text-decoration:none}nav a:hover,nav a.active{background:#123c52;border-color:#3fb8ba}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.card{padding:20px;border-radius:16px;border:1px solid #254157;background:#0d2034;box-shadow:0 8px 20px #0002}
-.metric{font-size:32px;font-weight:700;color:#bbf977}.pill{display:inline-block;padding:4px 9px;border-radius:20px;background:#14364a;color:#85e1eb;font-size:12px}
-.warn{color:#ffd68b}.ok{color:#b1ec91}.critical{color:#ffb1a2}label{display:block;margin:12px 0 6px;font-size:13px;color:#d8e8f7}
-input[type=text],input[type=password],select{width:100%;background:#071627;border:1px solid #376078;color:#f4f9ff;padding:12px 13px;border-radius:8px;font:inherit}
-input[type=checkbox]{accent-color:#88df88;width:18px;height:18px;vertical-align:middle}button{border:0;background:linear-gradient(110deg,#05c6cc,#a2ef59);color:#071524;border-radius:9px;padding:10px 16px;font-size:14px;font-weight:750;cursor:pointer;margin-top:10px}button:hover{filter:brightness(1.08)}button.secondary{background:#234659;color:white}
-form{margin:0 0 15px}.help{font-size:12px;color:#94adbf}.formrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.divider{height:1px;background:#294258;margin:18px 0}
-table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:9px;text-align:left;border-bottom:1px solid #244054;word-break:break-word}th{color:#b8d4e4}
-.alert{padding:13px 16px;border-radius:11px;border-left:4px solid #80dfe3;background:#133043;margin-bottom:20px}.error{border-color:#ffb181;background:#38252b}
-a{color:#7be1eb}small{color:#a0b8cb}.footer{margin-top:30px;color:#829db1;font-size:12px}
-@media(max-width:600px){main{padding:14px}header img{width:48px;height:48px}h1{font-size:22px}.card{padding:14px}}
+:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --bg:#071220;--surface:#102438;--surface2:#142d43;--border:#2a4659;
+  --text:#eff7fc;--muted:#acc2d3;--accent:#67dfcb;--lime:#b9f185;--amber:#ffcf80;--red:#ffada4;
+  background:var(--bg);color:var(--text)}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;min-width:320px;background:radial-gradient(ellipse at 85% -10%,#16495b 0,transparent 46%),var(--bg);line-height:1.5}
+main{max-width:1340px;margin:auto;padding:24px clamp(14px,3vw,40px) 48px}
+a{color:var(--accent);text-underline-offset:3px}
+a:hover{text-decoration-thickness:2px}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{
+  outline:3px solid var(--lime);outline-offset:3px}
+.skip{position:absolute;left:12px;top:-80px;z-index:100;background:var(--lime);color:#06111c;padding:12px}
+.skip:focus{top:8px}
+header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:0 0 22px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:16px;min-width:0}
+header img{width:60px;height:60px;object-fit:contain;filter:drop-shadow(0 5px 16px #31bda344)}
+h1{font-size:clamp(24px,2.5vw,33px);letter-spacing:-.8px;line-height:1.12;margin:0}
+h2{font-size:clamp(19px,2vw,23px);letter-spacing:-.25px;margin:0 0 12px}
+h3{font-size:16px;margin:0 0 8px}
+p{color:var(--muted);line-height:1.6;margin:8px 0 16px}
+strong{color:var(--text)}
+.sub,.help,small{font-size:12px;color:var(--muted)}
+.sub{font-size:13px}
+.mast-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+nav{position:sticky;top:0;z-index:10;display:flex;gap:5px;overflow-x:auto;white-space:nowrap;
+  margin:0 0 26px;padding:9px;background:#0c2032f2;backdrop-filter:blur(14px);
+  border:1px solid var(--border);border-radius:15px;scrollbar-width:thin}
+nav a{flex:0 0 auto;color:var(--muted);border-radius:9px;padding:9px 13px;text-decoration:none;font-size:13px;font-weight:650}
+nav a:hover{background:var(--surface2);color:var(--text)}
+nav a.active{background:#214c54;color:#e3fff4;box-shadow:inset 0 -2px 0 var(--accent)}
+.page-heading{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,265px),1fr));gap:14px}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:13px}
+.card{min-width:0;padding:21px;border-radius:16px;border:1px solid var(--border);
+  background:linear-gradient(160deg,#132b40,#0e2032);box-shadow:0 8px 24px #0002;overflow-x:auto}
+.card-soft{background:var(--surface);border-color:#264255}
+.metric-card{border-top:3px solid var(--accent)}
+.metric{font-size:clamp(25px,2.7vw,36px);font-variant-numeric:tabular-nums;font-weight:750;letter-spacing:-.9px;color:var(--lime);line-height:1.3}
+.pill,.state{display:inline-flex;align-items:center;padding:4px 10px;border:1px solid #326477;border-radius:100px;
+  background:#163846;color:#9dece8;font-size:12px;font-weight:650;white-space:normal;gap:4px}
+.state.ok{background:#183d32;border-color:#356c4d;color:#b8f9cb}
+.state.warn{background:#473821;border-color:#866632;color:#ffe0a6}
+.state.critical{background:#482a32;border-color:#875161;color:#ffc1bd}
+.state.neutral{background:#21384b;border-color:#395267;color:#d4e0eb}
+.warn{color:var(--amber)}.ok{color:var(--lime)}.critical{color:var(--red)}
+label{display:block;margin:12px 0 6px;font-size:13px;font-weight:600;color:#e2f0f8}
+input[type=text],input[type=password],input[type=search],input[type=date],select{
+  width:100%;min-width:0;background:#071727;border:1px solid #426276;color:var(--text);
+  padding:11px 13px;border-radius:9px;font:inherit}
+input[type=checkbox]{accent-color:var(--lime);width:18px;height:18px;vertical-align:middle}
+button,.button-link{display:inline-block;border:0;background:linear-gradient(110deg,#63dacc,#b6e987);color:#071b25;
+  border-radius:9px;padding:10px 16px;font-size:14px;font-weight:750;cursor:pointer;margin-top:9px;
+  text-decoration:none;min-height:40px}
+button:hover,.button-link:hover{filter:brightness(1.08);text-decoration:none}
+button.secondary,.button-link.secondary{background:#284b5d;color:#eff8fd;border:1px solid #406679}
+button:disabled{opacity:.5;cursor:not-allowed}
+form{margin:0 0 12px}
+.formrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.formrow>select,.formrow>input[type=text],.formrow>input[type=date],.formrow>input[type=search]{flex:1 1 150px}
+.divider{height:1px;background:var(--border);margin:18px 0}
+.alert{padding:13px 16px;border-radius:10px;border-left:4px solid var(--accent);background:#123746;margin-bottom:17px}
+.alert.error{border-color:var(--red);background:#3b2b34}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:13px}
+td,th{padding:11px 10px;text-align:left;border-bottom:1px solid #2b4658;overflow-wrap:anywhere;vertical-align:top}
+th{color:#d2e5ed;font-size:12px;letter-spacing:.02em}
+tbody tr:hover{background:#ffffff09}
+table tr:last-child td{border-bottom:0}
+.action-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.action-row .button-link{margin-top:0}
+.step-list{display:grid;gap:12px;list-style:none;margin:16px 0;padding:0}
+.step-list li{padding:14px 16px;background:#0b2030;border:1px solid #2a4856;border-radius:12px}
+.progress-track{height:9px;border-radius:20px;overflow:hidden;background:#304557;margin:9px 0}
+.progress-fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,#2fc7cb,#b8f185)}
+.provider-group{border:1px solid var(--border);background:#0c2132;border-radius:14px;margin:12px 0}
+.provider-group>summary{cursor:pointer;padding:15px 19px;font-weight:750;list-style-position:inside}
+.provider-group[open]>summary{border-bottom:1px solid var(--border)}
+.provider-group>.grid{padding:14px}
+.provider-group .card{box-shadow:none;padding:16px;background:#112b40}
+.source-toolbar{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0 18px}
+.source-toolbar a{border:1px solid #3e6071;border-radius:100px;padding:8px 14px;text-decoration:none}
+.source-toolbar a.active{background:#245766;border-color:#75e0ce;color:white}
+.section-space{margin-top:22px}
+.empty{padding:20px;border:1px dashed #466477;border-radius:12px}
+.footer{margin-top:32px;padding:18px 0;border-top:1px solid var(--border);color:#a1b9c9;font-size:12px}
+@media(max-width:720px){
+ main{padding:14px 12px 36px}
+ header{gap:12px}header img{width:45px;height:45px}
+ nav{margin:0 0 18px;padding:7px;border-radius:11px}
+ nav a{padding:9px 10px}
+ .card{padding:15px}
+ .metric{font-size:28px}
+ .provider-group>.grid{padding:9px}
+ .provider-group .card{padding:14px}
+ .mast-status{width:100%}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
 """
 
 
 def e(value):
-    return html.escape(str(value or ""), quote=True)
+    """Escape user/provider data for HTML, including numeric zero values."""
+    return html.escape(str(value if value is not None else ""), quote=True)
+
+
+def freshness(snapshot, now=None):
+    """Readable, conservative age indicator for a persisted last-good snapshot."""
+    if not snapshot:
+        return "Not collected", "warn"
+    try:
+        stamp = datetime.fromisoformat(snapshot["updated_at"])
+        age = (now or datetime.now(ZoneInfo("UTC"))) - stamp
+        if age.total_seconds() < -300:
+            return "Clock mismatch", "warn"
+        hours = max(0, int(age.total_seconds() // 3600))
+        if hours < 1:
+            return "Updated within 1 hour", "ok"
+        if hours < 24:
+            return "Updated %d hours ago" % hours, "ok"
+        days = hours // 24
+        return "Last updated %d days ago" % days, "warn"
+    except (KeyError, ValueError, TypeError, OverflowError):
+        return "Timestamp unavailable", "warn"
 
 
 class UI(BaseHTTPRequestHandler):
@@ -119,23 +221,26 @@ class UI(BaseHTTPRequestHandler):
         action = value("action")
         page = "dashboard" if self.store.config()["setup_complete"] else "sources"
         message = "Settings saved"
+        is_error = False
         try:
             if action == "sports":
+                page = "sources"
                 name = value("provider")
                 if name not in providers.SPORTS:
                     raise ValueError("Unknown sports provider")
-                self.store.configure({"sports": {name: value("enabled") == "on"}})
-                # Keys are stored by provider account, so one API-Sports key serves every API-Sports sport.
+                # Validate the entire form before modifying persisted state.
+                # One invalid key must not leave the provider toggle changed.
                 key_name = providers.SPORTS[name][2]
                 secret = value("key")
-                if secret and key_name:
-                    if len(secret) > 512:
-                        raise ValueError("API key exceeds safe length")
-                    self.store.configure({"keys": {key_name: secret}})
-                if value("remove") == "on" and key_name:
-                    self.store.configure({"keys": {key_name: ""}})
-                page = "sources"
+                if len(secret) > 512:
+                    raise ValueError("API key exceeds safe length")
+                updates = {"sports": {name: value("enabled") == "on"}}
+                if key_name and (secret or value("remove") == "on"):
+                    # Explicit remove wins if both fields are submitted.
+                    updates["keys"] = {key_name: "" if value("remove") == "on" else secret}
+                self.store.configure(updates)
             elif action == "options":
+                page = "sources"
                 sports = [s for s in form.get("tsdb", []) if s in providers.THESPORTSDB_SPORTS]
                 leagues = [l for l in form.get("old", []) if l in providers.OPENLIGADB_LEAGUES]
                 if not sports or not leagues:
@@ -143,12 +248,13 @@ class UI(BaseHTTPRequestHandler):
                 self.store.configure({"options": {"thesportsdb_sports": sports, "openligadb_leagues": leagues}})
                 page = "sources"
             elif action == "epg":
+                page = "sources"
                 name = value("provider")
                 if name not in providers.EPG:
                     raise ValueError("Unknown EPG source")
                 self.store.configure({"epg": {name: value("enabled") == "on"}})
-                page = "sources"
             elif action == "test_source":
+                page = "sources"
                 kind, name = value("kind"), value("provider")
                 if kind not in ("sports", "epg") or name not in (providers.SPORTS if kind == "sports" else providers.EPG):
                     raise ValueError("Unknown test source")
@@ -156,7 +262,9 @@ class UI(BaseHTTPRequestHandler):
                 status = self.engine.test_source(kind, name)
                 page = "sources"
                 message = status
+                is_error = "unsuccessful" in status.casefold()
             elif action == "github":
+                page = "publishing"
                 owner, repository, branch = value("owner"), value("repository"), value("branch")
                 if not all(re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", k) for k in (owner, repository, branch)):
                     raise ValueError("Invalid GitHub owner, repository or branch")
@@ -171,11 +279,13 @@ class UI(BaseHTTPRequestHandler):
                 self.store.configure({"github": updates})
                 page = "publishing"
             elif action == "test_github":
+                page = "publishing"
                 # Authenticate and inspect the SAVED destination; never commit.
                 # Saving a token and testing its connection are separate actions.
                 message = self.engine.test_github_destination()
                 page = "publishing"
             elif action == "schedule":
+                page = "scheduler"
                 times = []
                 for t in value("times").split(","):
                     t = t.strip()
@@ -198,10 +308,12 @@ class UI(BaseHTTPRequestHandler):
                 page = "dashboard"
                 message = "Refresh started. Check source history shortly" if started else "A refresh is already running"
             elif action == "publish":
+                page = "publishing"
                 revision = self.engine.publish()
                 page = "publishing"
                 message = "Feed %s committed atomically; public endpoint verification remains necessary" % revision
             elif action == "preview_feed":
+                page = "publishing"
                 manifest = self.engine.preview_feed()
                 page = "publishing"
                 message = "Feed preview %s built locally (%d assets); nothing uploaded" % (manifest["revision"], len(manifest["assets"]))
@@ -210,7 +322,10 @@ class UI(BaseHTTPRequestHandler):
         except (ValueError, RuntimeError) as exc:
             # Render only own controlled errors, not upstream URLs or secret-bearing exceptions.
             message = str(exc)[:140]
-        url = "?page=%s&message=%s" % (urllib.parse.quote(page), urllib.parse.quote(message))
+            is_error = True
+        url = "?page=%s&message=%s&level=%s" % (
+            urllib.parse.quote(page), urllib.parse.quote(message),
+            "error" if is_error else "info")
         self.send_response(303)
         self.send_header("Location", url)
         self.send_header("Cache-Control", "no-store")
@@ -221,16 +336,45 @@ class UI(BaseHTTPRequestHandler):
 
     def render(self, page, config, notice, query=None):
         query = query or {}
-        tabs = [("dashboard", "Overview"), ("today", "Live today"), ("sources", "Sources & API keys"), ("events", "Sports events"), ("guide", "EPG coverage"), ("scheduler", "Scheduler"), ("publishing", "Publishing"), ("health", "Diagnostics")]
-        head = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SportsLiveInfo</title><style>%s</style></head><body><main>' % CSS
-        head += '<header><img src="icon.png" alt="SportsLiveInfo"><div><h1>SportsLiveInfo</h1><div class="sub">International EPG intelligence · Live sporting fixtures</div></div></header>'
+        tabs = [("dashboard", "Overview"), ("today", "Live today"), ("events", "Sports events"),
+                ("guide", "EPG coverage"), ("sources", "Sources & API keys"), ("scheduler", "Scheduler"),
+                ("publishing", "Publishing"), ("health", "Diagnostics")]
+        sports_enabled = sum(bool(v) for v in config["sports"].values())
+        epg_enabled = sum(bool(v) for v in config["epg"].values())
+        collection_active = self.engine._busy.locked()
+        head = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+                '<meta name="viewport" content="width=device-width,initial-scale=1">'
+                '<meta name="theme-color" content="#071220"><title>SportsLiveInfo</title>'
+                '<style>%s</style></head><body><a class="skip" href="#content">Skip to main content</a><main>') % CSS
+        head += ('<header><div class="brand"><img src="icon.png" alt="">'
+                 '<div><h1>SportsLiveInfo</h1>'
+                 '<div class="sub">Independent sports schedules &amp; private television guide intelligence</div>'
+                 '</div></div><div class="mast-status"><span class="state %s">%s</span>'
+                 '<span class="state neutral">%d sports · %d EPG sources enabled</span></div></header>') % (
+                     "warn" if collection_active else ("ok" if config["setup_complete"] else "warn"),
+                     "Refreshing sources" if collection_active else ("Configured" if config["setup_complete"] else "Setup required"),
+                     sports_enabled, epg_enabled)
         if not config["setup_complete"]:
-            head += '<div class="alert">First-run setup: configure providers, review refresh times and optionally set a publishing destination. Credentials are stored privately in the Home Assistant App data volume.</div>'
+            head += ('<section class="card" aria-label="First-run setup" style="margin-bottom:18px">'
+                     '<div class="page-heading"><div><h2>First-run setup</h2>'
+                     '<p>Three short stages. You can return to any stage later, and publishing is optional.</p>'
+                     '</div><span class="state warn">Setup incomplete</span></div>'
+                     '<div class="action-row">'
+                     '<a class="button-link secondary" href="?page=sources">1 · Select and test sources</a>'
+                     '<a class="button-link secondary" href="?page=scheduler">2 · Choose refresh times</a>'
+                     '<a class="button-link secondary" href="?page=publishing">3 · Optional GitHub token</a>'
+                     '</div><p class="help">Use Finish setup on the current page when ready. '
+                     'Credentials remain in the Home Assistant App private data volume.</p></section>')
         if notice:
-            head += '<div class="alert">%s</div>' % e(notice)
-        head += '<nav>' + ''.join('<a class="%s" href="?page=%s">%s</a>' % ("active" if page == key else "", e(key), e(label)) for key, label in tabs) + '</nav>'
+            head += '<div class="alert %s" role="status" aria-live="polite">%s</div>' % (
+                "error" if query.get("level") == "error" else "", e(notice))
+        head += ('<nav aria-label="Main navigation">' +
+                 ''.join('<a %s href="?page=%s">%s</a>' % (
+                     'class="active" aria-current="page"' if page == key else '',
+                     e(key), e(label)) for key, label in tabs) +
+                 '</nav><div id="content"></div>')
         if page == "sources":
-            body = self.sources(config)
+            body = self.sources(config, query)
         elif page == "today":
             body = self.today()
         elif page == "events":
@@ -254,60 +398,210 @@ class UI(BaseHTTPRequestHandler):
         sport = self.store.snapshot("sports")
         epg = self.store.snapshot("epg")
         today = self.store.snapshot("today")
-        events = sport["data"]["events"] if sport else []
-        sources = epg["data"]["sources"] if epg else []
+        events = sport["data"].get("events", []) if sport else []
+        sources = epg["data"].get("sources", []) if epg else []
         day = today["data"] if today else {}
-        candidates = sum(e.get("broadcast_status", "none") != "none" for e in events)
-        result = '<div class="grid">'
-        for title, value, desc in [("Events today", day.get("count", 0), "%s probably live now · %s featured (England, home nations, PPV)" % (day.get("live_now", 0), len(day.get("featured", [])))),
-                                    ("Sporting events (8 days)", len(events), "De-duplicated across enabled sources"),
-                                    ("EPG source feeds", len(sources), "Private guide sources with last-good snapshots"),
-                                    ("EPG channel candidates", candidates, "Unverified guide matches; no channel is fabricated from league rights"),
-                                    ("API calls today", sum(self.store.usage().values()), "Local call-budget ledger; UTC day")]:
-            result += '<div class="card"><div class="sub">%s</div><div class="metric">%s</div><div class="help">%s</div></div>' % (e(title), e(value), e(desc))
-        result += '</div><section class="card" style="margin-top:16px"><h2>Collection status</h2>'
-        result += '<p>Sports snapshot: <strong>%s</strong><br>EPG snapshot: <strong>%s</strong></p>' % (e(sport["updated_at"] if sport else "No successful collection yet"), e(epg["updated_at"] if epg else "No successful collection yet"))
-        result += '<p class="warn">TV broadcaster confirmation is not yet implemented in the live adapters. All unverified sporting events are deliberately non-playable in the planned B1G feed.</p>'
-        result += self._form("collect", '<button type="submit">Refresh both engines now</button>')
-        result += '</section><div class="grid" style="margin-top:16px"><section class="card"><h2>Sports coverage</h2><p>%s</p></section><section class="card"><h2>EPG coverage</h2><p>%s</p></section></div>' % (
-            e(", ".join(s["id"] + " (%s)" % s["events"] for s in sport["data"].get("sources", [])) if sport else "No sporting source collected yet"),
-            e(", ".join(s["id"] + " (%s programmes)" % s["programmes"] for s in sources) or "No EPG source collected yet"))
+        enabled_sports = [n for n, active in config["sports"].items() if active and n in providers.SPORTS]
+        enabled_epg = [n for n, active in config["epg"].items() if active and n in providers.EPG]
+        missing_keys = sorted({providers.SPORTS[n][2] for n in enabled_sports
+                               if providers.SPORTS[n][2] and not config["keys"].get(providers.SPORTS[n][2])})
+        sport_age, sport_severity = freshness(sport)
+        epg_age, epg_severity = freshness(epg)
+        active = self.engine._busy.locked()
+        result = '<div class="page-heading"><div><h2>Operations overview</h2><p>At-a-glance readiness, latest successful snapshots and the actions needed next.</p></div>'
+        result += '<span class="state %s">%s</span></div>' % ("warn" if active else "neutral", "Collection running" if active else "Local-first · private collection")
+        metrics = [
+            ("Events today", day.get("count", 0), "UK calendar day · source-reported or estimated status"),
+            ("Sports events", len(events), "Future event records in the current local snapshot"),
+            ("EPG feeds", len(sources), "Private source feeds represented in the overview"),
+            ("API calls today", sum(self.store.usage().values()), "Requests reserved in the local UTC quota ledger"),
+        ]
+        result += '<div class="kpi-grid">'
+        for title, value, description in metrics:
+            result += ('<article class="card metric-card"><div class="sub">%s</div>'
+                       '<div class="metric">%s</div><div class="help">%s</div></article>') % (
+                           e(title), e(value), e(description))
+        result += '</div>'
+        result += '<div class="grid section-space"><section class="card"><h2>System readiness</h2><ul class="step-list">'
+        checks = [
+            ("Initial setup", bool(config["setup_complete"]), "Complete the first-run setup", "dashboard"),
+            ("Sports source selection", bool(enabled_sports), "Enable at least one sport provider", "sources"),
+            ("EPG source selection", bool(enabled_epg), "Enable an authorised private EPG source", "sources"),
+            ("Provider credentials", not missing_keys, "Enter keys for selected key-required providers", "sources"),
+            ("Sports snapshot", bool(sport), "Run a refresh to collect sports events", "dashboard"),
+            ("EPG snapshot", bool(epg), "Run a refresh to analyse programme coverage", "dashboard"),
+        ]
+        for label, good, action, destination in checks:
+            result += ('<li><span class="state %s">%s</span> <strong>%s</strong>'
+                       '<div class="help">%s</div></li>') % (
+                           "ok" if good else "warn", "Ready" if good else "Needs attention",
+                           e(label), "Completed" if good else (
+                               '<a href="?page=%s">%s</a>' % (e(destination), e(action))))
+        result += '</ul><p class="help">GitHub publishing is optional and excluded from collection readiness. '
+        result += 'Only rights-approved data may be exported.</p></section>'
+        result += '<section class="card"><h2>Latest snapshots</h2>'
+        for title, snapshot, age, severity, destination in [
+            ("Sports intelligence", sport, sport_age, sport_severity, "events"),
+            ("Private EPG analysis", epg, epg_age, epg_severity, "guide"),
+        ]:
+            result += ('<div class="divider"></div><h3>%s</h3>'
+                       '<p><span class="state %s">%s</span></p>'
+                       '<p class="help">Snapshot time (UTC): %s</p>'
+                       '<a href="?page=%s">Explore %s</a>') % (
+                           e(title), severity, e(age), e(snapshot["updated_at"] if snapshot else "No successful refresh"),
+                           e(destination), e(title))
+        result += '<div class="divider"></div><h3>Refresh collection</h3>'
+        result += '<p>A failed or partial provider refresh keeps the previous successful snapshot. '
+        result += 'An EPG source with no current programmes cannot silently replace your guide.</p>'
+        result += self._form("collect", '<button type="submit" %s>%s</button>' % (
+            "disabled" if active else "", "Refresh in progress" if active else "Refresh selected sources now"))
+        result += '<div class="action-row"><a class="button-link secondary" href="?page=sources">Configure sources</a>'
+        result += '<a class="button-link secondary" href="?page=health">View diagnostics</a></div></section></div>'
+        result += '<div class="grid section-space"><section class="card"><h2>Sports source coverage</h2>'
+        result += '<p>%s</p></section><section class="card"><h2>EPG source coverage</h2><p>%s</p></section></div>' % (
+            e(", ".join(str(s["id"]) + " (%s events)" % s.get("events", 0) for s in sport["data"].get("sources", []))
+              if sport else "No collected sports source yet"),
+            e(", ".join(str(s["id"]) + " (%s programmes)" % s.get("programmes", 0) for s in sources)
+              if sources else "No collected EPG source yet"))
+        result += '<p class="warn section-space">A sporting event is not a confirmed TV broadcast. '
+        result += 'Event-to-channel matches remain explicitly unverified until independent broadcast evidence exists.</p>'
         return result
 
-    def sources(self, config):
-        body = '<h2>Sporting event APIs</h2><p>Keys are entered once on Home Assistant, never on the ten televisions. Each Save preserves keys for other providers; no-key services are clearly labelled. One API-Sports key serves every API-Sports sport (each sport has its own free daily allowance).</p><div class="grid">'
-        for name, (label, url, keyname, limit) in providers.SPORTS.items():
-            enabled = bool(config["sports"].get(name))
-            saved = bool(config["keys"].get(keyname)) if keyname else True
-            note = providers.SOURCE_NOTES.get(providers.SPORT_FAMILY[name], "")
-            content = '<input type="hidden" name="provider" value="%s"><label><input type="checkbox" name="enabled" value="on" %s> Enabled</label>' % (e(name), "checked" if enabled else "")
-            if note:
-                content += '<p class="help">%s</p>' % e(note)
-            if keyname:
-                content += '<p class="help">%s (%s) · configured safe daily budget: %d calls</p><label>API key (leave blank to keep saved key)</label><input type="password" name="key" autocomplete="new-password" placeholder="%s"><label><input type="checkbox" name="remove" value="on"> Remove saved key</label>' % ("Key saved" if saved else "No key configured", e(keyname), limit, "Saved — enter a replacement" if saved else "Enter provider key")
-            else:
-                content += '<p class="ok">No API key required · conservative daily budget: %d calls</p>' % limit
-            content += '<button type="submit">Save this provider</button>'
-            test_button = self._form("test_source", '<button class="secondary" type="submit">Test connection (uses 1 quota call)</button>',
-                '<input type="hidden" name="kind" value="sports"><input type="hidden" name="provider" value="%s">' % e(name))
-            body += '<section class="card"><h3>%s</h3><p class="help">Endpoint: %s</p>%s%s</section>' % (
-                e(label), e(urllib.parse.urlsplit(url).hostname), self._form("sports", content), test_button)
-        options = config.get("options", {})
-        chosen_sports, chosen_leagues = set(options.get("thesportsdb_sports", [])), set(options.get("openligadb_leagues", []))
-        option_form = '<h3>TheSportsDB sports (one call per sport per day)</h3><div class="formrow">'
-        option_form += ''.join('<label><input type="checkbox" name="tsdb" value="%s" %s> %s</label>' % (e(s), "checked" if s in chosen_sports else "", e(s)) for s in providers.THESPORTSDB_SPORTS)
-        option_form += '</div><h3>OpenLigaDB leagues</h3><div class="formrow">'
-        option_form += ''.join('<label><input type="checkbox" name="old" value="%s" %s> %s</label>' % (e(l), "checked" if l in chosen_leagues else "", e(l)) for l in providers.OPENLIGADB_LEAGUES)
-        option_form += '</div><button type="submit">Save source options</button>'
-        body += '</div><section class="card" style="margin-top:16px"><h2>Source options</h2>%s</section>' % self._form("options", option_form)
-        body += '<h2 style="margin-top:28px">International television EPG sources</h2><p>Sources marked "verify" use a URL pattern that must pass Test EPG first. Optional, private guide collection only. Public re-publication of third-party programme text is DISABLED until verified rights are available. Source quality, geography and licence restrictions vary.</p><div class="grid">'
-        for name, (label, url) in providers.EPG.items():
-            content = '<input type="hidden" name="provider" value="%s"><label><input type="checkbox" name="enabled" value="on" %s> Enable private guide collection</label><p class="warn help">Rights for public redistribution not established</p><button type="submit">Save this source</button>' % (e(name), "checked" if config["epg"].get(name) else "")
-            test_button = self._form("test_source", '<button class="secondary" type="submit">Test EPG (downloads guide)</button>',
-                '<input type="hidden" name="kind" value="epg"><input type="hidden" name="provider" value="%s">' % e(name))
-            body += '<section class="card"><h3>%s</h3><p class="help">Source: %s</p>%s%s</section>' % (
-                e(label), e(urllib.parse.urlsplit(url).hostname), self._form("epg", content), test_button)
-        return body + '</div>'
+    def sources(self, config, query=None):
+        """Operator-friendly provider catalogue; all controls remain independent HTML forms."""
+        query = query or {}
+        section = query.get("kind", "all")
+        if section not in ("all", "sports", "epg"):
+            section = "all"
+        latest = {}
+        for operation in self.store.recent_jobs(300):
+            if operation["provider"] not in latest:
+                latest[operation["provider"]] = operation
+
+        def status(name):
+            operation = latest.get(name)
+            if not operation:
+                return '<span class="state neutral">Not tested</span>'
+            value = operation["state"]
+            colour = ("ok" if value in ("ok", "test_ok", "no_events_reported") else
+                      "warn" if value in ("partial", "empty", "stale", "needs_key", "test_failed",
+                                          "coverage_collapse", "quota") else "critical")
+            return '<span class="state %s" title="%s">%s</span>' % (
+                colour, e(operation["time"]), e(value.replace("_", " ").title()))
+
+        sports_on = sum(bool(config["sports"].get(name)) for name in providers.SPORTS)
+        epg_on = sum(bool(config["epg"].get(name)) for name in providers.EPG)
+        body = ('<div class="page-heading"><div><h2>Source management</h2>'
+                '<p>Select only the services you need. Expand a provider family or region to configure '
+                'it; independent Save and Test controls never overwrite other providers.</p></div>'
+                '<span class="state neutral">%s sports · %s EPG enabled</span></div>') % (sports_on, epg_on)
+        body += '<div class="source-toolbar" aria-label="Source type filters">'
+        for key, label in (("all", "All sources"), ("sports", "Sports APIs"), ("epg", "Television EPG")):
+            body += '<a href="?page=sources&amp;kind=%s" class="%s" %s>%s</a>' % (
+                key, "active" if key == section else "", 'aria-current="page"' if key == section else "", e(label))
+        body += '</div>'
+        if section in ("all", "sports"):
+            body += ('<h2>Sporting event APIs</h2><p>Choose free no-key sources first, then add optional '
+                     'provider keys. A shared API-Sports key serves all of its sport-specific adapters; '
+                     'free plans may have restricted competitions and quotas.</p>')
+            families = {}
+            for name in providers.SPORTS:
+                families.setdefault(providers.SPORT_FAMILY.get(name, name), []).append(name)
+            for family, names in families.items():
+                heading = ("API-Sports · multiple sports, one saved key" if family == "api_sports" else
+                           providers.SPORTS[names[0]][0])
+                enabled_count = sum(bool(config["sports"].get(n)) for n in names)
+                open_state = enabled_count > 0 or (not config["setup_complete"] and family == "jolpica")
+                body += ('<details class="provider-group" %s><summary>%s '
+                         '<span class="pill">%d / %d enabled</span></summary><div class="grid">') % (
+                             "open" if open_state else "", e(heading), enabled_count, len(names))
+                for name in names:
+                    label, url, keyname, limit = providers.SPORTS[name]
+                    enabled = bool(config["sports"].get(name))
+                    saved = bool(config["keys"].get(keyname)) if keyname else True
+                    note = providers.SOURCE_NOTES.get(providers.SPORT_FAMILY.get(name, name), "")
+                    inner = ('<input type="hidden" name="provider" value="%s">'
+                             '<label><input type="checkbox" name="enabled" value="on" %s> '
+                             'Enable source</label>') % (e(name), "checked" if enabled else "")
+                    if note:
+                        inner += '<p class="help">%s</p>' % e(note)
+                    if keyname:
+                        inner += ('<span class="state %s">%s · %s</span>'
+                                  '<p class="help">Conservative budget: %d requests/day</p>'
+                                  '<label for="key-%s">Provider API key (optional until enabled)</label>'
+                                  '<input id="key-%s" type="password" name="key" autocomplete="new-password" '
+                                  'placeholder="%s"><label><input type="checkbox" name="remove" value="on"> '
+                                  'Remove saved key</label>') % (
+                                      "ok" if saved else "warn",
+                                      "Key stored privately" if saved else "Key required", e(keyname), limit,
+                                      e(name), e(name), "Saved — enter a replacement" if saved else "Enter provider key")
+                    else:
+                        inner += '<p class="ok help">No API key required · safe daily budget %d calls</p>' % limit
+                    inner += '<button type="submit">Save provider</button>'
+                    test = self._form("test_source", '<button class="secondary" type="submit">Test connection (uses quota)</button>',
+                                      '<input type="hidden" name="kind" value="sports">'
+                                      '<input type="hidden" name="provider" value="%s">' % e(name))
+                    body += ('<article class="card card-soft"><h3>%s</h3>%s'
+                             '<p class="help">Provider host: %s</p>%s%s</article>') % (
+                                 e(label), status(name), e(urllib.parse.urlsplit(url).hostname),
+                                 self._form("sports", inner), test)
+                body += '</div></details>'
+            options = config.get("options", {})
+            chosen_sports = set(options.get("thesportsdb_sports", []))
+            chosen_leagues = set(options.get("openligadb_leagues", []))
+            option_form = '<h3>TheSportsDB sports</h3><p class="help">Each selected sport may use a daily call.</p><div class="formrow">'
+            option_form += ''.join('<label><input type="checkbox" name="tsdb" value="%s" %s> %s</label>' % (
+                e(item), "checked" if item in chosen_sports else "", e(item)) for item in providers.THESPORTSDB_SPORTS)
+            option_form += '</div><h3>OpenLigaDB leagues</h3><div class="formrow">'
+            option_form += ''.join('<label><input type="checkbox" name="old" value="%s" %s> %s</label>' % (
+                e(item), "checked" if item in chosen_leagues else "", e(item)) for item in providers.OPENLIGADB_LEAGUES)
+            option_form += '</div><button type="submit">Save source options</button>'
+            body += '<details class="provider-group"><summary>Competition and sport selections</summary><div class="card">' + (
+                self._form("options", option_form)) + '</div></details>'
+        if section in ("all", "epg"):
+            body += ('<div class="section-space"><h2>International television EPG sources</h2>'
+                     '<p>EPG imports stay private on Home Assistant. Sources marked verify must pass '
+                     'a connection test before their reliability is assumed. Public redistribution of '
+                     'programme text is disabled unless rights are separately established.</p></div>')
+            regions = {}
+            for name, (label, _) in providers.EPG.items():
+                if (label.startswith("UK ") or label.startswith("Sports ")):
+                    region = "United Kingdom · sports and national guide"
+                elif label.startswith("France "):
+                    region = "France"
+                elif label.startswith("Ireland "):
+                    region = "Ireland"
+                else:
+                    region = label.split(" · ")[0]
+                regions.setdefault(region, []).append(name)
+            for region, names in regions.items():
+                enabled_count = sum(bool(config["epg"].get(n)) for n in names)
+                body += ('<details class="provider-group" %s><summary>%s '
+                         '<span class="pill">%d / %d enabled</span></summary><div class="grid">') % (
+                             "open" if enabled_count else "", e(region), enabled_count, len(names))
+                for name in names:
+                    label, url = providers.EPG[name]
+                    inner = ('<input type="hidden" name="provider" value="%s">'
+                             '<label><input type="checkbox" name="enabled" value="on" %s> '
+                             'Enable private collection</label>'
+                             '<p class="warn help">No public redistribution rights established</p>'
+                             '<button type="submit">Save EPG source</button>') % (
+                                 e(name), "checked" if config["epg"].get(name) else "")
+                    check = self._form("test_source", '<button class="secondary" type="submit">Test EPG (downloads guide)</button>',
+                                       '<input type="hidden" name="kind" value="epg">'
+                                       '<input type="hidden" name="provider" value="%s">' % e(name))
+                    quality = self.store.snapshot("epg-quality:" + name)
+                    coverage = ""
+                    if quality:
+                        q = quality["data"]
+                        coverage = '<p class="help">Most recent 24h full-guide coverage: %s / %s channels</p>' % (
+                            e(q.get("full_coverage_channels", {}).get("24h", 0)), e(q.get("channels", 0)))
+                    body += ('<article class="card card-soft"><h3>%s</h3>%s'
+                             '<p class="help">Guide host: %s</p>%s%s%s</article>') % (
+                                 e(label), status(name), e(urllib.parse.urlsplit(url).hostname),
+                                 coverage, self._form("epg", inner), check)
+                body += '</div></details>'
+        return body
 
     @staticmethod
     def _uk_time(event, fmt="%d %b %H:%M %Z"):
@@ -323,13 +617,19 @@ class UI(BaseHTTPRequestHandler):
         if event.get("broadcast_verified"):
             return ", ".join(str(c.get("name", "")) for c in event.get("broadcasts", []) if isinstance(c, dict)) or "Verified"
         candidates = event.get("broadcast_candidates") or []
-        if candidates:
-            return "EPG match (unverified): " + ", ".join(c.get("channel_name", "") for c in candidates[:3])
+        if isinstance(candidates, list) and candidates:
+            readable = [str(c.get("channel_name", "")) for c in candidates[:3] if isinstance(c, dict)]
+            if readable:
+                return "EPG match (unverified): " + ", ".join(readable)
         return "Not verified"
 
     def _event_row(self, event, fmt="%d %b %H:%M %Z"):
         sources = event.get("sources") or [event.get("source_id", "")]
-        confidence = "%s · %s" % (event.get("fixture_confidence", "reported"), ", ".join(sources))
+        if not isinstance(sources, (list, tuple)):
+            sources = [sources]
+        confidence = "%s · %s" % (
+            event.get("fixture_confidence", "reported"),
+            ", ".join(str(source) for source in sources if source is not None))
         if event.get("start_conflict"):
             confidence += " · start time disagreement"
         state = LIVE_LABELS.get(event.get("live_state", ""), "")
@@ -354,71 +654,177 @@ class UI(BaseHTTPRequestHandler):
             body += '<section class="card" style="margin-bottom:14px"><h3>%s <span class="pill">%s</span></h3>' % (e(group["label"]), e(group["count"]))
             for category in group["categories"]:
                 body += '<p><strong>%s</strong> <small>(%s)</small></p>%s' % (e(category["label"]), e(category["count"]), table_head)
-                body += ''.join(self._event_row(ev, "%H:%M") for ev in category["events"][:60]) + '</table>'
+                body += ''.join(self._event_row(ev, "%H:%M") for ev in category["events"][:30]) + '</table>'
+                if len(category["events"]) > 30:
+                    params = urllib.parse.urlencode({
+                        "page": "events", "sport": group["sport"], "category": category["id"],
+                        "date": day.get("date", "")})
+                    body += ('<p class="help">Showing the first 30 of %d events. '
+                             '<a href="?%s">View all matching events</a></p>') % (
+                                 len(category["events"]), e(params))
             body += '</section>'
         return body
 
     def events(self, query=None):
+        """Server-side event filtering and pagination; no client-side event data cache."""
         query = query or {}
         snapshot = self.store.snapshot("sports")
         data = snapshot["data"] if snapshot else {}
         events = data.get("events", [])
-        sport, category, text = query.get("sport", ""), query.get("category", ""), query.get("q", "").casefold()
-        sports_present = sorted({ev.get("sport", "") for ev in events}, key=taxonomy.sport_order)
-        categories_present = sorted({(ev.get("category_id", ""), ev.get("category_label", "")) for ev in events
-                                     if not sport or ev.get("sport") == sport}, key=lambda c: c[1])
-        shown = [ev for ev in events if (not sport or ev.get("sport") == sport)
+        sport = query.get("sport", "")
+        category = query.get("category", "")
+        text = query.get("q", "").strip()
+        day = query.get("date", "")
+        if day:
+            try:
+                datetime.strptime(day, "%Y-%m-%d")
+            except (TypeError, ValueError):
+                day = ""
+
+        def uk_day(event):
+            try:
+                stamp = datetime.fromisoformat(event["start_utc"])
+                if stamp.tzinfo is None:
+                    return ""
+                return stamp.astimezone(ZoneInfo("Europe/London")).date().isoformat()
+            except (KeyError, TypeError, ValueError, OverflowError):
+                return ""
+
+        sports_present = sorted(
+            {ev.get("sport", "") for ev in events}, key=taxonomy.sport_order)
+        categories_present = sorted(
+            {(ev.get("category_id", ""), ev.get("category_label", "")) for ev in events
+             if not sport or ev.get("sport") == sport}, key=lambda c: c[1])
+        shown = [ev for ev in events
+                 if (not sport or ev.get("sport") == sport)
                  and (not category or ev.get("category_id") == category)
-                 and (not text or text in ("%s %s" % (ev.get("title", ""), ev.get("competition", ""))).casefold())]
-        body = '<h2>Sporting events</h2><p>Independent sports fixtures, races and sessions for the next eight UK days, de-duplicated across sources. This view does not claim a broadcaster unless a separately verified source has supplied one.</p>'
-        filters = '<form method="get"><input type="hidden" name="page" value="events"><div class="formrow"><select name="sport"><option value="">All sports</option>%s</select><select name="category"><option value="">All competitions</option>%s</select><input type="text" name="q" value="%s" placeholder="Team or competition"><button type="submit">Filter</button></div></form>' % (
-            "".join('<option value="%s" %s>%s</option>' % (e(s), "selected" if s == sport else "", e(taxonomy.SPORTS.get(s, ("Other",))[0])) for s in sports_present),
-            "".join('<option value="%s" %s>%s</option>' % (e(c), "selected" if c == category else "", e(label)) for c, label in categories_present),
-            e(query.get("q", "")))
-        body += '<section class="card">%s<h3>%s of %s events</h3><p class="help">%s · Data is private on this Home Assistant instance.</p>' % (
-            filters, e(len(shown)), e(len(events)), e(snapshot["updated_at"] if snapshot else "No sporting snapshot yet"))
-        body += '<table><tr><th>UK start time</th><th>Category and competition</th><th>Event and sources</th><th>UK channel</th></tr>'
-        body += ''.join(self._event_row(ev) for ev in shown[:200]) + '</table>'
-        if len(shown) > 200:
-            body += '<p class="help">Showing first 200 matching events; narrow the filter to see more.</p>'
-        if not events:
-            body += '<p>No events have been collected yet. Configure sources and run a refresh.</p>'
+                 and (not day or uk_day(ev) == day)
+                 and (not text or text.casefold() in (
+                     "%s %s" % (ev.get("title", ""), ev.get("competition", ""))).casefold())]
+        shown.sort(key=lambda ev: (str(ev.get("start_utc") or ""), str(ev.get("title") or ""),
+                                   str(ev.get("id") or "")))
+        per_page = 100
+        pages = max(1, (len(shown) + per_page - 1) // per_page)
+        requested = query.get("p", "1")
+        page_no = max(1, min(pages, int(requested))) if requested.isdecimal() else 1
+        start = (page_no - 1) * per_page
+        subset = shown[start:start + per_page]
+        body = ('<div class="page-heading"><div><h2>Sporting events</h2>'
+                '<p>Filter the next eight UK calendar days of source-reported fixtures, races and sessions. '
+                'Unverified EPG channel suggestions are not confirmed broadcasts.</p></div>'
+                '<span class="state neutral">%d matching events</span></div>') % len(shown)
+        filters = ('<form method="get"><input type="hidden" name="page" value="events">'
+                   '<div class="formrow">'
+                   '<label for="events-sport">Sport</label><select id="events-sport" name="sport">'
+                   '<option value="">All sports</option>%s</select>'
+                   '<label for="events-category">Competition</label><select id="events-category" name="category">'
+                   '<option value="">All competitions</option>%s</select>'
+                   '<label for="events-date">UK date</label>'
+                   '<input id="events-date" type="date" name="date" value="%s">'
+                   '<label for="events-search">Search</label>'
+                   '<input id="events-search" type="search" name="q" value="%s" '
+                   'placeholder="Team or competition">'
+                   '<button type="submit">Apply filters</button></div></form>') % (
+                       "".join('<option value="%s" %s>%s</option>' % (
+                           e(value), "selected" if value == sport else "",
+                           e(taxonomy.SPORTS.get(value, ("Other",))[0])) for value in sports_present),
+                       "".join('<option value="%s" %s>%s</option>' % (
+                           e(value), "selected" if value == category else "", e(label))
+                           for value, label in categories_present),
+                       e(day), e(text))
+        body += ('<section class="card">%s<h3>%d of %d events</h3>'
+                 '<p class="help">Snapshot UTC: %s · Private local data · Page %d of %d</p>') % (
+                     filters, len(shown), len(events),
+                     e(snapshot["updated_at"] if snapshot else "No sporting snapshot yet"), page_no, pages)
+        if subset:
+            body += ('<table><thead><tr><th>UK start time</th><th>Category and competition</th>'
+                     '<th>Event and sources</th><th>UK channel</th></tr></thead><tbody>')
+            body += ''.join(self._event_row(ev) for ev in subset) + '</tbody></table>'
+        elif not events:
+            body += ('<div class="empty"><p>No events have been collected yet. '
+                     'Configure sources and run a refresh first.</p>'
+                     '<a href="?page=sources&amp;kind=sports">Configure sporting sources</a></div>')
+        else:
+            body += ('<p class="empty">No events match these filters. '
+                     '<a href="?page=events">Clear filters</a> to see the full list.</p>')
+        if pages > 1:
+            base_query = {"page": "events", "sport": sport, "category": category,
+                          "date": day, "q": text}
+            body += '<div role="navigation" aria-label="Event result pages" class="source-toolbar">'
+            if page_no > 1:
+                body += '<a href="?%s">Previous page</a>' % e(urllib.parse.urlencode(
+                    dict(base_query, p=page_no - 1)))
+            body += '<span class="state neutral">Page %d / %d · up to %d per page</span>' % (
+                page_no, pages, per_page)
+            if page_no < pages:
+                body += '<a href="?%s">Next page</a>' % e(urllib.parse.urlencode(
+                    dict(base_query, p=page_no + 1)))
+            body += '</div>'
         return body + '</section>'
 
     def guide(self):
-        body = '<h2>International EPG coverage</h2><p>Private UK and French source analysis: distinguish a real 24-hour programme schedule from a feed that merely responds successfully. Canonical IDs are conservative hints; actual IPTV stream mapping remains local to B1G.</p>'
-        any_source = False
+        body = ('<div class="page-heading"><div><h2>International EPG coverage</h2>'
+                '<p>Private per-source guide completeness, missing intervals and canonical channel '
+                'identity hints. This does not replace the B1G subscription EPG.</p></div>'
+                '<a class="button-link secondary" href="?page=sources&amp;kind=epg">Manage EPG sources</a></div>')
+        sources_found = 0
         for name, (label, _) in providers.EPG.items():
             snapshot = self.store.snapshot("epg-quality:" + name)
             if not snapshot:
                 continue
-            any_source = True
+            sources_found += 1
             q = snapshot["data"]
-            total = int(q.get("channels", 0))
+            total = max(0, int(q.get("channels") or 0))
             full = q.get("full_coverage_channels", {})
-            body += '<section class="card" style="margin-bottom:14px"><h3>%s (%s)</h3>' % (e(label), e(q.get("country", "unknown")))
-            body += '<p class="sub">Last analysis: %s · %s channels · %s valid programmes · %s generic titles · %s invalid programmes</p>' % (
-                e(q.get("analysed_at")), e(total), e(q.get("valid_programmes", 0)),
-                e(q.get("generic_programmes", 0)), e(q.get("invalid_programmes", 0)))
+            stamp, severity = freshness(snapshot)
+            body += ('<section class="card section-space"><div class="page-heading"><h3>%s (%s)</h3>'
+                     '<span class="state %s">%s</span></div>') % (
+                         e(label), e(q.get("country", "unknown")), severity, e(stamp))
+            body += ('<p class="sub">Last analysis: %s · %s channels · %s valid programmes · '
+                     '%s generic titles · %s invalid programmes</p>') % (
+                         e(q.get("analysed_at")), e(total), e(q.get("valid_programmes", 0)),
+                         e(q.get("generic_programmes", 0)), e(q.get("invalid_programmes", 0)))
             body += '<div class="grid">'
             for horizon in ("24h", "72h", "168h"):
-                body += '<div><div class="metric">%s / %s</div><div class="help">Channels with a full %s guide</div></div>' % (
-                    e(full.get(horizon, 0)), e(total), e(horizon))
+                count = max(0, min(total, int(full.get(horizon) or 0)))
+                percent = round(100 * count / total) if total else 0
+                body += ('<div><div class="metric">%d / %d</div>'
+                         '<div class="help">%s channels with a continuous full guide</div>'
+                         '<div class="progress-track" role="progressbar" aria-label="%s full-guide coverage" '
+                         'aria-valuemin="0" aria-valuemax="100" aria-valuenow="%d">'
+                         '<div class="progress-fill" style="width:%d%%"></div></div>'
+                         '<div class="help">%d%% of source channels</div></div>') % (
+                             count, total, e(horizon), e(horizon), percent, percent, percent)
+            body += '</div>'
             families = q.get("families", {})
             if families:
-                body += '</div><div class="divider"></div><h3>Lineup families in this guide</h3><table><tr><th>Family</th><th>Channels</th><th>Full 24h guide</th></tr>'
-                for row in sorted(families.values(), key=lambda r: -r["channels"]):
-                    body += '<tr><td>%s</td><td>%s</td><td>%s</td></tr>' % (e(row["label"]), e(row["channels"]), e(row["full_24h"]))
-                body += '</table><div>'
-            body += '</div><div class="divider"></div><h3>Channels needing attention (worst 24h gaps)</h3>'
-            body += '<table><tr><th>Channel</th><th>Recognised service</th><th>24h programme coverage</th></tr>'
-            for row in q.get("channels_needing_attention", []):
-                body += '<tr><td>%s</td><td>%s</td><td>%s h</td></tr>' % (
-                    e(row.get("name", "")), e(row.get("canonical_id") or "Needs matching"),
-                    e(row.get("coverage_hours", {}).get("24h", 0)))
-            body += '</table><p class="help">Programme text and channel identifiers remain private. Guide source redistribution is disabled until independently licensed.</p></section>'
-        if not any_source:
-            body += '<section class="card"><p>No successful EPG import yet. Enable an approved UK or French guide in Sources and run a refresh.</p></section>'
+                body += ('<details class="provider-group"><summary>Recognised channel families</summary>'
+                         '<div class="card"><table><thead><tr><th>Family</th><th>Channels</th>'
+                         '<th>Full 24h guide</th></tr></thead><tbody>')
+                for row in sorted(families.values(), key=lambda item: -item.get("channels", 0)):
+                    body += '<tr><td>%s</td><td>%s</td><td>%s</td></tr>' % (
+                        e(row.get("label", "")), e(row.get("channels", 0)), e(row.get("full_24h", 0)))
+                body += '</tbody></table></div></details>'
+            attention = q.get("channels_needing_attention", [])
+            body += ('<details class="provider-group"><summary>Channels needing attention '
+                     '<span class="pill">%d shown</span></summary><div class="card">') % len(attention)
+            if attention:
+                body += ('<table><thead><tr><th>Channel</th><th>Recognised service</th>'
+                         '<th>24h programme coverage</th></tr></thead><tbody>')
+                for row in attention:
+                    body += '<tr><td>%s</td><td>%s</td><td>%s h</td></tr>' % (
+                        e(row.get("name", "")), e(row.get("canonical_id") or "Needs matching"),
+                        e(row.get("coverage_hours", {}).get("24h", 0)))
+                body += '</tbody></table>'
+            else:
+                body += '<p class="help">No missing-channel details were reported by this analysis.</p>'
+            body += ('</div></details><p class="help">Channel identities and EPG programme text remain private. '
+                     'Public guide redistribution is disabled without verified rights.</p></section>')
+        if not sources_found:
+            body += ('<section class="card empty"><h3>No EPG coverage report yet</h3>'
+                     '<p>Enable a permitted source, test its connection and run a refresh. '
+                     'The last successful report will remain available during upstream failures.</p>'
+                     '<a class="button-link secondary" href="?page=sources&amp;kind=epg">Set up EPG sources</a></section>')
         return body
 
     def schedule(self, config):
@@ -431,13 +837,28 @@ class UI(BaseHTTPRequestHandler):
 
     def publishing(self, config):
         github = config["github"]
+        approved = bool(config.get("publication_approvals"))
+        has_token = bool(github.get("token"))
+        ready = bool(github.get("enabled") and has_token and approved)
         form = '<label>GitHub owner</label><input name="owner" type="text" value="%s" required><label>Separate public feed repository name</label><input name="repository" type="text" value="%s" placeholder="LiveSports-EPG" required><label>Branch</label><input name="branch" type="text" value="%s" required><label>Fine-grained GitHub publishing token</label><input name="token" type="password" autocomplete="new-password" placeholder="%s"><label><input type="checkbox" name="remove" value="on"> Remove saved token</label>' % (e(github.get("owner")), e(github.get("repository")), e(github.get("branch")), "Saved — enter replacement only" if github.get("token") else "Token (only rights-cleared feed repository)")
         form += '<label><input type="checkbox" name="enabled" value="on" %s> Enable publishing</label>' % ("checked" if github.get("enabled") else "")
         form += '<label><input type="checkbox" name="auto_publish" value="on" %s> Publish automatically after every scheduled refresh</label><button type="submit">Save GitHub settings</button>' % ("checked" if github.get("auto_publish") else "")
-        body = '<h2>Outbound GitHub distribution</h2><p>Only SportsLiveInfo on Home Assistant will write to GitHub. B1G TVs remain read-only; no incoming connections to Home Assistant are needed.</p><p>Confirmed public data repository: <a href="https://github.com/jimmyfazz/LiveSports-EPG" rel="noopener noreferrer" target="_blank">jimmyfazz/LiveSports-EPG</a>. This is the JSON output destination, not the Home Assistant App installation repository. No feed has been published yet.</p>'
-        body += '<div class="alert error">Public publishing requires documented permission to redistribute every selected source. No programme guide source has been cleared for public export; EPG copying is disabled. No sporting source has been approved by default.</div>'
+        body = '<h2>Outbound GitHub distribution</h2><p>Only SportsLiveInfo on Home Assistant will write to GitHub. B1G TVs remain read-only; no incoming connections to Home Assistant are needed.</p><p>Confirmed public data repository: <a href="https://github.com/jimmyfazz/LiveSports-EPG" rel="noopener noreferrer" target="_blank">jimmyfazz/LiveSports-EPG</a>. This is the JSON output destination, not the Home Assistant App installation repository. Publication state is shown below.</p>'
+        body += '<div class="alert error" role="status">Public publishing requires documented permission to redistribute every selected source. No programme guide source has been cleared for public export; EPG copying is disabled. No sporting source has been approved by default.</div>'
+        body += ('<div class="kpi-grid section-space"><div class="card metric-card"><h3>Token</h3>'
+                 '<span class="state %s">%s</span></div>'
+                 '<div class="card metric-card"><h3>Publishing switch</h3>'
+                 '<span class="state %s">%s</span></div>'
+                 '<div class="card metric-card"><h3>Source approval</h3>'
+                 '<span class="state %s">%s</span></div></div>') % (
+                     "ok" if has_token else "warn", "Stored privately" if has_token else "Not configured",
+                     "warn" if github.get("enabled") else "neutral",
+                     "Enabled" if github.get("enabled") else "Disabled",
+                     "ok" if approved else "warn", "Sources approved" if approved else "None approved")
+        body += ('<details class="provider-group section-space" %s>'
+                 '<summary>Set up your GitHub publishing token</summary>'
+                 '<div class="card">') % ("open" if not has_token else "")
         body += (
-            '<section class="card" style="margin-top:16px"><h2>Set up your GitHub publishing token</h2>'
             '<p>You only need one fine-grained personal access token on this Home Assistant installation. '
             'Do not put it in GitHub files or on any of the B1G televisions.</p>'
             '<ol>'
@@ -465,7 +886,7 @@ class UI(BaseHTTPRequestHandler):
             '</ol>'
             '<p class="help">If the token expires or is revoked, create a replacement token in GitHub '
             'and paste it here; Save changes only the provided token. The existing one is not shown '
-            'after saving. Any Home Assistant backup containing tokens is sensitive.</p></section>'
+            'after saving. Any Home Assistant backup containing tokens is sensitive.</p></div></details>'
         )
         body += '<section class="card">' + self._form("github", form) + '<div class="divider"></div><p class="help">Even after enabling publishing, a permission gate will reject an export until a source is explicitly approved in the backend rights register. Saved token: %s.</p>' % ("yes" if github.get("token") else "no") + '</section>'
         body += '<section class="card" style="margin-top:16px"><h3>Connection check (no upload)</h3><p>Save the token and destination first. Testing never enables publication or changes GitHub contents.</p>' + self._form("test_github", '<button class="secondary" type="submit">Test saved GitHub connection</button>') + '</section>'
@@ -478,20 +899,62 @@ class UI(BaseHTTPRequestHandler):
         for note in preview.get("notices", []):
             body += '<p class="warn help">%s</p>' % e(note)
         body += self._form("preview_feed", '<button class="secondary" type="submit">Build feed preview (no upload)</button>')
-        body += self._form("publish", '<button type="submit">Publish feed now</button>') + '</section>'
+        if not ready:
+            body += '<p class="warn help">Publication is unavailable until a token, enabled publishing setting and rights-approved source are all present. Feed preview remains local.</p>'
+        body += self._form("publish", '<button type="submit" %s>Publish feed now</button>' % (
+            "" if ready else "disabled")) + '</section>'
         return body
 
     def health(self):
         rows = self.store.recent_jobs(35)
         usage = self.store.usage()
-        body = '<h2>Provider health & diagnostics</h2><p>Errors are recorded locally without API keys, programme titles or private account URLs. Repeat failures remain in the history; Home Assistant persistent notifications require a separately reviewed, least-privilege integration.</p>'
-        body += '<section class="card"><h3>Requests reserved today (UTC)</h3><table><tr><th>Provider</th><th>Count</th></tr>'
-        for k, v in sorted(usage.items()):
-            body += '<tr><td>%s</td><td>%s</td></tr>' % (e(k), e(v))
-        body += '</table></section><section class="card" style="margin-top:16px"><h3>Last 35 operations</h3><table><tr><th>Time (UTC)</th><th>Source</th><th>Status</th><th>Details</th></tr>'
-        for row in rows:
-            body += '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>' % tuple(e(row[k]) for k in ("time", "provider", "state", "details"))
-        body += '</table></section>'
+        failures = {"failed", "test_failed", "lane_error", "coverage_collapse", "stale"}
+        warnings = {"partial", "empty", "needs_key", "degraded", "quota", "no_sources"}
+        failed = sum(1 for row in rows if row["state"] in failures)
+        warned = sum(1 for row in rows if row["state"] in warnings)
+        body = ('<div class="page-heading"><div><h2>Provider health &amp; diagnostics</h2>'
+                '<p>Local-only operational events, daily call reservations and failures. '
+                'No secrets, playlist URLs or private programme text are shown.</p></div>'
+                '<a class="button-link secondary" href="?page=sources">Manage providers</a></div>')
+        body += '<div class="kpi-grid">'
+        for label, value, desc in [
+            ("Recent operations", len(rows), "Last 35 saved history entries"),
+            ("Failed operations", failed, "Failures in the displayed history; not unique incidents"),
+            ("Attention needed", warned, "Warnings and partial responses in the displayed history"),
+            ("Calls reserved today", sum(usage.values()), "UTC-day request budget, including tests"),
+        ]:
+            body += ('<div class="card metric-card"><div class="sub">%s</div>'
+                     '<div class="metric">%d</div><p class="help">%s</p></div>') % (
+                         e(label), value, e(desc))
+        body += '</div>'
+        body += '<section class="card section-space"><h3>Most recent operations</h3>'
+        if not rows:
+            body += '<p>No activity recorded yet. Enable and test a provider to see its status.</p>'
+        else:
+            body += ('<table><thead><tr><th>Time (UTC)</th><th>Provider</th><th>Status</th>'
+                     '<th>Detail</th></tr></thead><tbody>')
+            for row in rows:
+                state = row.get("state", "")
+                level = ("critical" if state in failures else
+                         "warn" if state in warnings else
+                         "ok" if state in ("ok", "test_ok", "finished", "no_events_reported") else "neutral")
+                body += '<tr><td>%s</td><td>%s</td><td><span class="state %s">%s</span></td><td>%s</td></tr>' % (
+                    e(row.get("time")), e(row.get("provider")), level,
+                    e(state.replace("_", " ").title()), e(row.get("details")))
+            body += '</tbody></table>'
+        body += '</section>'
+        body += ('<details class="provider-group section-space"><summary>UTC-day quota reservations '
+                 '<span class="pill">%d providers</span></summary><div class="card">') % len(usage)
+        if usage:
+            body += '<table><thead><tr><th>Provider</th><th>Requests reserved</th></tr></thead><tbody>'
+            for key, count in sorted(usage.items()):
+                body += '<tr><td>%s</td><td>%s</td></tr>' % (e(key), e(count))
+            body += '</tbody></table>'
+        else:
+            body += '<p>No requests reserved today.</p>'
+        body += ('</div></details><p class="help section-space">Repeat failures are recorded in local history. '
+                 'Home Assistant persistent notifications are not enabled; they require a separate '
+                 'least-privilege integration review.</p>')
         return body
 
 
