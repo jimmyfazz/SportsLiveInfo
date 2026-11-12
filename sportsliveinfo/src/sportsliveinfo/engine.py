@@ -30,6 +30,17 @@ SAFE_ERRORS = (ValueError, RuntimeError, TimeoutError, OSError, EOFError,
 FEED_RETAIN = 10  # published manifests (and the assets they reference) kept for slow/offline TVs
 
 
+class _NoGitHubRedirect(urllib.request.HTTPRedirectHandler):
+    """Never forward a GitHub publishing token through an HTTP redirect."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError("Unexpected GitHub API redirect; refusing to forward publishing credentials")
+
+
+def _github_open(request, timeout=30):
+    """Authenticated GitHub API request without following any redirects."""
+    return urllib.request.build_opener(_NoGitHubRedirect()).open(request, timeout=timeout)
+
+
 class QuotaExhausted(RuntimeError):
     pass
 
@@ -486,7 +497,7 @@ class Engine:
                    "User-Agent": "SportsLiveInfo/0.3"}
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=12) as response:
+            with _github_open(req, timeout=12) as response:
                 info = json.loads(response.read(64_000))
             if info.get("full_name", "").casefold() != (owner + "/" + repository).casefold():
                 raise ValueError("GitHub returned a different repository")
@@ -498,7 +509,7 @@ class Engine:
             ref = urllib.request.Request(
                 url + "/git/ref/heads/" + urllib.parse.quote(branch, safe=""),
                 headers=headers)
-            with urllib.request.urlopen(ref, timeout=12) as response:
+            with _github_open(ref, timeout=12) as response:
                 branch_info = json.loads(response.read(64_000))
             if branch_info.get("ref") != "refs/heads/" + branch:
                 raise ValueError("GitHub did not confirm the requested feed branch")
@@ -512,7 +523,7 @@ class Engine:
             raise ValueError("GitHub connection returned HTTP %d" % exc.code) from None
         except (TimeoutError, urllib.error.URLError, OSError):
             raise ValueError("Could not reach GitHub; check internet access and try again") from None
-        except (TypeError, KeyError, json.JSONDecodeError):
+        except (TypeError, KeyError, AttributeError, json.JSONDecodeError):
             raise ValueError("GitHub returned an unexpected response") from None
         return ("GitHub token authenticated and public feed branch readable. "
                 "Read-only check passed; Contents:write is proven only by an authorised publication.")
@@ -570,7 +581,7 @@ class Engine:
                                          headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
                                                   "User-Agent": "SportsLiveInfo/0.3", "Content-Type": "application/json"})
             try:
-                with urllib.request.urlopen(req, timeout=30) as res:
+                with _github_open(req, timeout=30) as res:
                     return json.loads(res.read(2_000_000))
             except urllib.error.HTTPError as exc:
                 raise RuntimeError("GitHub API rejected %s request (%d)" % (method, exc.code)) from None
