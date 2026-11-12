@@ -7,10 +7,16 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import providers
+
+# New sources are always added disabled: an upgrade never starts outbound
+# calls the owner has not chosen.
 DEFAULT = {
     "setup_complete": False,
-    "sports": {"jolpica": True, "openligadb": False, "football_data": False, "api_sports": False},
-    "epg": {"farleyflex": False, "fr_programmetv": False, "fr_telerama": False, "fr_xmltv": False},
+    "sports": {name: name == "jolpica" for name in providers.SPORTS},
+    "epg": {name: False for name in providers.EPG},
+    "options": {"thesportsdb_sports": list(providers.THESPORTSDB_SPORTS),
+                "openligadb_leagues": list(providers.OPENLIGADB_LEAGUES)},
     "keys": {},
     "schedule": ["04:00", "12:00", "17:00"],
     "github": {"owner": "jimmyfazz", "repository": "", "branch": "main", "token": "", "enabled": False},

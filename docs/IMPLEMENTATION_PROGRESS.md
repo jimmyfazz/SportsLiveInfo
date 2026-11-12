@@ -3,6 +3,19 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Latest development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## Source expansion and sports sub-categories — v0.3.0, 12 November 2026
+
+**Branch:** `claude/sportsliveinfo-b1g-android-syyo8j`. **Status:** SOURCE IMPLEMENTED + LOCAL TESTED (43/43). Live provider calls, Docker build and HAOS install **NOT RUN** (provider hosts unreachable from the build environment). Full detail: [SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md](SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md).
+
+| Workstream | New runnable work | Remaining gate |
+|---|---|---|
+| Sports | 16 sources, 24 sports, 127 competition rows (England internationals, PL, UCL, UEL, UECL, FA Cup, EFL Cup…), fusion/corroboration, Live today page | Per-source Test connection on HAOS; verify API-Sports league ids; recall benchmark |
+| EPG | 27 private feeds across 15 markets, richer XMLTV fields, 8-market service tables, farleyflex tvg-id crosswalk, 41 lineup families | Fetch the "verify" feeds; memory test on UK1/US1; streamed programme table |
+| Linking | Unverified EPG broadcast candidates with hard negatives; never sets `broadcast_verified` | Owner sign-off on the verification rule (LINK-002) |
+| Ownership note | Sports adapters/engine are Codex-owned in the collaboration plan; changed at the owner's direct request with no concurrent Codex branch present | Codex cross-review before merge |
+
+**API keys needed:** three, all free and optional — API-Sports (covers all 11 API-Sports adapters), football-data.org, CricketData.org. Jolpica, OpenF1, OpenLigaDB, TheSportsDB (public key) and all EPG feeds need none. A GitHub token is only for optional publishing.
+
 ## New functional implementation — v0.2.0, 12 November 2026
 
 **PR:** [#2](https://github.com/jimmyfazz/SportsLiveInfo/pull/2); initial branch commit `71d74058da751611283597e52e7eaaea369dc2b7`. **Status:** SOURCE IMPLEMENTED + LOCAL TESTED; actual Home Assistant OS installation and live source accuracy NOT VERIFIED.
