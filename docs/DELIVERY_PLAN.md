@@ -18,6 +18,14 @@ User specifically prioritises **accurate UK sports EPG programming and B1G sport
 - [ ] Refresh EPG by source version after its actual daily 06:00 UTC workflow (commits can be hours late), not only a fixed 05:00 GitHub upload.
 **Exit:** tested quality-improved Sky/TNT/Premier current/next EPG and today's event rail with verified channel selection, safe fallback and zero shared-API requests per TV; distribution rights passed before public publication.
 
+## Fixed design: read-only B1G clients
+
+Reference [read-only feed and inventory policy](B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md). Ten TV devices fetch published snapshots without write credentials, and current-account hidden live categories/channels remain filtered entirely on-device. Inventory export/import is optional, explicitly owner-initiated and never written by TVs to GitHub.
+
+- [ ] Test two TVs with different hidden categories/channels reading same feed: only their own local visible/playable selections appear.
+- [ ] Confirm account switching and unhide immediately adjust local EPG/sports projection without a central publication event.
+- [ ] Confirm no GitHub publishing token, subscribed playlist, provider credentials, hidden preferences or channel-list auto-upload exists in B1G.
+
 ## Stage P0 — groundwork (highest priority)
 
 - [ ] Scaffold Python package with typed canonical Event, Participant, Venue, Broadcast, SourceEvidence and SourceHealth models.
