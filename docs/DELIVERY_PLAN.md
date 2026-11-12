@@ -1,5 +1,7 @@
 # Delivery plan — technical work packages
 
+> **Historical outline superseded for execution on 12 Nov 2026.** The authoritative up-to-date full two-engine plan is [MASTER_IMPLEMENTATION_ROADMAP.md](MASTER_IMPLEMENTATION_ROADMAP.md), with [WORK_PACKAGE_BACKLOG.md](WORK_PACKAGE_BACKLOG.md), [CODEX_CLAUDE_COLLABORATION.md](CODEX_CLAUDE_COLLABORATION.md) and [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md). UK sports EPG is not the entire EPG scope; **international full-channel Guide and worldwide multi-sport event engines are equally mandatory**. Do not treat B1 integration as optional final-stage work.
+
 **Status 2026-11-12:** research complete/documented, implementation not started. This plan is for next development work; no claims that these tasks are done.
 
 **Primary host decision:** owner chooses directly installed **Home Assistant on an always-on personal-home mini PC (no Proxmox)**. Build one portable collector plus local **HAOS App** wrapper if installation type confirmed. See [HOME_ASSISTANT_BARE_METAL_PRIMARY.md](HOME_ASSISTANT_BARE_METAL_PRIMARY.md). Public GitHub JSON publishing is a proposed outbound-only step **after** licence approval; 10 B1G clients never query provider APIs.
