@@ -1,5 +1,5 @@
 # SportsLiveInfo public feed contract — format `sli/1`
-**Status:** IMPLEMENTED in SportsLiveInfo v0.3.0 (`feed.py`, `engine.publish`, `schemas/`, golden fixtures, 55 local tests). **No feed repository has been created and nothing has been published.** The B1G reader is designed (see the B1 repo, `docs/SPORTSLIVEINFO_FEED_READER_IMPLEMENTATION_2026-11-12.md`) but **not implemented**.
+**Status:** IMPLEMENTED in SportsLiveInfo v0.3.0 (`feed.py`, `engine.publish`, `schemas/`, golden fixtures, 55 local tests). **The public feed repository now exists at [jimmyfazz/LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG), but only its README is present; no `v1/manifest.json` or live data has been published.** The B1G reader is designed (see the B1 repo, `docs/SPORTSLIVEINFO_FEED_READER_IMPLEMENTATION_2026-11-12.md`) but **not implemented**.
 **Supersedes** the proposed layout in `FEED_CONTRACTS_AND_PUBLICATION.md` §2 for asset paths and versioning. The rights, state-machine and safety rules there remain in force.
 
 ---
@@ -82,5 +82,5 @@ SportsLiveInfo **must not** make a breaking change inside `v1/`. A future `v2/` 
 
 1. Install and test SportsLiveInfo on the HAOS mini PC; Test-connect the sources you want.
 2. Approve the sources whose public redistribution you accept (`publication_approvals`).
-3. Create a public feed repository (separate from this private repo) with GitHub Pages on its default branch, plus a fine-grained token. Enter both on the Publishing page.
+3. The public feed repository [jimmyfazz/LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) already exists. In the Home Assistant Publishing page use owner `jimmyfazz`, repository `LiveSports-EPG`, branch `main`. Set up a fine-grained token restricted to **that repository only** with Contents read/write, and enable GitHub Pages if choosing the Pages address. A public raw-content URL is also possible once the JSON files actually exist; neither URL is live yet.
 4. Publish once. Give the feed base URL to the B1G reader setting (one value; all later updates flow automatically).
