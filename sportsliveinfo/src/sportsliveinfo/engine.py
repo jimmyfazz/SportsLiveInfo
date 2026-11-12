@@ -1,8 +1,9 @@
 """Independent collector lanes with last-good snapshots, quotas and private defaults."""
 import base64
-import hashlib
 import json
 import logging
+import os
+import shutil
 import threading
 import time
 import urllib.error
@@ -12,9 +13,10 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import linking, providers, taxonomy
+from . import feed, linking, providers, taxonomy
 from .storage import utcnow
 from .guide import analyze_guide
 
@@ -24,8 +26,7 @@ LONDON = ZoneInfo("Europe/London")
 PACING = {"thesportsdb": 2.1, "football_data": 6.5, **{n: 6.1 for n in providers.SPORTS if n.startswith("api_sports")}}
 DAY_HORIZON = {**{n: 7 for n in providers.SPORTS if n.startswith("api_sports")}, "thesportsdb": 3}
 SAFE_ERRORS = (ValueError, RuntimeError, TimeoutError, OSError, json.JSONDecodeError)
-# Fields derived from private EPG data; never exported.
-PRIVATE_FIELDS = ("broadcast_candidates", "broadcast_status", "fetch_scope", "live_state")
+FEED_RETAIN = 10  # published manifests (and the assets they reference) kept for slow/offline TVs
 
 
 class QuotaExhausted(RuntimeError):
@@ -70,6 +71,12 @@ class Engine:
                     self.store.job("collector", "lane_error", type(exc).__name__)
         self._materialize()
         self.store.job("collector", "finished")
+        github = conf["github"]
+        if github.get("enabled") and github.get("auto_publish") and conf.get("publication_approvals"):
+            try:
+                self.publish()
+            except (ValueError, RuntimeError, OSError) as exc:
+                self.store.job("publisher", "failed", str(exc)[:140])
         return True
 
     # ---- request planning -------------------------------------------------
@@ -353,58 +360,92 @@ class Engine:
                 self._last_slot = key
                 self.start_collection()
 
-    def publish(self):
-        """Upload only explicitly rights-approved sport source records; EPG never copied.
+    def preview_feed(self, out_dir=None):
+        """Build the full sli/1 feed locally (no upload) for inspection and B1G testing."""
+        state = self.store._get("feed_state") or {}
+        manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"))
+        out = Path(out_dir or os.environ.get("SLI_DATA_DIR", "/data")) / "feed-preview"
+        staging = out.with_name("feed-preview.tmp")
+        shutil.rmtree(staging, ignore_errors=True)
+        for path, data in list(files.items()) + [("v1/manifest.json", feed._json(manifest))]:
+            target = staging / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        shutil.rmtree(out, ignore_errors=True)
+        staging.rename(out)
+        summary = {"revision": manifest["revision"], "generated_at": manifest["generated_at"],
+                   "assets": len(manifest["assets"]), "bytes": sum(a["bytes"] for a in manifest["assets"]),
+                   "coverage": manifest["coverage"], "notices": manifest["notices"]}
+        self.store._put("feed_preview", summary)
+        self.store.job("publisher", "preview", "Feed %s built locally: %d assets" % (manifest["revision"], len(manifest["assets"])))
+        return manifest
 
-        Disabled by default. A candidate manifest can only be published if at least
-        one sports-source licence is independently approved for public export.
+    def publish(self):
+        """Publish the sli/1 feed in ONE atomic commit; EPG programme text is never copied.
+
+        Disabled by default. Events appear only for sources whose public
+        redistribution licence has been explicitly approved.
         """
         conf = self.store.config()
         target = conf["github"]
         if not conf["setup_complete"] or not target.get("enabled"):
             raise ValueError("Public publishing is disabled")
-        allowed = set(conf.get("publication_approvals", []))
         # No approval is supplied by default; the app cannot invent redistribution rights.
-        if not allowed:
+        if not conf.get("publication_approvals"):
             raise ValueError("No sport source has an approved public redistribution licence")
-        snap = self.store.snapshot("sports")
-        if not snap:
+        if not self.store.snapshot("sports"):
             raise ValueError("No valid sports snapshot yet")
-        events = [{k: v for k, v in x.items() if k not in PRIVATE_FIELDS}
-                  for x in snap["data"]["events"] if x["source_id"] in allowed]
-        if not events:
-            raise ValueError("No rights-approved events to publish")
         owner, repository, branch, token = (target.get(n, "") for n in ("owner", "repository", "branch", "token"))
         if not owner or not repository or not branch or not token:
             raise ValueError("GitHub destination/token incomplete")
-        if not all(v.replace("-", "").replace("_", "").isalnum() for v in [owner, repository, branch]):
+        if not all(v.replace("-", "").replace("_", "").replace(".", "").isalnum() for v in [owner, repository, branch]):
             raise ValueError("Invalid GitHub repository address")
-        payload = json.dumps({"schema_version": "0.3", "generated_at": utcnow(), "events": events}, separators=(",", ":"), ensure_ascii=False).encode()
-        revision = hashlib.sha256(payload).hexdigest()[:20]
-        asset = "data/revisions/%s/events.json" % revision
-        self._github_write(owner, repository, branch, token, asset, payload)
-        manifest = {"schema_version": "0.3", "revision": revision, "generated_at": utcnow(), "assets": [{"kind": "sports", "path": asset, "sha256": hashlib.sha256(payload).hexdigest(), "bytes": len(payload)}], "epg": "not_published_pending_rights"}
-        self._github_write(owner, repository, branch, token, "data/manifest.json", json.dumps(manifest, separators=(",", ":")).encode())
-        self.store.job("publisher", "submitted", "Sports snapshot committed; verify published static endpoint separately")
+        state = self.store._get("feed_state") or {"revisions": []}
+        manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"))
+        revision = manifest["revision"]
+        if revision == state.get("last_revision"):
+            self.store.job("publisher", "unchanged", "Feed revision %s already published" % revision)
+            return revision
+        live_before = {p for h in state["revisions"] for p in h["assets"]}
+        uploads = {p: d for p, d in files.items() if p not in live_before}
+        manifest_bytes = feed._json(manifest)
+        uploads["%s/manifests/%s.json" % (feed.ROOT, revision)] = manifest_bytes
+        uploads["%s/manifest.json" % feed.ROOT] = manifest_bytes
+        history = state["revisions"] + [{"revision": revision, "assets": sorted(files)}]
+        keep, drop = history[-FEED_RETAIN:], history[:-FEED_RETAIN]
+        live_after = {p for h in keep for p in h["assets"]}
+        deletions = sorted({p for h in drop for p in h["assets"]} - live_after)
+        deletions += ["%s/manifests/%s.json" % (feed.ROOT, h["revision"]) for h in drop]
+        self._github_commit(owner, repository, branch, token, uploads, deletions,
+                            "SportsLiveInfo feed %s (%d events)" % (revision, manifest["coverage"]["events"]))
+        self.store._put("feed_state", {"last_revision": revision, "revisions": keep, "published_at": utcnow()})
+        self.store.job("publisher", "submitted", "Feed %s committed atomically (%d new files, %d removed); verify the static endpoint" % (
+            revision, len(uploads), len(deletions)))
         return revision
 
     @staticmethod
-    def _github_write(owner, repository, branch, token, path, data):
-        endpoint = "https://api.github.com/repos/%s/%s/contents/%s" % (owner, repository, path)
-        def request(method, body=None):
-            req = urllib.request.Request(endpoint + "?ref=" + urllib.parse.quote(branch), method=method,
-                 headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json", "User-Agent": "SportsLiveInfo/0.3", "Content-Type": "application/json"}, data=body)
+    def _github_commit(owner, repository, branch, token, uploads, deletions, message):
+        """Single commit via the Git Data API: readers never see a manifest without its assets."""
+        base = "https://api.github.com/repos/%s/%s" % (owner, repository)
+
+        def api(method, path, body=None):
+            req = urllib.request.Request(base + path, method=method, data=json.dumps(body).encode() if body is not None else None,
+                                         headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
+                                                  "User-Agent": "SportsLiveInfo/0.3", "Content-Type": "application/json"})
             try:
-                with urllib.request.urlopen(req, timeout=20) as res:
-                    return json.loads(res.read(200_000))
+                with urllib.request.urlopen(req, timeout=30) as res:
+                    return json.loads(res.read(2_000_000))
             except urllib.error.HTTPError as exc:
-                raise RuntimeError("GitHub API rejected request (%d)" % exc.code) from None
-        sha = None
-        try:
-            sha = request("GET").get("sha")
-        except RuntimeError:
-            pass  # New object or inaccessible target; PUT will report the real failure.
-        body = {"message": "SportsLiveInfo: update validated snapshot", "branch": branch, "content": base64.b64encode(data).decode()}
-        if sha:
-            body["sha"] = sha
-        request("PUT", json.dumps(body).encode())
+                raise RuntimeError("GitHub API rejected %s request (%d)" % (method, exc.code)) from None
+
+        ref = "/git/refs/heads/" + urllib.parse.quote(branch)
+        head = api("GET", ref)["object"]["sha"]
+        base_tree = api("GET", "/git/commits/" + head)["tree"]["sha"]
+        tree = [{"path": path, "mode": "100644", "type": "blob",
+                 "sha": api("POST", "/git/blobs", {"content": base64.b64encode(data).decode(), "encoding": "base64"})["sha"]}
+                for path, data in sorted(uploads.items())]
+        tree += [{"path": path, "mode": "100644", "type": "blob", "sha": None} for path in deletions]
+        new_tree = api("POST", "/git/trees", {"base_tree": base_tree, "tree": tree})["sha"]
+        commit = api("POST", "/git/commits", {"message": message, "tree": new_tree, "parents": [head]})["sha"]
+        api("PATCH", ref, {"sha": commit, "force": False})
+        return commit

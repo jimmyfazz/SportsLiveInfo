@@ -151,7 +151,8 @@ class UI(BaseHTTPRequestHandler):
                 owner, repository, branch = value("owner"), value("repository"), value("branch")
                 if not all(re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", k) for k in (owner, repository, branch)):
                     raise ValueError("Invalid GitHub owner, repository or branch")
-                updates = {"owner": owner, "repository": repository, "branch": branch, "enabled": value("enabled") == "on"}
+                updates = {"owner": owner, "repository": repository, "branch": branch, "enabled": value("enabled") == "on",
+                           "auto_publish": value("auto_publish") == "on"}
                 if value("token"):
                     if len(value("token")) > 400:
                         raise ValueError("GitHub token exceeds safe length")
@@ -183,9 +184,13 @@ class UI(BaseHTTPRequestHandler):
                 page = "dashboard"
                 message = "Refresh started. Check source history shortly" if started else "A refresh is already running"
             elif action == "publish":
-                self.engine.publish()
+                revision = self.engine.publish()
                 page = "publishing"
-                message = "GitHub commit submitted; public endpoint verification remains necessary"
+                message = "Feed %s committed atomically; public endpoint verification remains necessary" % revision
+            elif action == "preview_feed":
+                manifest = self.engine.preview_feed()
+                page = "publishing"
+                message = "Feed preview %s built locally (%d assets); nothing uploaded" % (manifest["revision"], len(manifest["assets"]))
             else:
                 raise ValueError("Unsupported action")
         except (ValueError, RuntimeError) as exc:
@@ -413,10 +418,21 @@ class UI(BaseHTTPRequestHandler):
     def publishing(self, config):
         github = config["github"]
         form = '<label>GitHub owner</label><input name="owner" type="text" value="%s" required><label>Separate public feed repository name</label><input name="repository" type="text" value="%s" placeholder="SportsLiveInfoFeed" required><label>Branch</label><input name="branch" type="text" value="%s" required><label>Fine-grained GitHub publishing token</label><input name="token" type="password" autocomplete="new-password" placeholder="%s"><label><input type="checkbox" name="remove" value="on"> Remove saved token</label>' % (e(github.get("owner")), e(github.get("repository")), e(github.get("branch")), "Saved — enter replacement only" if github.get("token") else "Token (only rights-cleared feed repository)")
-        form += '<label><input type="checkbox" name="enabled" value="on" %s> Enable publishing</label><button type="submit">Save GitHub settings</button>' % ("checked" if github.get("enabled") else "")
+        form += '<label><input type="checkbox" name="enabled" value="on" %s> Enable publishing</label>' % ("checked" if github.get("enabled") else "")
+        form += '<label><input type="checkbox" name="auto_publish" value="on" %s> Publish automatically after every scheduled refresh</label><button type="submit">Save GitHub settings</button>' % ("checked" if github.get("auto_publish") else "")
         body = '<h2>Outbound GitHub distribution</h2><p>Only SportsLiveInfo on Home Assistant will write to GitHub. B1G TVs remain read-only; no incoming connections to Home Assistant are needed.</p>'
         body += '<div class="alert error">Public publishing requires documented permission to redistribute every selected source. No programme guide source has been cleared for public export; EPG copying is disabled. No sporting source has been approved by default.</div>'
         body += '<section class="card">' + self._form("github", form) + '<div class="divider"></div><p class="help">Even after enabling publishing, a permission gate will reject an export until a source is explicitly approved in the backend rights register. Saved token: %s.</p>' % ("yes" if github.get("token") else "no") + '</section>'
+        preview = self.store._get("feed_preview") or {}
+        state = self.store._get("feed_state") or {}
+        body += '<section class="card" style="margin-top:16px"><h2>B1G feed (format sli/1)</h2><p>One atomic GitHub commit per revision: taxonomy, channel registry, guide catalogue, eight daily event files, today grouping and source health, all referenced by <code>v1/manifest.json</code>. Assets are content-addressed, so TVs download only what changed. EPG programme text and unverified channel candidates are never included.</p>'
+        body += '<p class="sub">Last preview: %s · Last published: %s</p>' % (
+            e("%s (%s assets, %s bytes, %s events)" % (preview["revision"], preview["assets"], preview["bytes"], preview["coverage"]["events"])) if preview else "none",
+            e("%s at %s" % (state["last_revision"], state.get("published_at"))) if state.get("last_revision") else "never")
+        for note in preview.get("notices", []):
+            body += '<p class="warn help">%s</p>' % e(note)
+        body += self._form("preview_feed", '<button class="secondary" type="submit">Build feed preview (no upload)</button>')
+        body += self._form("publish", '<button type="submit">Publish feed now</button>') + '</section>'
         return body
 
     def health(self):

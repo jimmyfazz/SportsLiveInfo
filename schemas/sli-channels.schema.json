@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sli.channels/1",
+  "title": "Canonical channel registry, families and guide catalogue",
+  "description": "Identity hints only. The TV matches these against its OWN provider channel list; user manual mappings and hidden channels always win. Nothing here is a stream URL.",
+  "type": "object",
+  "required": ["schema", "normalisation", "services", "source_crosswalk", "families", "matching_rules", "guide_catalogue"],
+  "properties": {
+    "schema": {"const": "sli.channels/1"},
+    "normalisation": {"type": "object", "required": ["steps", "country_prefixes", "quality_suffixes", "synonyms"]},
+    "services": {"type": "array", "items": {"type": "object", "required": ["id", "market", "names"],
+      "properties": {"id": {"type": "string", "pattern": "^[a-z]{2}\\.[a-z0-9_.]+$"}, "market": {"type": "string", "pattern": "^[A-Z]{2}$"}, "names": {"type": "array", "items": {"type": "string"}}}}},
+    "source_crosswalk": {"type": "array", "items": {"type": "object", "required": ["source_id", "source_url", "ids"]}},
+    "families": {"type": "array", "items": {"type": "object", "required": ["id", "label", "pattern", "pattern_syntax"]}},
+    "matching_rules": {"type": "object", "required": ["precedence", "market_gate", "never_auto_match", "families_are_diagnostic_only"]},
+    "guide_catalogue": {"type": "array", "items": {"type": "object", "required": ["id", "label", "url", "upstream_family", "url_verified", "automatic_fallback", "programme_rights"],
+      "properties": {"url": {"type": "string", "pattern": "^https://"}, "automatic_fallback": {"type": "boolean"}, "market": {"type": ["string", "null"]}}}}
+  }
+}

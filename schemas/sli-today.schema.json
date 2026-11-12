@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sli.today/1",
+  "title": "Today's grouping and featured order",
+  "description": "References event ids in the same day's events asset. Readers apply the user's SportsPriorityStore order on top of this default order.",
+  "type": "object",
+  "required": ["schema", "date", "featured_event_ids", "groups"],
+  "properties": {
+    "schema": {"const": "sli.today/1"},
+    "date": {"type": "string"},
+    "featured_event_ids": {"type": "array", "items": {"type": "string"}},
+    "groups": {"type": "array", "items": {"type": "object", "required": ["sport", "categories"],
+      "properties": {"sport": {"type": "string"}, "categories": {"type": "array", "items": {"type": "object", "required": ["id", "event_ids"]}}}}}
+  }
+}

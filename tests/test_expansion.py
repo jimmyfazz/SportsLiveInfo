@@ -353,10 +353,13 @@ class EngineExpansionTests(unittest.TestCase):
                               "github": {"enabled": True, "owner": "o", "repository": "feed", "branch": "main", "token": "t"}})
         self.store.save_snapshot("sports", {"events": [ev(id="openligadb:1", source_id="openligadb", broadcast_status="single_guide_match",
                                                           broadcast_candidates=[{"channel_name": "Private"}], fetch_scope="league:bl1")]})
-        written = []
-        with patch.object(Engine, "_github_write", side_effect=lambda *a: written.append(a)):
+        commits = []
+        with patch.object(Engine, "_github_commit", side_effect=lambda *a: commits.append(a)):
             Engine(self.store).publish()
-        payload = written[0][5].decode()
+        uploads = commits[0][4]
+        payload = b"".join(d for p, d in uploads.items() if "/assets/events/" in p).decode()
+        self.assertIn("openligadb:1", payload)
+        self.assertIn("v1/manifest.json", uploads)
         for private in ("broadcast_candidates", "Private", "fetch_scope", "broadcast_status"):
             self.assertNotIn(private, payload)
 

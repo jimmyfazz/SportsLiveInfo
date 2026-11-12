@@ -1,0 +1,264 @@
+{
+ "schema": "sli.matching-cases/1",
+ "note": "B1G SliChannelRegistry must return exactly these results for the same source market/url",
+ "cases": [
+  {
+   "source_id": "farleyflex",
+   "epg_id": "skysportsmainevent.uk",
+   "name": "Sky Sports Main Event",
+   "normalised": "sky sports main event",
+   "canonical_id": "gb.sky.sports.main_event",
+   "families": [
+    "sky_sports"
+   ]
+  },
+  {
+   "source_id": "farleyflex",
+   "epg_id": "",
+   "name": "UK | SKY SPORTS MAIN EVENT FHD",
+   "normalised": "sky sports main event",
+   "canonical_id": "gb.sky.sports.main_event",
+   "families": [
+    "sky_sports"
+   ]
+  },
+  {
+   "source_id": "farleyflex",
+   "epg_id": "",
+   "name": "Sky Sports Premier League UHD +1",
+   "normalised": "sky sports premier league uhd +1",
+   "canonical_id": null,
+   "families": [
+    "sky_sports"
+   ]
+  },
+  {
+   "source_id": "farleyflex",
+   "epg_id": "",
+   "name": "Sky Sports+",
+   "normalised": "sky sports+",
+   "canonical_id": null,
+   "families": [
+    "sky_sports",
+    "sky_sports_plus"
+   ]
+  },
+  {
+   "source_id": "farleyflex",
+   "epg_id": "",
+   "name": "Sky News",
+   "normalised": "sky news",
+   "canonical_id": null,
+   "families": []
+  },
+  {
+   "source_id": "farleyflex",
+   "epg_id": "",
+   "name": "BBC 1",
+   "normalised": "bbc one",
+   "canonical_id": "gb.bbc.one",
+   "families": [
+    "uk_ie_fta"
+   ]
+  },
+  {
+   "source_id": "farleyflex",
+   "epg_id": "",
+   "name": "BBC One Scotland",
+   "normalised": "bbc one scotland",
+   "canonical_id": null,
+   "families": [
+    "uk_ie_fta"
+   ]
+  },
+  {
+   "source_id": "farleyflex",
+   "epg_id": "",
+   "name": "BBC One +1",
+   "normalised": "bbc one +1",
+   "canonical_id": null,
+   "families": [
+    "uk_ie_fta"
+   ]
+  },
+  {
+   "source_id": "mjh_sky_uk",
+   "epg_id": "",
+   "name": "ITV1 HD",
+   "normalised": "itv 1",
+   "canonical_id": "gb.itv.one",
+   "families": [
+    "uk_ie_fta"
+   ]
+  },
+  {
+   "source_id": "mjh_sky_uk",
+   "epg_id": "",
+   "name": "TNT Sports 2",
+   "normalised": "tnt sports 2",
+   "canonical_id": "gb.tnt.sports.2",
+   "families": [
+    "tnt_sports"
+   ]
+  },
+  {
+   "source_id": "mjh_sky_uk",
+   "epg_id": "",
+   "name": "TNT Sports 8",
+   "normalised": "tnt sports 8",
+   "canonical_id": null,
+   "families": [
+    "tnt_sports"
+   ]
+  },
+  {
+   "source_id": "epgshare_uk",
+   "epg_id": "",
+   "name": "Premier Sports 1",
+   "normalised": "premier sports 1",
+   "canonical_id": "gb.premier.sports.1",
+   "families": [
+    "premier_sports"
+   ]
+  },
+  {
+   "source_id": "epgshare_uk",
+   "epg_id": "",
+   "name": "Setanta Sports 1",
+   "normalised": "setanta sports 1",
+   "canonical_id": null,
+   "families": [
+    "setanta"
+   ]
+  },
+  {
+   "source_id": "epgshare_uk",
+   "epg_id": "",
+   "name": "Sky Sports Box Office",
+   "normalised": "sky sports box office",
+   "canonical_id": "gb.sky.sports.box_office",
+   "families": [
+    "sky_sports",
+    "ppv"
+   ]
+  },
+  {
+   "source_id": "fr_programmetv",
+   "epg_id": "",
+   "name": "FR: Canal+ Sport HD",
+   "normalised": "canal+ sport",
+   "canonical_id": "fr.canal.sport",
+   "families": [
+    "canal_plus"
+   ]
+  },
+  {
+   "source_id": "fr_programmetv",
+   "epg_id": "",
+   "name": "Canal+ Sport 360 +1",
+   "normalised": "canal+ sport 360 +1",
+   "canonical_id": null,
+   "families": [
+    "canal_plus"
+   ]
+  },
+  {
+   "source_id": "fr_xmltv",
+   "epg_id": "",
+   "name": "beIN Sports 4",
+   "normalised": "bein sports 4",
+   "canonical_id": null,
+   "families": [
+    "bein"
+   ]
+  },
+  {
+   "source_id": "fr_xmltv",
+   "epg_id": "",
+   "name": "L'Équipe",
+   "normalised": "l'equipe",
+   "canonical_id": "fr.lequipe",
+   "families": []
+  },
+  {
+   "source_id": "epgshare_ie",
+   "epg_id": "",
+   "name": "RTE2",
+   "normalised": "rte 2",
+   "canonical_id": "ie.rte.two",
+   "families": [
+    "uk_ie_fta"
+   ]
+  },
+  {
+   "source_id": "epgshare_us",
+   "epg_id": "",
+   "name": "ESPN2",
+   "normalised": "espn2",
+   "canonical_id": "us.espn2",
+   "families": [
+    "espn"
+   ]
+  },
+  {
+   "source_id": "iptvorg_foxtel_au",
+   "epg_id": "",
+   "name": "Fox Footy",
+   "normalised": "fox footy",
+   "canonical_id": "au.fox.footy",
+   "families": [
+    "fox_sports"
+   ]
+  },
+  {
+   "source_id": "epgshare_hk",
+   "epg_id": "",
+   "name": "HK: Now Sports Premier League",
+   "normalised": "now sports premier league",
+   "canonical_id": "hk.now.sports.premier_league",
+   "families": [
+    "now_sports_hk"
+   ]
+  },
+  {
+   "source_id": "epgshare_my",
+   "epg_id": "",
+   "name": "MYS | Astro Premier League FHD",
+   "normalised": "astro premier league",
+   "canonical_id": "my.astro.premier_league",
+   "families": [
+    "astro"
+   ]
+  },
+  {
+   "source_id": "iptv_epg_ge",
+   "epg_id": "",
+   "name": "Setanta Sports 2 HD",
+   "normalised": "setanta sports 2",
+   "canonical_id": "ge.setanta.sports.2",
+   "families": [
+    "setanta"
+   ]
+  },
+  {
+   "source_id": "epgtalk_sports",
+   "epg_id": "",
+   "name": "Sky Sports Main Event",
+   "normalised": "sky sports main event",
+   "canonical_id": null,
+   "families": [
+    "sky_sports"
+   ]
+  },
+  {
+   "source_id": "unknown_source",
+   "epg_id": "",
+   "name": "BBC One",
+   "normalised": "bbc one",
+   "canonical_id": null,
+   "families": [
+    "uk_ie_fta"
+   ]
+  }
+ ]
+}

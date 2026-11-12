@@ -19,7 +19,7 @@ DEFAULT = {
                 "openligadb_leagues": list(providers.OPENLIGADB_LEAGUES)},
     "keys": {},
     "schedule": ["04:00", "12:00", "17:00"],
-    "github": {"owner": "jimmyfazz", "repository": "", "branch": "main", "token": "", "enabled": False},
+    "github": {"owner": "jimmyfazz", "repository": "", "branch": "main", "token": "", "enabled": False, "auto_publish": False},
     "publication_approvals": [],
 }
 

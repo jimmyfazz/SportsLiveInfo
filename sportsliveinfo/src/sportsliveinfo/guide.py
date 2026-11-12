@@ -110,7 +110,7 @@ CHANNEL_FAMILIES = [
     ("now_sports_hk", "Now Sports (Hong Kong)", r"^now (?:sports|premier league|golf)\b"),
     ("astro", "Astro (Malaysia)", r"^astro\b"),
     ("supersport", "SuperSport (Africa)", r"^supersport\b"),
-    ("espn", "ESPN", r"^espn\b"),
+    ("espn", "ESPN", r"^espn"),
     ("fox_sports", "Fox Sports", r"^(?:fox sports|fs1|fs2|fox footy|fox cricket|fox league)\b"),
     ("tsn_sportsnet", "TSN / Sportsnet (CA)", r"^(?:tsn|sportsnet)\b"),
     ("viaplay", "Viaplay", r"^viaplay\b"),
@@ -127,7 +127,7 @@ CHANNEL_FAMILIES = [
     ("peacock", "Peacock", r"^peacock\b"),
     ("paramount_plus", "Paramount+", r"^paramount ?\+"),
     ("fubo", "Fubo Sports", r"^fubo\b"),
-    ("us_networks", "US networks (ABC/CBS/NBC/Fox/USA)", r"^(?:abc|cbs|nbc|fox|usa network|tnt|tbs|nbcsn)\b(?! sports? \d)"),
+    ("us_networks", "US networks (ABC/CBS/NBC/Fox/USA)", r"^(?:abc|cbs|nbc|fox|usa network|tnt|tbs|nbcsn)\b(?! (?:sports? \d|footy|cricket|league))"),
     ("us_team_channels", "US league/team channels (MLB/NBA/WNBA/NFL/NHL)", r"^(?:mlb|nba|wnba|nfl|nhl)\b"),
     ("kayo_stan", "Kayo / Stan Sport (AU)", r"^(?:kayo|stan sports?)\b"),
     ("sky_sport_nz", "Sky Sport (NZ)", r"^(?:nz:? )?sky sport (?:nz|[1-9]|now|select)\b"),
@@ -140,7 +140,7 @@ CHANNEL_FAMILIES = [
     ("in_pk_sports", "India/Pakistan sport (Star, Sony, PTV, Willow, Ten)", r"^(?:star sports|sony (?:sports|ten|six)|ptv sports|willow|ten sports|a sports)\b"),
     ("fite", "Fite TV (combat PPV)", r"^fite\b"),
     ("europe_sport_nets", "European sport networks (Sport TV, Eleven, Polsat, Canal+ Sport PL, Nova, Cosmote, V Sport, TV2 Sport)",
-     r"^(?:sport ?tv|eleven|polsat sport|canal\+ sport \d|nova sports?|cosmote sport|v sport|tv ?2 sport|c more|ziggo sport|dazn \d)"),
+     r"^(?:sport ?tv|eleven|polsat sport|canal\+ sport \d\b|nova sports?|cosmote sport|v sport|tv ?2 sport|c more|ziggo sport|dazn \d)"),
     ("latin_sport_nets", "Latin American sport networks (ESPN LatAm, TyC, Fox Sports AR, TUDN)", r"^(?:tyc|tudn|tnt sports (?:ar|cl|br)|fox sports (?:ar|mx|premium))\b"),
 ]
 _FAMILY_PATTERNS = [(fid, label, re.compile(pattern)) for fid, label, pattern in CHANNEL_FAMILIES]

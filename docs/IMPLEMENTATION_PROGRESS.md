@@ -14,6 +14,8 @@
 | Linking | Unverified EPG broadcast candidates with hard negatives; never sets `broadcast_verified` | Owner sign-off on the verification rule (LINK-002) |
 | Ownership note | Sports adapters/engine are Codex-owned in the collaboration plan; changed at the owner's direct request with no concurrent Codex branch present | Codex cross-review before merge |
 
+**B1G feed (sli/1):** implemented and fixture-tested (`feed.py`, `schemas/`, `docs/FEED_CONTRACT_SLI_V1.md`); atomic Git Data API publisher, retention 10, preview, optional auto-publish. NOT published (no feed repository/token; no approved sources). B1G reader design: B1 repo `docs/SPORTSLIVEINFO_FEED_READER_IMPLEMENTATION_2026-11-12.md` (not implemented). Local tests: 55/55.
+
 **API keys needed:** three, all free and optional — API-Sports (covers all 11 API-Sports adapters), football-data.org, CricketData.org. Jolpica, OpenF1, OpenLigaDB, TheSportsDB (public key) and all EPG feeds need none. A GitHub token is only for optional publishing.
 
 ## New functional implementation — v0.2.0, 12 November 2026

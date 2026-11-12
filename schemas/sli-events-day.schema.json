@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sli.events-day/1",
+  "title": "Sporting events for one Europe/London day",
+  "description": "Field whitelist. Readers compute live state from start/end and taxonomy typical_minutes; broadcasts appear only when broadcast_verified is true.",
+  "type": "object",
+  "required": ["schema", "date", "timezone", "events"],
+  "properties": {
+    "schema": {"const": "sli.events-day/1"},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "timezone": {"const": "Europe/London"},
+    "events": {"type": "array", "items": {"$ref": "#/$defs/event"}}
+  },
+  "$defs": {
+    "event": {
+      "type": "object",
+      "required": ["id", "sport", "category_id", "title", "start_utc", "start_precision", "broadcast_verified", "b1g_priority_group"],
+      "properties": {
+        "id": {"type": "string"},
+        "sport": {"type": "string"},
+        "sport_label": {"type": "string"},
+        "category_id": {"type": "string"},
+        "category_label": {"type": "string"},
+        "category_priority": {"type": "integer"},
+        "competition": {"type": "string"},
+        "competition_id": {"type": "string"},
+        "competition_country": {"type": "string"},
+        "event_type": {"type": "string"},
+        "session": {"type": "string"},
+        "match_type": {"type": "string"},
+        "day_number": {"type": "integer"},
+        "weight_class": {"type": "string"},
+        "title": {"type": "string"},
+        "participants": {"type": "array", "items": {"type": "string"}},
+        "participants_short": {"type": "array", "items": {"type": "string"}},
+        "start_utc": {"type": "string"},
+        "end_utc": {"type": "string"},
+        "start_precision": {"type": "string", "description": "scheduled | provisional | not_before | estimated | time_tbc | date_only | (unknown: time_tbc)"},
+        "status_normalized": {"type": "string", "description": "scheduled | live | finished | postponed | cancelled | unknown"},
+        "round": {"type": "string"},
+        "stage": {"type": "string"},
+        "venue": {"type": "string"},
+        "country": {"type": "string"},
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "sources": {"type": "array", "items": {"type": "string"}},
+        "fixture_confidence": {"type": "string", "description": "reported | corroborated"},
+        "corroboration": {"type": "integer"},
+        "start_conflict": {"type": "boolean"},
+        "broadcast_verified": {"type": "boolean"},
+        "broadcasts": {"type": "array", "items": {"type": "object", "required": ["canonical_channel_id"]}},
+        "b1g_priority_group": {"type": "string"}
+      }
+    }
+  }
+}
