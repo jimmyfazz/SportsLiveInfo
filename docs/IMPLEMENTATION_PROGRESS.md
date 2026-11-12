@@ -1,4 +1,20 @@
 # SportsLiveInfo — implementation progress and agent handover
+
+## Continued engineering — 12 November 2026, experimental v0.3.1
+
+**Primary operator UI branch:** `feat/haos-operator-dashboard-ux-20261112`; **PR #7 OPEN, NOT MERGED.** Accurate current evidence: source committed, offline regression tests added but **not executed against exact PR HEAD**, HAOS install/build and mobile/desktop visual acceptance not run. GitHub Actions check continues to fail with empty job steps and unavailable logs (BlobNotFound). Do not mark CI green.
+
+- Home Assistant responsive operator dashboard, readiness checklist, setup navigation, provider family/region panels, source statuses, EPG coverage visuals and diagnostics are implemented in `server.py`.
+- Sports Events now paginates all filtered results rather than truncating at 200; date filtering honours Europe/London BST/GMT.
+- EPG Test Connection now denies syntactically correct but expired XMLTV; rejected stale/collapsed imports skip expensive coverage scoring and preserve last-good.
+- GitHub publication button is guarded in the UI, while the existing backend rights gate remains authoritative; publishing defaults OFF.
+- Private source installation route: authenticated Mac download → `local_apps/sportsliveinfo` → `local_sportsliveinfo`. See `docs/PRIVATE_HAOS_TEST_INSTALL.md` and the revised App DOCS. No private source visibility change.
+- Version `0.3.1` synchronized across `config.yaml`, runtime `__init__` and Dockerfile default, with a static test. Still **experimental**.
+
+**Independent performance branch:** `perf/epg-broadcast-window-index-20261112`; **PR #8 OPEN, NOT MERGED**. Reduces event × EPG nested comparisons using bounded event-hour indexing and a separate long-programme path; existing _matches hard negatives and unverified-candidate semantics retained. Differential, boundary and call-count tests added, but **not run/benchmarked on real HAOS**. This branch is based on main and does not include PR #7's UI/version changes. Integrate through reviewed PRs, not overlapping file edits.
+
+**Required release gates:** execute `PYTHONPATH=sportsliveinfo/src python -m compileall -q sportsliveinfo/src` and `PYTHONPATH=sportsliveinfo/src python -m unittest discover -s tests -v` on the exact proposed merge HEAD; fix GitHub Actions or establish equivalent reproducible logs; test Docker image and HAOS Ingress, persistent /data, device memory, source preflight, and permissions. Remain honest about source coverage and public redistribution rights. No live JSON feed or Android consumer has been verified.
+
 **Updated:** 12 November 2026  
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Latest development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
