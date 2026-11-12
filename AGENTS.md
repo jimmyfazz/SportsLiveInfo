@@ -8,6 +8,16 @@ Read README.md and all docs before major changes; start with docs/DELIVERY_PLAN.
 
 **Mandatory:** Read [docs/HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md](docs/HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md) before App/UI implementation. Build **HA Ingress** first-run wizard (not a literal OS splash): individual supplier cards with correct signup URLs, masked API key, per-source **Save** and **Test Connection**; providers without keys clearly labelled; non-publishable sources gated; separate GitHub feed-repo/token Save/Test; GMT/BST-aware fetch and publication scheduler Save; wizard auto-opens only on first run, resumable, manually reopened later. Operational dashboard + quiet Home Assistant persistent notifications with dedup, comprehensive remediation, severity/cooldown and redaction. Treat the wizard, scheduling, and HA notifications as *acceptance-critical*, not optional design polish. HA Core API notification access via `homeassistant_api: true` is powerful; security-review or use a least-privilege companion integration. Never allow UI form field changes to erase unrelated saved keys.
 
+## FORCED scope and source-of-truth: B1G UK sports EPG and rail
+
+Read [docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md](docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md) before any API/EPG/B1G work. B1's existing enhanced UK feed is **farleyflex/epg-guide**, generated daily at 06:00 UTC via iptv-org from third-party guides; source updates have landed hours late. Treat EPG programme accuracy separately from freshness, and source publishing rights separately from public fetch availability.
+
+Central engine must support **EPG source-specific programme corrections plus daily sports fixtures**, subject to explicit redistribution rights. Do not merely append another XMLTV source after generic provider entries: verified detailed programmes need quality-aware precedence, manual user choices take priority, source identity cannot rely on literal farleyflex URL matching. The B1G consumer alone resolves local playable stream channels, account scope, visibility and user overrides.
+
+The only observed user-entered third-party API keys in Android Settings are **API-Sports, TMDB, OMDb**. Move **API-Sports / sport fixture API keys** to Home Assistant only. **DO NOT** bring TMDB, OMDb, movie/TV posters, hero art, IPTV account credentials, credentialed provider XMLTV, stream URLs, or local per-user mappings into SportsLiveInfo. TheSportsDB public test-key team crest/standings should remain a B1 feature for now. No unlicensed EPG redistribution.
+
+Important B1 corrective candidates from this audit: free-fixture API missing coverage must not suppress independently credible EPG fixtures; event status is not equivalent to broadcasting programme time; Android sports rank currently caps including PPV at 10 whereas Mac uses 10 plus 1 optional PPV. All such fixes belong in separately reviewed B1 code changes, not silent changes to SportsLiveInfo.
+
 ## Non-negotiable requirements
 
 1. Zero recurring subscription cost for the initial private prototype. Avoid paid data services and language-model inference. Provider adapters must be pluggable; never tie the whole app to one provider.
