@@ -30,12 +30,17 @@ Use **independent fixture adapters + independent UK EPG/broadcaster adapters + d
 7. [Implementation delivery plan](docs/DELIVERY_PLAN.md)
 8. [Forensic test and acceptance matrix](docs/TEST_PLAN.md)
 9. [Optional B1 Android integration](docs/B1_INTEGRATION.md)
-10. [Home Assistant App or Proxmox LXC hosting decision](docs/HOME_ASSISTANT_PROXMOX_HOSTING.md)
-11. [Instructions for coding agents](AGENTS.md)
+10. **[PRIMARY: Home Assistant mini PC directly installed — deployment decision](docs/HOME_ASSISTANT_BARE_METAL_PRIMARY.md)**
+11. [ALTERNATIVE ONLY: Home Assistant under Proxmox / LXC](docs/HOME_ASSISTANT_PROXMOX_HOSTING.md)
+12. [Instructions for coding agents](AGENTS.md)
 
 ## Project status
 
 **Research documented; production aggregator NOT yet implemented.** No API key has been created, no provider accuracy benchmark has yet been run, no JSON feed has been deployed, and no broadcaster matching has been demonstrated end-to-end. Provider limits and terms are subject to change.
+
+## Deployment selected (12 November 2026)
+
+**Primary host: the owner's always-on personal home mini PC running Home Assistant directly on hardware (not Proxmox).** Assuming its installation type is Home Assistant OS, build SportsLiveInfo as a private local Home Assistant App, an independently managed container. All ten personal B1G TVs will read the **same versioned JSON snapshot** from a proposed separate GitHub public feed, never query sporting-provider APIs themselves. The collector publishes over outbound HTTPS only; **no incoming access to the home computer or network**. Actual Home Assistant OS/App support must be confirmed before installation. See [primary deployment specification](docs/HOME_ASSISTANT_BARE_METAL_PRIMARY.md). Public distribution of provider-derived data is subject to a source-by-source licence gate; no public feed exists yet.
 
 ## Priority
 
