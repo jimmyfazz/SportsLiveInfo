@@ -224,21 +224,23 @@ class UI(BaseHTTPRequestHandler):
         is_error = False
         try:
             if action == "sports":
+                page = "sources"
                 name = value("provider")
                 if name not in providers.SPORTS:
                     raise ValueError("Unknown sports provider")
-                self.store.configure({"sports": {name: value("enabled") == "on"}})
-                # Keys are stored by provider account, so one API-Sports key serves every API-Sports sport.
+                # Validate the entire form before modifying persisted state.
+                # One invalid key must not leave the provider toggle changed.
                 key_name = providers.SPORTS[name][2]
                 secret = value("key")
-                if secret and key_name:
-                    if len(secret) > 512:
-                        raise ValueError("API key exceeds safe length")
-                    self.store.configure({"keys": {key_name: secret}})
-                if value("remove") == "on" and key_name:
-                    self.store.configure({"keys": {key_name: ""}})
-                page = "sources"
+                if len(secret) > 512:
+                    raise ValueError("API key exceeds safe length")
+                updates = {"sports": {name: value("enabled") == "on"}}
+                if key_name and (secret or value("remove") == "on"):
+                    # Explicit remove wins if both fields are submitted.
+                    updates["keys"] = {key_name: "" if value("remove") == "on" else secret}
+                self.store.configure(updates)
             elif action == "options":
+                page = "sources"
                 sports = [s for s in form.get("tsdb", []) if s in providers.THESPORTSDB_SPORTS]
                 leagues = [l for l in form.get("old", []) if l in providers.OPENLIGADB_LEAGUES]
                 if not sports or not leagues:
@@ -246,12 +248,13 @@ class UI(BaseHTTPRequestHandler):
                 self.store.configure({"options": {"thesportsdb_sports": sports, "openligadb_leagues": leagues}})
                 page = "sources"
             elif action == "epg":
+                page = "sources"
                 name = value("provider")
                 if name not in providers.EPG:
                     raise ValueError("Unknown EPG source")
                 self.store.configure({"epg": {name: value("enabled") == "on"}})
-                page = "sources"
             elif action == "test_source":
+                page = "sources"
                 kind, name = value("kind"), value("provider")
                 if kind not in ("sports", "epg") or name not in (providers.SPORTS if kind == "sports" else providers.EPG):
                     raise ValueError("Unknown test source")
@@ -261,6 +264,7 @@ class UI(BaseHTTPRequestHandler):
                 message = status
                 is_error = "unsuccessful" in status.casefold()
             elif action == "github":
+                page = "publishing"
                 owner, repository, branch = value("owner"), value("repository"), value("branch")
                 if not all(re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", k) for k in (owner, repository, branch)):
                     raise ValueError("Invalid GitHub owner, repository or branch")
@@ -275,11 +279,13 @@ class UI(BaseHTTPRequestHandler):
                 self.store.configure({"github": updates})
                 page = "publishing"
             elif action == "test_github":
+                page = "publishing"
                 # Authenticate and inspect the SAVED destination; never commit.
                 # Saving a token and testing its connection are separate actions.
                 message = self.engine.test_github_destination()
                 page = "publishing"
             elif action == "schedule":
+                page = "scheduler"
                 times = []
                 for t in value("times").split(","):
                     t = t.strip()
@@ -302,10 +308,12 @@ class UI(BaseHTTPRequestHandler):
                 page = "dashboard"
                 message = "Refresh started. Check source history shortly" if started else "A refresh is already running"
             elif action == "publish":
+                page = "publishing"
                 revision = self.engine.publish()
                 page = "publishing"
                 message = "Feed %s committed atomically; public endpoint verification remains necessary" % revision
             elif action == "preview_feed":
+                page = "publishing"
                 manifest = self.engine.preview_feed()
                 page = "publishing"
                 message = "Feed preview %s built locally (%d assets); nothing uploaded" % (manifest["revision"], len(manifest["assets"]))
