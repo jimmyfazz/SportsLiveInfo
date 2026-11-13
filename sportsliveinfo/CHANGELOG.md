@@ -2,6 +2,16 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.10 — Stronger event-to-channel matching
+
+- Sports fixtures are matched to guide listings with stricter team rules: distinctive team words and exact aliases are required, generic words ("North", "West") never identify a side, and women's and age-group variants must agree. A guide may add a club suffix the feed omits ("Cheltenham Town"), but never change it ("Manchester City" is not "Manchester United").
+- Women-only competitions (WSL, NWSL, SWPL, WBBL, AFLW) count as the women's game even when a listing does not say so.
+- Guide decorations are ignored when matching: trailing dates ("14.11"), "[NEW]"-style tags and league badges ("⚽ [EPL]").
+- Radio, shopping, +1/+2 timeshift and wrong-sport channels are never offered as the live channel.
+- Guide channels resolve through the broadcaster registry, the optional channel dictionary and the identity graph, with one id per service (e.g. every ITV1 region as `gb.itv.one`).
+- Measured on three public UK guides for 14–15 November: 14 of 14 known live broadcasts matched (6 before), and all 22 channel suggestions were correct on a hand check.
+- Channel suggestions stay private in the app. They are not published in the feed; that needs a separate owner decision.
+
 ## 0.3.9 — Repair Matt Huisman guide sources
 
 - Point the New Zealand and Sydney XMLTV sources directly at their final raw GitHub URLs, avoiding the cross-origin redirects from `i.mjh.nz` that the collector correctly blocks.
