@@ -10,7 +10,7 @@ import secrets
 import threading
 import urllib.parse
 from collections import OrderedDict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -604,6 +604,9 @@ class UI(BaseHTTPRequestHandler):
                 "time_unconfirmed": "Fixture time TBC",
                 "fixture_inactive": "Fixture postponed or cancelled",
                 "fixture_title_unmatched": "No fixture match in available guides",
+                "matching_channel_unmapped": "Matching listing on an unmapped channel",
+                "no_guide_data": "No saved guide data",
+                "outside_guide_dates": "Outside available guide dates",
                 "no_recognised_guide_slot": "No usable guide slot on recognised channels",
             }.get(event.get("broadcast_gap"), "Not verified"))
         items = []
@@ -611,7 +614,12 @@ class UI(BaseHTTPRequestHandler):
             name = candidate.get("channel_name", "")
             market = candidate.get("canonical_channel_id", "").partition(".")[0].upper()
             coverage = self._uk_time({"start_utc": candidate.get("programme_start_utc")})
-            sources = ", ".join(providers.EPG.get(source, (source,))[0] for source in candidate.get("epg_sources", []))
+            source_ids = candidate.get("epg_sources", [])
+            sources = ", ".join(providers.EPG.get(source, (source,))[0] for source in source_ids)
+            family_count = len({providers.EPG_FAMILY.get(source, source) for source in source_ids})
+            if family_count < len(source_ids):
+                sources += " · %d guides share %d upstream %s" % (
+                    len(source_ids), family_count, "source" if family_count == 1 else "sources")
             basis = {"epg_title_teams": "Fixture title", "epg_f1_session": "F1 session",
                      "epg_tournament_session": "Named event or session"}.get(candidate.get("match_basis"))
             items.append("<li>%s · %s<br><small>Guide start %s · %s%s</small></li>" %

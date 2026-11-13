@@ -96,6 +96,24 @@ class CandidateIndexTests(unittest.TestCase):
         result = linking.broadcast_candidates([mens, womens, unknown], {"farleyflex": guide([row])}, BASE)
         self.assertEqual(set(result), {"womens"})
 
+    def test_reports_guide_gaps_without_promoting_an_unmapped_listing(self):
+        row = programme(BASE - timedelta(minutes=15), BASE + timedelta(hours=2))
+        unknown = dict(row, channel_id="unknown-channel")
+        cases = [
+            ({}, "no_guide_data"),
+            ({"farleyflex": guide([dict(row, start_utc=(BASE - timedelta(days=2)).isoformat(),
+                                      end_utc=(BASE - timedelta(days=2) + timedelta(hours=2)).isoformat())])},
+             "outside_guide_dates"),
+            ({"farleyflex": guide([unknown])}, "matching_channel_unmapped"),
+            ({"farleyflex": guide([dict(unknown, is_repeat=True)])}, "no_recognised_guide_slot"),
+            ({"farleyflex": guide([dict(row, title="Live: Leeds v Hull")])}, "fixture_title_unmatched"),
+        ]
+        for guides, reason in cases:
+            with self.subTest(reason=reason):
+                gaps = {}
+                self.assertEqual(linking.broadcast_candidates([event("e")], iter(guides.items()), BASE, gaps=gaps), {})
+                self.assertEqual(gaps, {"e": reason})
+
     def test_large_guide_avoids_full_cross_product(self):
         # 480 slots over 120 hours, 30 events (old code did ~14,400
         # _matches calls). Every event is given a matching EPG row.

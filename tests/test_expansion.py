@@ -457,7 +457,7 @@ class EngineExpansionTests(unittest.TestCase):
         self.assertFalse(rows["tomorrow"]["broadcast_verified"])
         self.assertEqual(rows["no-title-match"]["broadcast_gap"], "fixture_title_unmatched")
         self.assertEqual(rows["date-only"]["broadcast_gap"], "time_unconfirmed")
-        self.assertEqual(rows["no-slot"]["broadcast_gap"], "no_recognised_guide_slot")
+        self.assertEqual(rows["no-slot"]["broadcast_gap"], "outside_guide_dates")
         self.assertEqual(self.store.snapshot("today")["data"]["count"], 0)
         client = IngressTestClient(self.store, "csrf-test", memory=True)
         with client.open(client.base + "?page=events&guide=1") as response:
@@ -515,6 +515,23 @@ class IngressExpansionTests(unittest.TestCase):
         body = urllib.parse.urlencode(dict(fields, csrf="csrf-test"), doseq=True).encode()
         with self.client.open(urllib.request.Request(self.base, body, method="POST"), timeout=3) as response:
             return response.read().decode()
+
+    def test_channel_details_show_shared_guide_family_and_retry_time(self):
+        now = datetime.now(timezone.utc)
+        self.store.configure({"epg": {"epgshare_uk": True}, "sports": {"api_sports": True}})
+        self.store._put("sports_backoff:api_sports", (now + timedelta(hours=2)).isoformat())
+        for _ in range(providers.EPG_DAILY_REQUEST_LIMIT):
+            self.store.increment("epg:epgshare_uk", providers.EPG_DAILY_REQUEST_LIMIT)
+        self.store.save_snapshot("sports", {"events": [taxonomy.classify(ev(
+            title="Guide match", broadcast_candidates=[{
+                "canonical_channel_id": "gb.sky.sports.main_event", "channel_name": "Sky Sports Main Event",
+                "programme_start_utc": NOW.isoformat(), "epg_sources": ["epgshare_uk", "epgshare_ie"],
+            }]
+        ))]})
+        self.assertIn("2 guides share 1 upstream source", self.get("?page=events"))
+        health = self.get("?page=health")
+        self.assertIn("Retry after", health)
+        self.assertIn(f"{providers.EPG_DAILY_REQUEST_LIMIT} / {providers.EPG_DAILY_REQUEST_LIMIT}", health)
 
     def test_shared_api_sports_key_and_source_options(self):
         self.post({"action": "sports", "provider": "api_sports_rugby", "enabled": "on", "key": "shared-secret"})

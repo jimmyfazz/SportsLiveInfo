@@ -10,6 +10,7 @@
 - Match guide listings for upcoming events and show channel, region, guide start time and source. Add optional Open Boxing world title bout dates.
 - Add the official British racing meeting calendar, per-source contribution counts and retry times in Diagnostics.
 - Match named live tournament listings in golf, snooker, cycling, darts, athletics and horse racing, with checks for rounds, stages and variants.
+- Explain missing guide data, dates outside guide coverage and matching listings on unmapped channels. Identify guide matches that share an upstream source.
 
 ## 0.3.4 — Collector and dashboard audit integration
 
