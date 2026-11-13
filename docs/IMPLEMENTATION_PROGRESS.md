@@ -7,6 +7,12 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## Collection consistency and EPG matching — 13 November 2026
+
+Baseline: private PR #10 commit `b963f66e5e37c2d08a934df2a42abc4c580d64eb`. SQLite commits the sports, today and EPG dashboard snapshots together. Guide data and its quality report also commit together. A failed combined write leaves the previous dashboard available and records a collector failure. This requires no database migration.
+
+EPG matching parses each fixture time once, skips expired programmes using an end-time index and retains source order for representative matches. Python 3.12.14 compiled the package and passed 98 tests, including a forced SQLite rollback and programme boundary tests. A synthetic run with 457 fixtures and 8,000 programme rows produced identical candidates for 443 fixtures. Runtime was 5.782 seconds before and 1.508 seconds after on this runner. HAOS runtime and live coverage are still unmeasured for this revision. Source rights and the public feed contract are unchanged. Rollback uses the prior App build and existing SQLite schema.
+
 ## v0.3.1 dashboard maintenance — 12 November 2026
 
 Baseline: private main `56ea1bee0611d1343f4a05f2d7983e146f415606`. The live v0.3.0 HAOS snapshot showed 1,223 sports events and eight EPG guides. This maintenance build fixes the fallback labels, zero rendering and misleading full-coverage rows using existing snapshots. It adds no provider requests, licence changes, schema changes or storage migrations.

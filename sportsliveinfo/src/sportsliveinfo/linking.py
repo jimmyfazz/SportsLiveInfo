@@ -7,6 +7,7 @@ title/sub-title contains both teams. They never set broadcast_verified,
 because guide upstream lineage is not yet proven independent.
 """
 import re
+from bisect import bisect_left
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -194,10 +195,7 @@ def _programme_index(epg_guides, window_start, window_end):
 
 
 def _matches(event, row):
-    start = _dt(event["start_utc"])
-    p_start, p_end, words, text = row[0], row[1], row[2], row[3]
-    if not (p_start <= start + timedelta(minutes=20) and p_end >= start + timedelta(minutes=30)):
-        return False
+    words, text = row[2], row[3]
     if event.get("sport") == "motorsport":
         if not re.search(r"\b(f1|formula 1|formula one|grand prix)\b", text):
             return False
@@ -211,12 +209,21 @@ def broadcast_candidates(events, epg_guides, now):
     events = [event for event in events if event.get("start_precision") not in UNCONFIRMED_START_PRECISIONS]
     if not events or not epg_guides:
         return {}
-    starts = [_dt(e["start_utc"]) for e in events]
-    index = _programme_index(epg_guides, min(starts) - timedelta(hours=1), max(starts) + timedelta(hours=1))
+    starts = [_dt(event["start_utc"]) for event in events]
+    # A programme starting earlier can still cover kickoff. Index by its end
+    # so long programmes remain eligible without rescanning expired rows.
+    rows = _programme_index(epg_guides, min(starts), max(starts) + timedelta(minutes=21))
+    by_end = sorted(enumerate(rows), key=lambda item: item[1][1])
+    ends = [row[1] for _, row in by_end]
     result = {}
-    for event in events:
+    for event, start in zip(events, starts):
         found = {}
-        for row in index:
+        earliest_end = start + timedelta(minutes=30)
+        latest_start = start + timedelta(minutes=20)
+        first = bisect_left(ends, earliest_end)
+        # Keep source order when choosing the representative channel name
+        # and programme times for a service reported by multiple guides.
+        for _, row in sorted(item for item in by_end[first:] if item[1][0] <= latest_start):
             if not _matches(event, row):
                 continue
             canonical = row[5]

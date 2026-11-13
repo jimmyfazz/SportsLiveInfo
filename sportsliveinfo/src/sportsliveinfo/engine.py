@@ -111,7 +111,12 @@ class Engine:
             self.store.job("collector", state, "%d of %d enabled sources refreshed; last-good retained" %
                            (successes, attempted))
             return False
-        self._materialize()
+        try:
+            self._materialize()
+        except Exception as exc:
+            LOGGER.error("Combined snapshot update failed (%s)", type(exc).__name__)
+            self.store.job("collector", "failed", "Combined snapshot update failed; previous dashboard retained")
+            return False
         state = "finished" if successes == attempted else "degraded"
         self.store.job("collector", state, "%d of %d sources refreshed; older last-good retained as needed" %
                        (successes, attempted))
@@ -350,8 +355,7 @@ class Engine:
                     self.store.job(name, "coverage_collapse",
                                    "New guide lost over 75% of forward programme records; keeping last-good")
                     return False
-            self.store.save_snapshot("epg:" + name, parsed)
-            self.store.save_snapshot("epg-quality:" + name, quality)
+            self.store.save_snapshots({"epg:" + name: parsed, "epg-quality:" + name: quality})
             self.store.job(name, "ok", "%d channels; %d programmes; %d invalid; %d with 24h guide; %d recognised services" % (
                 len(parsed["channels"]), len(parsed["programmes"]), parsed["invalid_programmes"],
                 quality["full_coverage_channels"]["24h"], len(quality["matched_canonical_channels"])))
@@ -407,11 +411,14 @@ class Engine:
             if linked:
                 event["broadcast_status"] = linked["broadcast_status"]
                 event["broadcast_candidates"] = linked["broadcast_candidates"]
-        self.store.save_snapshot("sports", {"schema_version": "0.3", "events": eligible, "sources": sources,
-                                            "generated_at": utcnow(), "broadcast_status": "not_verified"})
-        self.store.save_snapshot("today", today)
-        self.store.save_snapshot("epg", {"schema_version": "0.3", "generated_at": utcnow(), "sources": guides,
-                                         "note": "Private source-specific schedules; publication rights not cleared"})
+        generated_at = now.isoformat(timespec="seconds")
+        self.store.save_snapshots({
+            "sports": {"schema_version": "0.3", "events": eligible, "sources": sources,
+                       "generated_at": generated_at, "broadcast_status": "not_verified"},
+            "today": today,
+            "epg": {"schema_version": "0.3", "generated_at": generated_at, "sources": guides,
+                    "note": "Private source-specific schedules; publication rights not cleared"},
+        })
 
     def test_source(self, kind, name):
         """Probe exactly one provider request; reserve one unit in its quota ledger.

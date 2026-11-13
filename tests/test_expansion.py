@@ -1,5 +1,6 @@
 """v0.3 source expansion, sports taxonomy, fusion, today view and broadcast candidates."""
 import json
+import sqlite3
 import tempfile
 import unittest
 import urllib.parse
@@ -265,6 +266,20 @@ class TodayAndBroadcastTests(unittest.TestCase):
             self.assertEqual(linking.broadcast_candidates([event], {"farleyflex": guide}, NOW), {})
             self.assertEqual(linking.live_state(event, NOW), "time_tbc")
 
+    def test_candidate_time_boundaries_and_source_order(self):
+        first = _guide("farleyflex", "skysportsmainevent.uk", "First name", [
+            dict(self.ko, start_utc="2026-11-14T12:00:00+00:00",
+                 end_utc="2026-11-14T18:00:00+00:00", title="Arsenal v Manchester City")])
+        second = _guide("mjh_sky_uk", "x", "Sky Sports Main Event", [
+            dict(self.ko, start_utc="2026-11-14T15:20:00+00:00",
+                 end_utc="2026-11-14T15:30:00+00:00", title="Arsenal v Manchester City")])
+        status, candidates = linking.broadcast_candidates(
+            [self.match], {"farleyflex": first, "mjh_sky_uk": second}, NOW)["m1"]
+        self.assertEqual(status, "multi_guide_match")
+        self.assertEqual(candidates[0]["channel_name"], "First name")
+        second["programmes"][0]["end_utc"] = "2026-11-14T15:29:59+00:00"
+        self.assertEqual(linking.broadcast_candidates([self.match], {"mjh_sky_uk": second}, NOW), {})
+
     def test_hard_negatives_highlights_repeats_wrong_team_and_unknown_channel(self):
         guides = {
             "farleyflex": _guide("farleyflex", "skysportsmainevent.uk", "Sky Sports Main Event", [
@@ -351,6 +366,27 @@ class EngineExpansionTests(unittest.TestCase):
         self.assertEqual(len(snap["scopes_ok"]), 2)
         self.assertEqual(len(snap["scopes_failed"]), 4)
 
+    def test_snapshot_batch_rolls_back_if_second_write_fails(self):
+        self.store.save_snapshot("sports", {"events": ["previous"]})
+        with sqlite3.connect(self.store.path) as db:
+            db.execute("""CREATE TRIGGER fail_today BEFORE INSERT ON snapshots
+                          WHEN NEW.product = 'today' BEGIN SELECT RAISE(ABORT, 'test failure'); END""")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.save_snapshots({"sports": {"events": ["new"]}, "today": {}})
+        self.assertEqual(self.store.snapshot("sports")["data"], {"events": ["previous"]})
+        self.assertIsNone(self.store.snapshot("today"))
+
+    def test_collection_reports_failed_combined_snapshot(self):
+        self.store.configure({"setup_complete": True})
+        engine = Engine(self.store)
+        with patch.object(engine, "_collect_sport", return_value=True), patch.object(
+                engine, "_materialize", side_effect=RuntimeError("sensitive test input")):
+            self.assertFalse(engine.collect())
+        job = self.store.recent_jobs(1, provider="collector")[0]
+        self.assertEqual(job["state"], "failed")
+        self.assertIn("previous dashboard retained", job["details"])
+        self.assertNotIn("sensitive test input", job["details"])
+
     def test_materialize_writes_classified_deduplicated_today_snapshot(self):
         self.store.configure({"setup_complete": True, "sports": {"football_data": True, "api_sports": True}, "epg": {"farleyflex": True}})
         self.store.save_snapshot("sports:football_data", {"events": [ev(id="football-data:1", source_id="football_data", competition="Premier League",
@@ -362,7 +398,10 @@ class EngineExpansionTests(unittest.TestCase):
         self.store.save_snapshot("epg:farleyflex", _guide("farleyflex", "tntsports1.uk", "TNT Sports 1", [
             {"start_utc": "2026-11-14T14:00:00+00:00", "end_utc": "2026-11-14T17:00:00+00:00", "title": "Arsenal v Manchester City"}]))
         Engine(self.store)._materialize(now=NOW)
-        today = self.store.snapshot("today")["data"]
+        snapshots = [self.store.snapshot(name) for name in ("sports", "today", "epg")]
+        self.assertEqual(len({snapshot["updated_at"] for snapshot in snapshots}), 1)
+        self.assertEqual({snapshot["data"]["generated_at"] for snapshot in snapshots}, {NOW.isoformat()})
+        today = snapshots[1]["data"]
         football = today["sports"][0]
         self.assertEqual([c["id"] for c in football["categories"]], ["football.premier_league", "football.fa_cup"])
         pl = football["categories"][0]["events"][0]

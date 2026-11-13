@@ -140,9 +140,16 @@ class Store:
             return {"updated_at": row[0], "data": json.loads(row[1])} if row else None
 
     def save_snapshot(self, product, data):
-        encoded = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        self.save_snapshots({product: data})
+
+    def save_snapshots(self, products):
+        """Commit related products together using one refresh timestamp."""
+        updated_at = utcnow()
+        rows = [(product, updated_at, json.dumps(data, ensure_ascii=False, separators=(",", ":")))
+                for product, data in products.items()]
         with self._lock, self._db() as db:
-            db.execute("INSERT INTO snapshots(product,updated_at,data) VALUES(?,?,?) ON CONFLICT(product) DO UPDATE SET updated_at=excluded.updated_at,data=excluded.data", (product, utcnow(), encoded))
+            db.executemany("INSERT INTO snapshots(product,updated_at,data) VALUES(?,?,?) "
+                           "ON CONFLICT(product) DO UPDATE SET updated_at=excluded.updated_at,data=excluded.data", rows)
             db.commit()
 
     def job(self, provider, state, details=""):
