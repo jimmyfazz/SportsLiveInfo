@@ -132,8 +132,9 @@ SOURCE_NOTES = {
     "thesportsdb": "Free public key 123: soccer, rugby, cricket, motorsport, fighting, golf, darts, snooker and more. Free-tier coverage is partial.",
     "cricketdata": "Free lifetime plan 100 hits/day. Key travels in the query string (provider requirement); never logged.",
 }
-THESPORTSDB_SPORTS = ["Soccer", "Rugby", "Cricket", "Motorsport", "Fighting", "Golf", "Darts", "Snooker",
+THESPORTSDB_DEFAULT_SPORTS = ["Soccer", "Rugby", "Cricket", "Motorsport", "Fighting", "Golf", "Darts", "Snooker",
                       "Tennis", "Ice Hockey", "Basketball", "American Football", "Cycling", "Horse Racing"]
+THESPORTSDB_SPORTS = THESPORTSDB_DEFAULT_SPORTS + ["Athletics", "Bowling", "eSports", "Boxing"]
 OPENLIGADB_DEFAULT_LEAGUES = ("bl1", "bl2", "bl3")
 OPENLIGADB_LEAGUES = {
     "bl1": ("Bundesliga", "Germany"),
@@ -580,10 +581,15 @@ def thesportsdb_events(data):
             home, away = row.get("strHomeTeam"), row.get("strAwayTeam")
             participants = [p for p in (home, away) if p]
             raw_status = "postponed" if str(row.get("strPostponed", "")).lower() == "yes" else row.get("strStatus") or ""
-            events.append({"id": "thesportsdb:%s" % row["idEvent"], "sport": row.get("strSport") or "other",
-                           "competition": row.get("strLeague") or "", "competition_country": row.get("strCountry") or "",
+            sport = row.get("strSport") or "other"
+            league = row.get("strLeague") or ""
+            title = row.get("strEvent") or " v ".join(participants)
+            if sport.casefold() == "fighting" and re.search(r"\bboxing\b", f"{league} {title}", re.I):
+                sport = "boxing"
+            events.append({"id": "thesportsdb:%s" % row["idEvent"], "sport": sport,
+                           "competition": league, "competition_country": row.get("strCountry") or "",
                            "event_type": "match" if len(participants) == 2 else "event",
-                           "title": row.get("strEvent") or (" v ".join(participants)), "participants": participants,
+                           "title": title, "participants": participants,
                            "start_utc": when.astimezone(timezone.utc).isoformat(timespec="seconds"), "start_precision": precision,
                            "time_basis": "provider_declared_utc",
                            "status": raw_status, "status_normalized": status_of(raw_status),

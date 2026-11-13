@@ -182,7 +182,7 @@ class Engine:
                 plan.append(dict(url=base + "?" + query, headers={"x-apisports-key": key}, scope=day.isoformat(),
                                  decode=decode, max_bytes=7_000_000))
         elif name == "thesportsdb":
-            chosen = [s for s in options.get("thesportsdb_sports", providers.THESPORTSDB_SPORTS) if s in providers.THESPORTSDB_SPORTS]
+            chosen = [s for s in options.get("thesportsdb_sports", providers.THESPORTSDB_DEFAULT_SPORTS) if s in providers.THESPORTSDB_SPORTS]
             for day in self._days(name, previous, today):
                 for sport in chosen:
                     query = urllib.parse.urlencode({"d": day.isoformat(), "s": sport})

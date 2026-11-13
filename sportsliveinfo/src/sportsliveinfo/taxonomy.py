@@ -27,6 +27,8 @@ SPORTS = {
     "horse_racing": ("Horse racing", 300, 46),
     "cycling": ("Cycling", 300, 48),
     "athletics": ("Athletics", 180, 50),
+    "bowling": ("Bowling", 180, 52),
+    "esports": ("Esports", 180, 54),
     "basketball": ("Basketball", 150, 55),
     "american_football": ("American football", 210, 56),
     "ice_hockey": ("Ice hockey", 160, 57),
@@ -47,6 +49,8 @@ SPORT_ALIASES = {
     "boxing": "boxing", "mma": "mma", "fighting": "mma",
     "golf": "golf", "darts": "darts", "snooker": "snooker",
     "horse racing": "horse_racing", "racing": "horse_racing", "cycling": "cycling", "athletics": "athletics",
+    "tenpin bowling": "bowling", "ten pin bowling": "bowling", "e sports": "esports",
+    "track and field": "athletics", "motorcycle racing": "motorsport",
     "basketball": "basketball", "american football": "american_football", "nfl": "american_football",
     "ice hockey": "ice_hockey", "hockey": "ice_hockey", "baseball": "baseball",
     "handball": "handball", "volleyball": "volleyball", "australian football": "aussie_rules",
@@ -193,6 +197,9 @@ COMPETITIONS = {
     "motorsport": [
         C("motorsport.f1", "Formula 1", 1, ["formula 1", "f1", "formula one", "fia formula one world championship"], None),
         C("motorsport.motogp", "MotoGP", 2, ["motogp", "moto gp"], None),
+        C("motorsport.moto2_moto3", "Moto2 / Moto3", 3, ["moto2", "moto3", "moto 2", "moto 3"], None),
+        C("motorsport.superbikes", "Superbike racing", 3,
+          ["world superbike", "world superbikes", "worldsbk", "british superbikes", "british superbike championship"], None),
         C("motorsport.formula_e", "Formula E", 3, ["formula e", "abb fia formula e"], None),
         C("motorsport.wec", "World Endurance Championship", 4, ["wec", "world endurance championship", "24 hours of le mans"], None),
         C("motorsport.indycar", "IndyCar", 5, ["indycar", "indycar series"], None),
@@ -202,6 +209,8 @@ COMPETITIONS = {
         C("motorsport.nascar", "NASCAR", 8, [], None, prefixes=["nascar"]),
     ],
     "boxing": [
+        C("boxing.ppv", "Boxing pay-per-view", 0, ["boxing ppv", "boxing box office"], None),
+        C("boxing.premium", "Premium boxing", 1, ["premium boxing"], None),
         C("boxing.world_title", "World title fights", 1, [], None, prefixes=["world title", "wbc", "wba", "ibf", "wbo", "undisputed"]),
         C("boxing.british_title", "British & European titles", 2, [], None, prefixes=["british title", "european title", "commonwealth title"]),
     ],
@@ -237,6 +246,17 @@ COMPETITIONS = {
     ],
     "cycling": [
         C("cycling.grand_tours", "Grand Tours", 1, ["tour de france", "giro d italia", "vuelta a espana", "la vuelta"], None),
+    ],
+    "athletics": [
+        C("athletics.diamond_league", "Diamond League", 1, ["diamond league", "wanda diamond league"], None),
+        C("athletics.world_championships", "World Athletics Championships", 1, ["world athletics championships"], None),
+        C("athletics.road_races", "World Athletics road races", 2, [], None, prefixes=["world athletics road races"]),
+    ],
+    "bowling": [
+        C("bowling.pba", "PBA Tour", 1, ["pba", "pba tour", "professional bowlers association"], None),
+    ],
+    "esports": [
+        C("esports.blast_premier", "BLAST Premier", 1, ["blast premier"], None),
     ],
     "basketball": [
         C("basketball.nba", "NBA", 1, ["nba"], ("usa", "")),
@@ -369,6 +389,12 @@ def classify(event):
     extra_tags = set()
     if sport in ("boxing", "mma") and _PPV.search(norm(" ".join(str(event.get(k) or "") for k in ("title", "competition", "event_type")))):
         extra_tags.add("ppv")
+    if sport == "boxing":
+        description = norm(" ".join(str(event.get(k) or "") for k in ("title", "competition", "event_type")))
+        if "ppv" in extra_tags or "ppv" in event.get("tags", []):
+            category = ("boxing.ppv", "Boxing pay-per-view", 0)
+        elif re.search(r"\bpremium\b", description):
+            category = ("boxing.premium", "Premium boxing", 1)
     national = NATIONAL_CATEGORIES.get(sport, {})
     international_context = sport != "football" or category[0] in _INTERNATIONAL_FOOTBALL
     for nation in nations:
