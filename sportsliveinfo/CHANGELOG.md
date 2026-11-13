@@ -2,6 +2,14 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.7 — Channel identity across guides
+
+- New channel identity graph. After each guide refresh, channels in different guides that show the same programmes at the same times, and whose names agree apart from decoration (HD, TV, country prefixes), are linked as one service. B1G can then use another guide's data for a provider channel whose guide ID comes from a different guide family.
+- +1 and +2 channels are detected from schedules shifted by exactly 60 or 120 minutes and published as timeshift links to their base channel.
+- Never merged: +1/+2, Sports+/plus, channel numbers, UK regions (including ROI and Channel Islands) and language feeds. Different names with identical schedules (rebrands, aliases, sister channels) are listed for owner review on the EPG coverage page and are not published.
+- New optional feed asset `identity` (`sli.identity/1`, capability `channel_identity`); feed format `sli/1.1`. Old readers ignore it. Only channel ids, names and timeshift relations are published; programme data never leaves Home Assistant.
+- Tested on three real UK guides (922 channels, 159,514 programmes). 181 services were linked across 402 guide channels and 59 timeshifts were found, with no false merges after manual review. 26 pairs were held back for owner review.
+
 ## 0.3.6 — Reliable publishing feedback
 
 - Publish feed now runs in the background. The Publishing page shows progress, refreshes itself and reports the result. Previously the request blocked for 15–25 s with no feedback, repeated clicks queued, and a failure reason was lost when the browser stopped waiting.

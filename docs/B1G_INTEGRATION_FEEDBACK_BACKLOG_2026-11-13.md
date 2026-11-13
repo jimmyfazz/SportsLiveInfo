@@ -21,6 +21,13 @@
 
 ## 2. Producer backlog (priority order)
 
+0. **ID-1: channel identity graph. DONE in 0.3.7.**
+   - Schedule-fingerprint linking across guides, with identity-token guards, timeshift detection and an owner review list.
+   - Optional `identity` asset, `sli/1.1`.
+   - Validated on three real UK guides; see the B1 review §4.8.
+   - **Next:** ID-2 accepts fingerprints in the B1G feedback import (review §4.8.3 I5). ID-3 adds the labelled benchmark and a precision gate (I6). ID-4 adds owner accept/reject actions for the review list, which feed `channels`.
+
+
 1. **FEED-T1: tiered event assets.**
    - Publish `events-core:<day>` alongside the current `events:<day>`, which becomes the "all" tier.
    - **Core** holds featured events; `category_priority` ≤ 50; competitions in the B1G household preferences when imported (§3); and events any imported B1G link evidence shows as watchable.

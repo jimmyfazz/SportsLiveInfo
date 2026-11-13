@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 from . import __version__, providers, taxonomy
 from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, SERVICES, SOURCE_ID_CROSSWALK
 
-FORMAT_MAJOR, FORMAT_MINOR = 1, 0
+FORMAT_MAJOR, FORMAT_MINOR = 1, 1  # 1.1: optional `identity` asset (channel_identity)
 ROOT = "v1"
 LONDON = ZoneInfo("Europe/London")
 
@@ -154,6 +154,18 @@ def channels_document():
     }
 
 
+def identity_document(store):
+    """Published channel identity graph: ids, names and timeshift relations only (never programme data)."""
+    snapshot = store.snapshot("channel-identity")
+    document = (snapshot or {}).get("data", {}).get("document") if snapshot else None
+    if not isinstance(document, dict) or not document.get("channels"):
+        return None
+    used = sorted({m["source_id"] for c in document["channels"] for m in c["members"]}
+                  | {t["source_id"] for t in document.get("timeshifts", [])})
+    return dict(document, sources=[{"source_id": s, "source_url": providers.EPG[s][1]}
+                                   for s in used if s in providers.EPG])
+
+
 def _event_public(event):
     row = {k: event[k] for k in EVENT_FIELDS if k in event and event[k] not in (None, "", [])}
     # A cached event must not become a "verified broadcaster" merely
@@ -218,6 +230,9 @@ def build_feed(store, now=None, previous_revision=None):
 
     add("taxonomy", taxonomy_document(), "sli.taxonomy/1", True)
     add("channels", channels_document(), "sli.channels/1", True)
+    identity_doc = identity_document(store)
+    if identity_doc:
+        add("identity", identity_doc, "sli.identity/1", False)
     for day in window:
         rows = sorted(by_day.get(day, []), key=lambda e: (e["start_utc"], e["id"]))
         add("events:" + day, {"schema": "sli.events-day/1", "date": day, "timezone": "Europe/London", "events": rows},
@@ -265,6 +280,7 @@ def build_feed(store, now=None, previous_revision=None):
                     "expires_at": (now + timedelta(hours=48)).isoformat(timespec="seconds")},
         "capabilities": ["taxonomy", "channel_registry", "channel_families", "guide_catalogue", "events_by_day",
                          "today", "source_health", "fixture_corroboration"]
+                        + (["channel_identity"] if identity_doc else [])
                         + (["verified_broadcasts"] if any(e["broadcast_verified"] for e in events) else []),
         "assets": assets,
         "coverage": {"events": len(events), "today": len(todays), "by_sport": dict(sorted(by_sport.items())),

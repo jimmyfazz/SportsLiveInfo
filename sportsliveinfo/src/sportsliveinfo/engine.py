@@ -19,7 +19,7 @@ from functools import partial
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import feed, linking, providers, taxonomy
+from . import feed, identity, linking, providers, taxonomy
 from .storage import utcnow
 from .guide import analyze_guide
 
@@ -178,18 +178,26 @@ class Engine:
         deferrals = 0
         with ThreadPoolExecutor(max_workers=max(1, min(6, len(sports) + 1)), thread_name_prefix="sli-lane") as pool:
             futures = [pool.submit(self._collect_sport, name, conf) for name in sports]
+            epg_future = None
             if guides:
                 collect_epg = partial(self._collect_epg, scheduled=True) if scheduled else self._collect_epg
-                futures.append(pool.submit(lambda: [collect_epg(name) for name in guides]))
+                epg_future = pool.submit(lambda: [collect_epg(name) for name in guides])
+                futures.append(epg_future)
+            guides_refreshed = 0
             for future in futures:
                 try:
                     result = future.result()
+                    if future is epg_future:
+                        guides_refreshed = sum(item is True for item in result)
                     results = result if isinstance(result, list) else [result]
                     successes += sum(bool(item) for item in results)
                     deferrals += sum(item is None for item in results)
                 except Exception as exc:  # A crashed lane must not mask missing data.
                     LOGGER.error("Collector lane failed (%s)", type(exc).__name__)
                     self.store.job("collector", "lane_error", type(exc).__name__)
+        if guides_refreshed:
+            # Only when at least one guide changed; an all-failed run keeps the previous identity graph.
+            self._refresh_identity([n for n, on in conf["epg"].items() if on and n in providers.EPG])
         attempted = len(sports) + len(guides)
         if attempted and deferrals == attempted:
             self.store.job("collector", "deferred", f"{label}: all {attempted} sources deferred; last-good retained")
@@ -522,6 +530,21 @@ class Engine:
         if limit < daily_limit and self.store.usage().get(provider, 0) < daily_limit:
             raise QuotaExhausted("Remaining guide requests reserved for scheduled refreshes")
         raise QuotaExhausted("Local daily guide request budget exhausted; resets at 00:00 UTC")
+
+    def _refresh_identity(self, names):
+        """Link channels across stored guides by schedule (private); never breaks a collection."""
+        try:
+            document, report = identity.build_from_store(self.store, names)
+            self.store.save_snapshot("channel-identity", {"document": document, "report": report})
+            stats = report["stats"]
+            self.store.job("identity", "ok", "%d services linked across %d guides (%d guide channels); "
+                           "%d timeshifts; %d pairs for owner review" % (
+                               stats["clusters"], stats["guides"], stats["linked_channels"],
+                               stats["timeshifts"], stats["suggestions"]))
+        except Exception as exc:
+            LOGGER.exception("Channel identity refresh failed")
+            self.store.job("identity", "failed", "Channel identity not refreshed (%s); previous result kept"
+                           % type(exc).__name__)
 
     def _collect_epg(self, name, *, scheduled=False):
         _, url = providers.EPG[name]

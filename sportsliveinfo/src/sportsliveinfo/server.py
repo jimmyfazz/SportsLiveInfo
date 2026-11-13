@@ -792,6 +792,45 @@ class UI(BaseHTTPRequestHandler):
             body += '<p>No events match this filter.</p>'
         return body + '</section>'
 
+    def _identity_card(self):
+        """Schedule-based channel identity across guides: results and the owner review queue."""
+        snapshot = self.store.snapshot("channel-identity")
+        if not snapshot:
+            return ('<section class="card" style="margin-bottom:14px"><h3>Channel identity across guides</h3>'
+                    '<p class="help">Built after the next EPG refresh. Channels that show the same programmes at the '
+                    'same times in different guides are linked, so B1G can use another guide\'s data for the same channel.</p></section>')
+        report = snapshot["data"].get("report", {})
+        document = snapshot["data"].get("document", {})
+        stats = report.get("stats", {})
+        body = ('<section class="card" style="margin-bottom:14px"><h3>Channel identity across guides</h3>'
+                '<p class="sub">Updated %s · %s guides · %s channels compared · <strong>%s services linked</strong> '
+                '(%s guide channels) · %s timeshift (+1/+2) links · %s pairs for review</p>') % (
+            e(when(snapshot.get("updated_at"))), e(stats.get("guides", 0)), e(stats.get("channels_fingerprinted", 0)),
+            e(stats.get("clusters", 0)), e(stats.get("linked_channels", 0)), e(stats.get("timeshifts", 0)),
+            e(stats.get("suggestions", 0)))
+        body += ('<p class="help">Linked only when names agree apart from decoration (HD, TV, prefixes) and schedules '
+                 'agree; +1, Sports+, numbers, regions and languages are never merged. Only channel ids and names are '
+                 'published (asset <code>identity</code>); programme data never leaves Home Assistant.</p>')
+        linked = [c for c in document.get("channels", []) if len(c.get("members", [])) > 1]
+        if linked:
+            body += '<details><summary>Linked services (%d)</summary><table><tr><th>Service</th><th>Names in guides</th><th>Guides</th></tr>' % len(linked)
+            for c in linked[:150]:
+                body += '<tr><td><code>%s</code></td><td>%s</td><td>%s</td></tr>' % (
+                    e(c["id"]), e(" / ".join(c.get("names", []))),
+                    e(", ".join(sorted({m["source_id"] for m in c["members"]}))))
+            body += '</table></details>'
+        suggestions = report.get("suggestions", [])
+        if suggestions:
+            body += ('<details><summary>Needs your review (%d)</summary><p class="help">Same schedules, different names: '
+                     'rebrands, aliases or sister channels. These are <strong>not</strong> linked automatically.</p>'
+                     '<table><tr><th>Guide channel</th><th>Guide channel</th><th>Schedule agreement</th></tr>') % len(suggestions)
+            for row in suggestions[:60]:
+                body += '<tr><td>%s <small>(%s)</small></td><td>%s <small>(%s)</small></td><td>%d%%</td></tr>' % (
+                    e(row.get("a_name")), e((row.get("a") or ["?"])[0]), e(row.get("b_name")),
+                    e((row.get("b") or ["?"])[0]), round(100 * float(row.get("schedule_agreement", 0))))
+            body += '</table></details>'
+        return body + '</section>'
+
     def guide(self):
         body = '<h2>International EPG coverage</h2><p>Private guide analysis: distinguish a real 24-hour programme schedule from a feed that merely responds successfully. Canonical IDs are conservative hints; actual IPTV stream mapping remains local to B1G.</p>'
         epg = (self.store.snapshot("epg") or {}).get("data", {})
@@ -807,6 +846,7 @@ class UI(BaseHTTPRequestHandler):
                     e(providers.EPG.get(name, (name,))[0]), e(f"{hours:.0f} h" if isinstance(hours, (int, float)) else "Unknown"),
                     e(row["window_matches"]), e(row["exclusive_matches"]))
             body += '</table></section>'
+        body += self._identity_card()
         any_source = False
         for name, (label, _) in providers.EPG.items():
             snapshot = self.store.snapshot("epg-quality:" + name)

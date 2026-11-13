@@ -33,6 +33,7 @@ v1/assets/<kind>/<sha256[:24]>.json   immutable, content-addressed assets
 | `events:YYYY-MM-DD` ×8 | `sli.events-day/1` | today yes, others no | De-duplicated, classified events for each Europe/London day (today + 7), field whitelist |
 | `today` | `sli.today/1` | yes | Default grouping (sport → competition → event ids) and featured ids for today |
 | `health` | `sli.health/1` | no | Source states and guide coverage per family, measured on the HA host |
+| `identity` (since 1.1, capability `channel_identity`) | `sli.identity/1` | no | **Channel identity graph.** Guide channels linked across guides because they show the same programmes at the same times and their names agree apart from decoration. Members `{source_id, channel_id}` per service; `timeshifts` (+1/+2 channels with their base channel); `sources` with guide URLs. Channel ids and names only, never programme data. Generated `<mk>.auto.*` ids are join keys valid within one revision; curated ids are stable |
 
 JSON is UTF-8, compact, keys sorted. The SHA-256 in the manifest covers the exact bytes.
 
@@ -60,6 +61,16 @@ JSON is UTF-8, compact, keys sorted. The SHA-256 in the manifest covers the exac
 | Removing or renaming a field, or changing meaning or units | **major +1** | Old readers keep the last good feed and show "update B1G"; publish v1 and v2 in parallel during migration |
 
 SportsLiveInfo **must not** make a breaking change inside `v1/`. A future `v2/` lives beside `v1/` until all TVs are updated.
+
+### 4.1 Using the identity graph (B1G reader)
+
+The identity graph lets a provider tvg-id from one guide family use another guide's rows for the same channel:
+1. Precedence is unchanged: user manual mapping, then the provider tvg-id in the source being read, then `channels.source_crosswalk`.
+2. **New step after these:** if the provider tvg-id (or the curated id resolved for the channel) is a member `channel_id` of an `identity.channels[]` entry, any other member in a loaded guide may supply rows. The reader picks the member whose guide has rows in the window, in the user's source order.
+3. `timeshifts[]`: a channel listed here may show its `base` channel's rows shifted by `offset_minutes`, labelled as timeshifted. Never the reverse.
+4. Never use a generated `*.auto.*` id as a stored key, because it may change between revisions. Store the provider tvg-id and source instead.
+
+The merge rules are published inside the asset (`rules`): identity tokens (+1/+2, plus/Sports+, numbers, regions including ROI and Channel Islands, languages) must be equal, names must agree apart from decoration, and schedules must agree for at least 50 % of comparable slots. Pairs whose schedules agree but whose names differ are **never** published; they wait for owner review in the Home Assistant app.
 
 ## 5. Rights and privacy (unchanged laws)
 
