@@ -538,9 +538,12 @@ class IngressExpansionTests(unittest.TestCase):
         for _ in range(36):
             self.store.job("farleyflex", "test_ok")
         page = self.get("?page=dashboard")
-        self.assertIn("Latest collection activity: <strong>Degraded</strong>", page)
+        self.assertIn("Partial refresh</strong>", page)
         self.assertIn("8 of 19 sources refreshed", page)
-        self.assertIn("live or probably live at refresh", page)
+        self.assertIn("Refresh sports for today", page)
+        self.assertIn('aria-current="page"', page)
+        self.assertIn("<summary>More</summary>", page)
+        self.assertLess(page.index("Collection status"), page.index("Events today"))
 
     def test_epg_diagnostics_report_safe_failure_reasons(self):
         engine = Engine(self.store)

@@ -54,7 +54,27 @@ form{margin:0 0 15px}.help{font-size:12px;color:#94adbf}.formrow{display:flex;ga
 table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:9px;text-align:left;border-bottom:1px solid #244054;word-break:break-word}th{color:#b8d4e4}
 .alert{padding:13px 16px;border-radius:11px;border-left:4px solid #80dfe3;background:#133043;margin-bottom:20px}.error{border-color:#ffb181;background:#38252b}
 a{color:#7be1eb}small{color:#a0b8cb}.footer{margin-top:30px;color:#829db1;font-size:12px}
-@media(max-width:600px){main{padding:14px}header img{width:48px;height:48px}h1{font-size:22px}.card{padding:14px}}
+.mobile-nav{display:none}
+.dashboard-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}
+.dashboard-metrics a{color:inherit;text-decoration:none;min-width:0;padding:12px}
+.dashboard-metrics .metric{color:#e8f3ff;font-size:26px}
+.collection h2{margin-bottom:6px}.collection p{margin:6px 0}
+.refresh-actions{display:flex;flex-wrap:wrap;gap:8px}.refresh-actions button{margin:0;min-height:44px}
+.collection form{margin:12px 0 0}.source-list summary,.mobile-nav summary{cursor:pointer}
+.source-list summary{padding:10px 0}.source-list details+details{border-top:1px solid #294258}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #85e1eb;outline-offset:3px}
+@media(max-width:600px){
+main{padding:12px}header{gap:10px;margin-bottom:12px}header img{width:42px;height:42px}
+h1{font-size:21px}.card{padding:12px}.desktop-nav{display:none}
+.mobile-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin-bottom:12px}
+.mobile-nav>a,.mobile-nav summary{padding:10px 4px;min-height:44px;display:grid;place-items:center;text-align:center;font-size:13px}
+.mobile-nav summary{border:1px solid #29465b;border-radius:11px;color:#d1e6f5}
+.mobile-nav details[open] summary{background:#123c52}
+.mobile-nav details div{position:absolute;right:12px;z-index:2;display:grid;gap:4px;padding:8px;background:#0d2034;border:1px solid #29465b;border-radius:11px}
+.dashboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+.refresh-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.refresh-actions button:first-child{grid-column:1/-1}
+}
 """
 
 
@@ -257,7 +277,15 @@ class UI(BaseHTTPRequestHandler):
             head += '<div class="alert">First-run setup: configure providers, review refresh times and optionally set a publishing destination. Credentials are stored privately in the Home Assistant App data volume.</div>'
         if notice:
             head += '<div class="alert">%s</div>' % e(notice)
-        head += '<nav>' + ''.join('<a class="%s" href="?page=%s">%s</a>' % ("active" if page == key else "", e(key), e(label)) for key, label in tabs) + '</nav>'
+        def tab(key, label):
+            current = ' class="active" aria-current="page"' if page == key else ""
+            return '<a%s href="?page=%s">%s</a>' % (current, e(key), e(label))
+
+        head += '<nav class="desktop-nav" aria-label="SportsLiveInfo">' + ''.join(tab(*item) for item in tabs) + '</nav>'
+        primary = {"dashboard": "Overview", "today": "Live today", "guide": "Guide"}
+        head += '<nav class="mobile-nav" aria-label="SportsLiveInfo">' + ''.join(tab(*item) for item in primary.items())
+        head += '<details><summary>More</summary><div>' + ''.join(tab(*item) for item in tabs if item[0] not in primary)
+        head += '</div></details></nav>'
         if page == "sources":
             body = self.sources(config)
         elif page == "today":
@@ -285,32 +313,89 @@ class UI(BaseHTTPRequestHandler):
         events = sport["data"]["events"] if sport else []
         sources = epg["data"]["sources"] if epg else []
         day = today["data"] if today else {}
-        candidates = sum(e.get("broadcast_status", "none") != "none" for e in events)
-        result = '<div class="grid">'
-        for title, value, desc in [("Events today", day.get("count", 0), "%s live or probably live at refresh · %s featured (England, home nations, PPV)" % (day.get("live_now", 0), len(day.get("featured", [])))),
-                                    ("Sporting events (8 days)", len(events), "De-duplicated across enabled sources"),
-                                    ("EPG source feeds", len(sources), "Private guide sources with last-good snapshots"),
-                                    ("EPG channel candidates", candidates, "Unverified guide matches; no channel is fabricated from league rights"),
-                                    ("API calls today", sum(self.store.usage().values()), "Local call-budget ledger; UTC day")]:
-            result += '<div class="card"><div class="sub">%s</div><div class="metric">%s</div><div class="help">%s</div></div>' % (e(title), e(value), e(desc))
-        result += '</div><section class="card" style="margin-top:16px"><h2>Collection status</h2>'
-        result += '<p>Sports snapshot: <strong>%s</strong><br>EPG snapshot: <strong>%s</strong></p>' % (e(sport["updated_at"] if sport else "No successful collection yet"), e(epg["updated_at"] if epg else "No successful collection yet"))
+        live = {"live": 0, "live_probable": 0}
+        for group in day.get("sports", []):
+            for category in group["categories"]:
+                for event in category["events"]:
+                    state = event.get("live_state")
+                    if state in live:
+                        live[state] += 1
+
+        result = '<section class="card collection"><h2>Collection status</h2>'
+        result += '<p class="sub">Sports <strong>%s</strong> · EPG <strong>%s</strong></p>' % (
+            e(self._uk_timestamp(sport["updated_at"] if sport else None)),
+            e(self._uk_timestamp(epg["updated_at"] if epg else None)))
         jobs = self.store.recent_jobs(1, provider="collector")
         if jobs:
             job = jobs[0]
-            result += '<p>Latest collection activity: <strong>%s</strong> · %s%s</p>' % (
-                e(job["state"].replace("_", " ").capitalize()), e(job["time"]),
-                " · " + e(job["details"]) if job["details"] else "")
-        result += '<p class="warn">TV broadcaster confirmation is not yet implemented in the live adapters. All unverified sporting events are deliberately non-playable in the planned B1G feed.</p>'
-        result += self._form("collect", '<div class="formrow">'
-                             '<button type="submit" name="scope" value="both">Refresh both engines now</button>'
+            state = {"started": "Refreshing…", "degraded": "Partial refresh", "finished": "Refresh complete"}.get(
+                job["state"], job["state"].replace("_", " ").capitalize())
+            tone = {"degraded": "warn", "failed": "critical", "finished": "ok"}.get(job["state"], "")
+            result += '<p><strong class="%s">%s</strong> · %s · <a href="?page=health">Details</a></p>' % (
+                tone, e(state), e(self._uk_timestamp(job["time"])))
+            if job["details"]:
+                result += '<p class="sub">%s</p>' % e(job["details"])
+        result += self._form("collect", '<div class="refresh-actions">'
+                             '<button type="submit" name="scope" value="both">Refresh all</button>'
                              '<button type="submit" class="secondary" name="scope" value="sports">Refresh sports</button>'
                              '<button type="submit" class="secondary" name="scope" value="epg">Refresh EPG</button>'
                              '</div>')
-        result += '</section><div class="grid" style="margin-top:16px"><section class="card"><h2>Sports coverage</h2><p>%s</p></section><section class="card"><h2>EPG coverage</h2><p>%s</p></section></div>' % (
-            e(", ".join(s["id"] + " (%s)" % s["events"] for s in sport["data"].get("sources", [])) if sport else "No sporting source collected yet"),
-            e(", ".join(s["id"] + " (%s programmes)" % s["programmes"] for s in sources) or "No EPG source collected yet"))
-        return result
+        result += '</section><div class="dashboard-metrics">'
+        current_day = day.get("date") == datetime.now(ZoneInfo("Europe/London")).date().isoformat()
+        live_count = live["live"] if current_day else "—"
+        live_note = "%s probably live" % live["live_probable"] if current_day else "Refresh sports for today"
+        for title, value, description, page in (
+            ("Live at refresh", live_count, live_note, "today"),
+            ("Events today", day.get("count", 0) if current_day else "—",
+             day.get("date") if current_day else "Awaiting today’s snapshot", "today"),
+            ("Sports events", len(events), "Eight-day schedule", "events"),
+            ("EPG feeds", len(sources), "Feeds with saved guides", "guide"),
+        ):
+            result += '<a class="card" href="?page=%s"><div class="sub">%s</div><div class="metric">%s</div><div class="help">%s</div></a>' % (
+                e(page), e(title), e(value), e(description))
+        result += '</div><div class="grid">'
+        latest = {}
+        for job in self.store.recent_jobs(300):
+            if not job["state"].startswith("test_"):
+                latest.setdefault(job["provider"], job)
+        for kind, title, registry, saved, count_key in (
+            ("sports", "Sports sources", providers.SPORTS, sport["data"].get("sources", []) if sport else [], "events"),
+            ("epg", "EPG sources", providers.EPG, sources, "programmes"),
+        ):
+            saved_by_id = {entry["id"]: entry for entry in saved}
+            result += '<section class="card source-list"><h2>%s</h2>' % e(title)
+            for name, (label, *_) in registry.items():
+                if not config[kind].get(name):
+                    continue
+                entry = saved_by_id.get(name, {})
+                job = latest.get(name, {})
+                state = job.get("state")
+                status = {"ok": "Refreshed", "partial": "Partially refreshed",
+                          "no_events_reported": "No events returned", "failed": "Refresh failed",
+                          "stale": "Stale guide", "empty": "Empty guide",
+                          "coverage_collapse": "Coverage dropped", "needs_key": "Key required"}.get(
+                              state, state.replace("_", " ").capitalize() if state else "Awaiting refresh")
+                result += '<details><summary>%s <span class="pill">%s</span></summary>' % (e(label), e(status))
+                result += '<p class="sub">Last successful import · %s</p>' % e(self._uk_timestamp(entry.get("last_success")))
+                if count_key in entry:
+                    result += '<p class="sub">%s %s in saved data</p>' % (e(entry[count_key]), count_key)
+                if job.get("details"):
+                    result += '<p class="sub">%s</p>' % e(job["details"])
+                result += '</details>'
+            result += '<p><a href="?page=sources">Manage sources</a></p></section>'
+        return result + '</div>'
+
+    @staticmethod
+    def _uk_timestamp(value):
+        if not value:
+            return "Awaiting collection"
+        try:
+            stamp = datetime.fromisoformat(value)
+            if stamp.tzinfo:
+                return stamp.astimezone(ZoneInfo("Europe/London")).strftime("%d %b, %H:%M %Z")
+        except (TypeError, ValueError):
+            pass
+        return value
 
     def _bulk_sources(self, config, group, title, help_text):
         section, options = bulk_providers(group)
