@@ -612,8 +612,10 @@ class UI(BaseHTTPRequestHandler):
             market = candidate.get("canonical_channel_id", "").partition(".")[0].upper()
             coverage = self._uk_time({"start_utc": candidate.get("programme_start_utc")})
             sources = ", ".join(providers.EPG.get(source, (source,))[0] for source in candidate.get("epg_sources", []))
-            items.append("<li>%s · %s<br><small>Guide start %s · %s</small></li>" %
-                         (e(name), e(market), e(coverage), e(sources)))
+            basis = {"epg_title_teams": "Fixture title", "epg_f1_session": "F1 session",
+                     "epg_tournament_session": "Named event or session"}.get(candidate.get("match_basis"))
+            items.append("<li>%s · %s<br><small>Guide start %s · %s%s</small></li>" %
+                         (e(name), e(market), e(coverage), e(sources), " · " + e(basis) if basis else ""))
         first = candidates[0]
         first_market = first.get("canonical_channel_id", "").partition(".")[0].upper()
         return '<details><summary>EPG match (unverified) · %s (%s)%s</summary><ul>%s</ul></details>' % (

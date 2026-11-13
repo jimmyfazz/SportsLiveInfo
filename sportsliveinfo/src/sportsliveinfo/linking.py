@@ -3,7 +3,7 @@
 A fixture reported by two independent provider families is "corroborated";
 one family is "reported". EPG programme matches are *candidates*: they name a
 recognised channel whose guide shows a programme covering kick-off whose
-title/sub-title contains both teams. They never set broadcast_verified,
+title/sub-title identifies the fixture or a named tournament session. They never set broadcast_verified,
 because guide upstream lineage is not yet proven independent.
 """
 import re
@@ -46,6 +46,50 @@ _MAX_PROGRAMME = timedelta(hours=9)
 _SESSION_WORDS = {"race": ("race", "grand prix"), "qualifying": ("qualifying",), "sprint": ("sprint",),
                   "sprint_qualifying": ("sprint qualifying", "sprint shootout"),
                   "practice1": ("practice",), "practice2": ("practice",), "practice3": ("practice",)}
+
+
+# Named events only. Broad tours and ambiguous labels such as "The Masters"
+# require sport context in the programme or an unambiguous alternative name.
+_TOURNAMENT_NAMES = {
+    "golf": (
+        ("masters tournament", "us masters", "augusta masters", "the masters"),
+        ("pga championship", "us pga championship"),
+        ("us open golf", "u s open golf", "us open", "u s open"),
+        ("the open championship", "the open"),
+        ("ryder cup",), ("solheim cup",),
+    ),
+    "snooker": (
+        ("world snooker championship", "world championship snooker"),
+        ("uk snooker championship", "snooker uk championship", "uk championship"),
+        ("masters snooker", "snooker masters", "the masters"),
+        ("champion of champions snooker", "snooker champion of champions", "champion of champions"),
+    ),
+    "cycling": (
+        ("tour de france",), ("giro d italia",), ("vuelta a espana", "la vuelta"),
+    ),
+    "darts": (
+        ("pdc world championship", "pdc world darts championship", "world darts championship"),
+        ("premier league darts", "darts premier league"),
+        ("world matchplay darts", "darts world matchplay", "world matchplay"),
+        ("grand slam of darts",),
+    ),
+    "athletics": (("world athletics championships",),),
+    "horse_racing": (
+        ("cheltenham festival", "cheltenham"), ("royal ascot",),
+        ("grand national", "aintree grand national"), ("glorious goodwood",),
+    ),
+}
+_AMBIGUOUS_TITLES = frozenset({
+    "the masters", "us open", "u s open", "the open", "the open championship",
+    "uk championship", "champion of champions", "world matchplay", "cheltenham",
+})
+_TOURNAMENT_QUALIFIER = re.compile(
+    r"\b(stage|round|day|night|session) (\d{1,2})\b|"
+    r"\b(quarter finals?|semi finals?|quarterfinals?|semifinals?|finals?|"
+    r"morning|afternoon|evening|qualifying|qualification)\b"
+)
+_WOMENS_VARIANTS = frozenset({"women", "womens", "ladies", "femmes", "femenina", "femminile"})
+_TOURNAMENT_VARIANT = re.compile(r"\b(women|womens|ladies|femmes|femenina|femminile|junior|juniors|u23|u21|u20|u19|u18|u17|seniors|senior|indoor|indoors|para|paralympic|virtual)\b")
 
 
 def _dt(value):
@@ -248,6 +292,65 @@ def _fixture_in(text, home, away, allowed):
             (_side_matches(left, away, allowed) and _side_matches(right, home, allowed)))
 
 
+def _has_phrase(text, phrase):
+    return f" {phrase} " in f" {text} "
+
+
+def _tournament_qualifiers(text):
+    qualifiers = set()
+    for kind, number, word in _TOURNAMENT_QUALIFIER.findall(text):
+        if kind:
+            qualifiers.add(f"{kind} {int(number)}")
+        else:
+            word = word.replace(" ", "").removesuffix("s")
+            qualifiers.add("qualifying" if word == "qualification" else word)
+    return qualifiers
+
+
+def _tournament_variants(text):
+    variants = set(_TOURNAMENT_VARIANT.findall(text))
+    if variants & _WOMENS_VARIANTS:
+        variants.difference_update(_WOMENS_VARIANTS)
+        variants.add("women")
+    if "indoors" in variants:
+        variants.remove("indoors")
+        variants.add("indoor")
+    return variants
+
+
+def _matches_tournament(event, row):
+    sport = event.get("sport")
+    series = _TOURNAMENT_NAMES.get(sport)
+    if not series:
+        return False
+    title = taxonomy.norm(event.get("title"))
+    competition = taxonomy.norm(event.get("competition"))
+    fixture = " ".join((title, competition))
+    # Round, stage or session information must agree, including when one
+    # source gives a generic tournament listing and the other names a round.
+    details = []
+    for field in ("session", "round", "stage"):
+        value = taxonomy.norm(event.get(field))
+        details.append(f"{field} {value}" if value.isdecimal() else value)
+    detail = " ".join(details)
+    text = row[3]
+    if _tournament_qualifiers(f"{fixture} {detail}") != _tournament_qualifiers(text):
+        return False
+    if _tournament_variants(fixture) != _tournament_variants(text):
+        return False
+    context = "racing" if sport == "horse_racing" else sport
+    # A long-form generic EPG row needs either a live flag or an explicit
+    # live title before it can support a tournament or meeting candidate.
+    if not row[4] and not _has_phrase(text, "live"):
+        return False
+    return any(
+        any(_has_phrase(fixture, name) for name in aliases)
+        and any(_has_phrase(text, name) and (name not in _AMBIGUOUS_TITLES or _has_phrase(text, context))
+                for name in aliases)
+        for aliases in series
+    )
+
+
 def _matches(event, row):
     parts, text = row[2], row[3]
     if not parts:
@@ -267,7 +370,7 @@ def _matches(event, row):
         return any(w in text for w in _SESSION_WORDS.get(session, ()))
     teams = [team_key(p) for p in event.get("participants") or []][:2]
     if len(teams) != 2:
-        return False
+        return _matches_tournament(event, row)
     allowed = _PROGRAMME_WORDS | set(tokens(event.get("competition", "")))
     return any(_fixture_in(part, teams[0], teams[1], allowed) for part in parts)
 
@@ -304,6 +407,12 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None):
         first = bisect_left(programme_starts, earliest_end - _MAX_PROGRAMME)
         last = bisect_right(programme_starts, latest_start)
         overlapping = [item for item in by_start[first:last] if item[1][1] >= earliest_end]
+        if event.get("sport") == "motorsport":
+            basis = "epg_f1_session"
+        elif len(event.get("participants") or []) < 2:
+            basis = "epg_tournament_session"
+        else:
+            basis = "epg_title_teams"
         # Keep source order when choosing the representative channel name
         # and programme times for a service reported by multiple guides.
         for _, row in sorted(overlapping):
@@ -313,7 +422,7 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None):
             entry = found.setdefault(canonical, {"canonical_channel_id": canonical, "channel_name": row[6][:120],
                                                  "programme_start_utc": row[0].isoformat(timespec="seconds"),
                                                  "programme_end_utc": row[1].isoformat(timespec="seconds"),
-                                                 "epg_live_flag": False, "epg_sources": [], "match_basis": "epg_f1_session" if event.get("sport") == "motorsport" else "epg_title_teams"})
+                                                 "epg_live_flag": False, "epg_sources": [], "match_basis": basis})
             entry["epg_live_flag"] = entry["epg_live_flag"] or row[4]
             if row[7] not in entry["epg_sources"]:
                 entry["epg_sources"].append(row[7])
