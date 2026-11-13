@@ -161,7 +161,7 @@ class Engine:
                              decode=providers.openf1_events, max_bytes=3_000_000))
         elif name == "openligadb":
             season = today.year if today.month >= 7 else today.year - 1
-            leagues = [l for l in options.get("openligadb_leagues", providers.OPENLIGADB_LEAGUES) if l in providers.OPENLIGADB_LEAGUES]
+            leagues = [l for l in options.get("openligadb_leagues", providers.OPENLIGADB_DEFAULT_LEAGUES) if l in providers.OPENLIGADB_LEAGUES]
             for league in leagues:
                 plan.append(dict(url="%s/%s/%d" % (base, league, season), scope="league:" + league,
                                  decode=partial(providers.openligadb_events, league=league), max_bytes=7_000_000))
@@ -188,6 +188,12 @@ class Engine:
                     query = urllib.parse.urlencode({"d": day.isoformat(), "s": sport})
                     plan.append(dict(url=base + "?" + query, scope="%s|%s" % (day.isoformat(), sport),
                                      decode=providers.thesportsdb_events, max_bytes=3_000_000))
+        elif name == "tennis_api":
+            headers = {"X-RapidAPI-Key": key, "X-RapidAPI-Host": providers.TENNIS_API_HOST}
+            for scope in ("upcoming/atp", "upcoming/wta", "live"):
+                plan.append(dict(url=f"{base}/{scope}", headers=headers, scope=scope,
+                                 decode=partial(providers.tennis_api_events, live=scope == "live"),
+                                 max_bytes=3_000_000))
         elif name == "cricketdata":
             for offset in (0, 25):
                 # Provider requires the key as a query parameter; URLs are never logged.
@@ -304,8 +310,16 @@ class Engine:
                 by_id[event["id"]] = event
             except (KeyError, ValueError, TypeError):
                 continue
-        for scope in succeeded:
+        # Apply the live board after upcoming scopes so reported play wins.
+        if name == "tennis_api":
+            for event_id, event in list(by_id.items()):
+                if event.get("status_normalized") == "live" and "live" in succeeded:
+                    # A match leaving the board is no longer confirmed live.
+                    by_id[event_id] = dict(event, status_normalized="unknown", live_status_unconfirmed=True)
+        for scope in sorted(succeeded, key=lambda scope: scope == "live"):
             for event in scopes[scope]:
+                if name == "tennis_api" and event["status_normalized"] == "live":
+                    event["live_observed_at"] = utcnow()
                 by_id[event["id"]] = event
         events = list(by_id.values())
         # A successful zero-result response might be valid offseason or the
@@ -438,7 +452,10 @@ class Engine:
             _, _, key_name, limit = providers.SPORTS[name]
             if key_name and not conf["keys"].get(key_name):
                 raise ValueError("Save this provider API key before testing")
-            item = self._plan(name, conf, datetime.now(LONDON).date())[0]
+            plan = self._plan(name, conf, datetime.now(LONDON).date())
+            if not plan:
+                raise ValueError("Select at least one provider option before testing")
+            item = plan[-1] if name == "tennis_api" else plan[0]
             self.store.increment(name, limit)
             try:
                 rows = item["decode"](providers.fetch(item["url"], headers=item["headers"], max_bytes=item["max_bytes"]))

@@ -150,7 +150,15 @@ def merge_events(events):
 
 
 def live_state(event, now):
+    if event.get("live_status_unconfirmed"):
+        return "unknown"
     status = event.get("status_normalized") or "unknown"
+    if status == "live" and event.get("live_observed_at"):
+        try:
+            if now - _dt(event["live_observed_at"]) > timedelta(minutes=45):
+                return "unknown"
+        except (TypeError, ValueError):
+            return "unknown"
     if status in ("finished", "postponed", "cancelled", "live"):
         return status
     try:

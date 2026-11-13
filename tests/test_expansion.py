@@ -617,5 +617,43 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertIn("1 of 2 events", filtered)
 
 
+class CoverageFollowupTests(unittest.TestCase):
+    def test_generic_guide_is_not_counted_as_specific_title_coverage(self):
+        guide = {"channels": {"one": "One"}, "programmes": [
+            {"channel_id": "one", "title": "TBA", "start_utc": NOW.isoformat(),
+             "end_utc": (NOW + timedelta(days=1)).isoformat()},
+            {"channel_id": "one", "title": "Match of the Day", "start_utc": NOW.isoformat(),
+             "end_utc": (NOW + timedelta(hours=2)).isoformat()},
+        ]}
+        quality = analyze_guide(guide, NOW)
+        self.assertEqual(quality["full_coverage_channels"]["24h"], 1)
+        self.assertEqual(quality["channels_with_full_specific_titles_24h"], 0)
+        self.assertEqual(quality["generic_title_gaps"][0]["specific_title_hours_24h"], 2)
+
+    def test_openligadb_uses_competition_market_and_scoped_identity(self):
+        row = {"matchID": 1, "leagueShortcut": "la1", "matchDateTimeUTC": NOW.isoformat(),
+               "team1": {"teamName": "Home"}, "team2": {"teamName": "Away"}}
+        raw = json.dumps([row])
+        event, = providers.openligadb_events(raw, league="la1")
+        self.assertEqual(event["competition_country"], "Spain")
+        self.assertEqual(taxonomy.classify(event)["competition_id"], "football.la_liga")
+        self.assertEqual(providers.openligadb_events(raw, league="ucl"), [])
+
+    def test_tennis_uses_stable_match_key_and_expires_live_evidence(self):
+        row = {"matchKey": "1-2-3-4", "tourType": "wta", "status": "InPlay",
+               "startTimestamp": int(NOW.timestamp()), "league": "Sample Open",
+               "participant1": "Player A", "participant2": "Player B"}
+        live, = providers.tennis_api_events(json.dumps({"success": True, "results": [row]}), live=True)
+        scheduled, = providers.tennis_api_events(json.dumps(
+            {"success": True, "results": [dict(row, status="Not Started")]}))
+        self.assertEqual(live["id"], scheduled["id"])
+        self.assertFalse(live["broadcast_verified"])
+        live["live_observed_at"] = NOW.isoformat()
+        self.assertEqual(linking.live_state(live, NOW), "live")
+        self.assertEqual(linking.live_state(live, NOW + timedelta(hours=1)), "unknown")
+        with self.assertRaises(ValueError):
+            providers.tennis_api_events('{"success":false,"results":[]}', live=True)
+
+
 if __name__ == "__main__":
     unittest.main()

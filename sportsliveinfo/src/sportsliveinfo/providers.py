@@ -31,6 +31,11 @@ EPG = {
     "epgshare_us_sports": ("United States sports · EPG Share US SPORTS1", "https://epgshare01.online/epgshare01/epg_ripper_US_SPORTS1.xml.gz"),
     "iptv_epg_gb": ("UK broad · IPTV-EPG.org", "https://iptv-epg.org/files/epg-gb.xml.gz"),
     "iptv_epg_au": ("Australia · IPTV-EPG.org", "https://iptv-epg.org/files/epg-au.xml.gz"),
+    "iptv_epg_de": ("Germany · IPTV-EPG.org", "https://iptv-epg.org/files/epg-de.xml.gz"),
+    "iptv_epg_it": ("Italy · IPTV-EPG.org", "https://iptv-epg.org/files/epg-it.xml.gz"),
+    "iptv_epg_es": ("Spain · IPTV-EPG.org", "https://iptv-epg.org/files/epg-es.xml.gz"),
+    "iptv_epg_nl": ("Netherlands · IPTV-EPG.org", "https://iptv-epg.org/files/epg-nl.xml.gz"),
+    "iptv_epg_ca": ("Canada · IPTV-EPG.org", "https://iptv-epg.org/files/epg-ca.xml.gz"),
     "iptvorg_foxtel_au": ("Australia · iptv-org Foxtel (B1G backup feed; verify)", "https://iptv-org.github.io/epg/guides/au/foxtel.com.au.epg.xml.gz"),
     # International sports lineups named in the B1G 10 Nov sports-coverage register entry.
     "epgshare_hk": ("Hong Kong · EPG Share HK1 — Now Sports/beIN (verify)", "https://epgshare01.online/epgshare01/epg_ripper_HK1.xml.gz"),
@@ -56,7 +61,7 @@ EPG_FAMILY = {
     "epgshare_us": "epgshare", "epgshare_us_sports": "epgshare", "epgshare_hk": "epgshare", "epgshare_my": "epgshare",
     "fr_programmetv": "iptv_org", "fr_telerama": "iptv_org", "iptvorg_sky_uk": "iptv_org", "iptvorg_foxtel_au": "iptv_org",
     "fr_xmltv": "xmltvfr", "mjh_sky_uk": "mjh", "epgtalk_uk": "epgtalk", "epgtalk_sports": "epgtalk",
-    "iptv_epg_gb": "iptv_epg_org", "iptv_epg_au": "iptv_epg_org",
+    **{f"iptv_epg_{market}": "iptv_epg_org" for market in ("gb", "au", "de", "it", "es", "nl", "ca")},
     "iptv_epg_fr": "iptv_epg_org", "iptv_epg_hk": "iptv_epg_org", "iptv_epg_ge": "iptv_epg_org",
 }
 EPG_FAMILY.update({"epgshare_" + cc.lower(): "epgshare" for cc in EPGSHARE_MARKETS})
@@ -66,6 +71,7 @@ EPG_LIMITS = {
     "uk_freeview": (30_000_000, 100_000),
     "iptv_epg_gb": (30_000_000, 180_000), "iptv_epg_au": (14_000_000, 100_000),
     "epgshare_us_sports": (5_000_000, 150_000),
+    "iptv_epg_ca": (16_000_000, 175_000), "iptv_epg_nl": (20_000_000, 100_000),
     "epgshare_uk": (60_000_000, 300_000), "epgshare_fr": (40_000_000, 250_000),
     "epgshare_ie": (30_000_000, 200_000), "epgshare_us": (60_000_000, 300_000),
     "epgshare_hk": (30_000_000, 200_000), "epgshare_my": (30_000_000, 200_000),
@@ -79,7 +85,7 @@ DEFAULT_EPG_LIMIT = (14_000_000, 100_000)
 # XML TV Fr lists an expanded France-only file of about 70 MiB.
 EPG_EXPANDED_LIMITS = {
     "fr_xmltv": 85_000_000, "epgshare_ca": 85_000_000, "epgshare_us": 95_000_000,
-    "iptv_epg_gb": 95_000_000, "epgtalk_uk": 115_000_000,
+    "iptv_epg_gb": 95_000_000, "iptv_epg_ca": 95_000_000, "epgtalk_uk": 115_000_000,
 }
 # Remove only the fixed external marker in these publishers' prologues.
 XMLTV_DTD_SOURCES = frozenset({"fr_xmltv", "epgtalk_uk", "epgtalk_sports"})
@@ -89,10 +95,12 @@ _XMLTV_DTD_PROLOGUE = re.compile(
 )
 
 # name -> (label, base URL, shared key name or None, conservative daily call budget)
+TENNIS_API_HOST = "tennis-api-atp-wta-itf.p.rapidapi.com"
 SPORTS = {
+    "tennis_api": ("Tennis · Tennis API (RapidAPI)", f"https://{TENNIS_API_HOST}/tennis/v2/extend/api/events", "tennis_api", 40),
     "jolpica": ("Formula 1 · Jolpica (Ergast)", "https://api.jolpi.ca/ergast/f1/current.json", None, 6),
     "openf1": ("Formula 1 sessions · OpenF1", "https://api.openf1.org/v1/sessions", None, 6),
-    "openligadb": ("Football · OpenLigaDB (Bundesliga 1–3)", "https://api.openligadb.de/getmatchdata", None, 12),
+    "openligadb": ("Football · OpenLigaDB", "https://api.openligadb.de/getmatchdata", None, 24),
     "football_data": ("Football · football-data.org (PL, CL, Championship, top European leagues)", "https://api.football-data.org/v4/matches", "football_data", 45),
     "api_sports": ("Football · API-Sports (worldwide incl. FA Cup, EFL Cup, UEL, UECL, internationals)", "https://v3.football.api-sports.io/fixtures", "api_sports", 80),
     "api_sports_rugby": ("Rugby union & league · API-Sports", "https://v1.rugby.api-sports.io/games", "api_sports", 80),
@@ -115,9 +123,10 @@ API_SPORTS_SPORT = {
     "api_sports_afl": "aussie_rules",
 }
 SOURCE_NOTES = {
+    "tennis_api": "Optional RapidAPI key. Live singles and the first 50 upcoming matches per tour, when supplied. Free plan: 50 requests/day. Private collection.",
     "jolpica": "Ergast-compatible F1 calendar incl. practice/qualifying/sprint. CC BY-NC-SA attribution.",
     "openf1": "Independent F1 session times with end times (2023+). Free, no key.",
-    "openligadb": "Community Bundesliga, 2. Bundesliga, 3. Liga fixtures. ODbL attribution/share-alike.",
+    "openligadb": "Community fixtures for selected German and European competitions. ODbL attribution/share-alike.",
     "football_data": "Free plan: 12 competitions incl. Premier League, Champions League, Championship, World Cup, Euros. 10 calls/min; delayed scores.",
     "api_sports": "Free plan 100 calls/day per sport API; one key works for every API-Sports sport below.",
     "thesportsdb": "Free public key 123: soccer, rugby, cricket, motorsport, fighting, golf, darts, snooker and more. Free-tier coverage is partial.",
@@ -125,7 +134,16 @@ SOURCE_NOTES = {
 }
 THESPORTSDB_SPORTS = ["Soccer", "Rugby", "Cricket", "Motorsport", "Fighting", "Golf", "Darts", "Snooker",
                       "Tennis", "Ice Hockey", "Basketball", "American Football", "Cycling", "Horse Racing"]
-OPENLIGADB_LEAGUES = ["bl1", "bl2", "bl3"]
+OPENLIGADB_DEFAULT_LEAGUES = ("bl1", "bl2", "bl3")
+OPENLIGADB_LEAGUES = {
+    "bl1": ("Bundesliga", "Germany"),
+    "bl2": ("2. Bundesliga", "Germany"),
+    "bl3": ("3. Liga", "Germany"),
+    "dfb": ("DFB-Pokal", "Germany"),
+    "ffb1": ("Frauen-Bundesliga", "Germany"),
+    "ucl": ("UEFA Champions League", "World"),
+    "la1": ("La Liga", "Spain"),
+}
 
 ALLOW_HOSTS = {urllib.parse.urlparse(item[1]).hostname for item in list(EPG.values()) + list(SPORTS.values())}
 
@@ -622,7 +640,7 @@ def cricketdata_events(data, horizon_days=8):
 
 
 def openligadb_events(data, league=None):
-    """Parse community-maintained Bundesliga match records (no supplied secret).
+    """Parse community-maintained football match records (no supplied secret).
 
     Prefer the unambiguous UTC timestamp. Never infer dates from a naïve
     local-time string or fabricate teams or television carriage.
@@ -647,10 +665,13 @@ def openligadb_events(data, league=None):
             if not home or not away:
                 continue
             shortcut = league or m.get("leagueShortcut") or "bl1"
+            if league and m.get("leagueShortcut") not in (None, league):
+                continue
+            label, country = OPENLIGADB_LEAGUES.get(shortcut, ("OpenLigaDB football", ""))
             events.append({
                 "id": "openligadb:%s" % m["matchID"],
-                "sport": "football", "competition": m.get("leagueName") or "German Bundesliga",
-                "competition_code": "old:%s" % shortcut, "competition_country": "Germany",
+                "sport": "football", "competition": label if shortcut in OPENLIGADB_LEAGUES else m.get("leagueName") or label,
+                "competition_code": "old:%s" % shortcut, "competition_country": country,
                 "event_type": "match", "title": f"{home} v {away}",
                 "participants": [home, away],
                 "participants_short": [m["team1"].get("shortName") or home, m["team2"].get("shortName") or away],
@@ -663,4 +684,53 @@ def openligadb_events(data, league=None):
             })
         except (TypeError, KeyError, ValueError):
             continue
+    return events
+
+
+def tennis_api_events(data, *, live=False):
+    """Normalise the documented Tennis API live-board records."""
+    payload = json.loads(data)
+    if not isinstance(payload, dict) or payload.get("success") is not True:
+        raise ValueError("Tennis API reported an upstream error")
+    rows = payload.get("results")
+    if not isinstance(rows, list):
+        raise ValueError("Tennis API results missing or invalid")
+    events = []
+    for row in rows:
+        try:
+            match_key = row["matchKey"]
+            if not isinstance(match_key, str) or not re.fullmatch(r"\d+-\d+-\d+-\d+", match_key):
+                continue
+            tour = row["tourType"].lower()
+            if tour not in ("atp", "wta"):
+                continue
+            players = [row.get(f"participant{i}") or (row.get(f"player{i}") or {}).get("name") for i in (1, 2)]
+            if not all(isinstance(p, str) and p.strip() for p in players):
+                continue
+            timestamp = row["startTimestamp"]
+            if type(timestamp) is not int or timestamp <= 0:
+                continue
+            status = row.get("status", "").casefold().replace(" ", "")
+            if live and status != "inplay":
+                continue
+            if not live and status not in ("notstarted", "upcoming"):
+                continue
+            tournament = (row.get("tournament") or {}).get("name") or row.get("league")
+            if not isinstance(tournament, str) or not tournament.strip():
+                continue
+            events.append({
+                "id": f"tennis-api:{tour}:{match_key}", "source_id": "tennis_api",
+                "sport": "tennis", "competition": tournament, "event_type": "match",
+                "title": " v ".join(players), "participants": players,
+                "start_utc": _epoch(timestamp), "start_precision": "scheduled",
+                "status_normalized": "live" if live else "scheduled",
+                "broadcasts": [], "broadcast_verified": False,
+            })
+        except (AttributeError, KeyError, TypeError, ValueError, OverflowError, OSError):
+            continue
+    if rows and not events and live:
+        # Non-live rows on the live board can be ignored. Invalid live rows
+        # should not invalidate otherwise useful upcoming scopes.
+        if any(isinstance(row, dict) and str(row.get("status", "")).casefold() == "inplay" for row in rows):
+            raise ValueError("Tennis API live records could not be decoded")
     return events

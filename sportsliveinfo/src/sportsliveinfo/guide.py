@@ -9,6 +9,7 @@ import re
 import unicodedata
 
 COUNTRY_BY_SOURCE = {
+    **{f"iptv_epg_{market.lower()}": market for market in ("DE", "IT", "ES", "NL", "CA")},
     "farleyflex": "GB", "uk_freeview": "GB", "epgshare_uk": "GB", "mjh_sky_uk": "GB",
     "iptvorg_sky_uk": "GB", "epgtalk_uk": "GB", "iptv_epg_gb": "GB",
     "epgshare_ie": "IE",
@@ -247,6 +248,7 @@ def analyze_guide(guide, now=None, detail_limit=30):
     channels = guide.get("channels", {})
     programmes = guide.get("programmes", [])
     grouped = defaultdict(list)
+    detailed = defaultdict(list)
     bad = 0
     generic = 0
     for row in programmes:
@@ -260,12 +262,16 @@ def analyze_guide(guide, now=None, detail_limit=30):
             if not title:
                 bad += 1
                 continue
-            generic += bool(GENERIC_PROGRAMME.fullmatch(title.strip()))
+            if GENERIC_PROGRAMME.fullmatch(title.strip()):
+                generic += 1
+            else:
+                detailed[channel_id].append((a, b))
             grouped[channel_id].append((a, b))
         except (KeyError, ValueError, TypeError, OverflowError):
             bad += 1
     breakdown = []
     counts = {"24h": 0, "72h": 0, "168h": 0}
+    full_detail = 0
     families = {fid: {"label": label, "channels": 0, "full_24h": 0} for fid, label, _ in CHANNEL_FAMILIES}
     for channel_id in sorted(set(channels) | set(grouped)):
         name = str(channels.get(channel_id) or channel_id)
@@ -277,6 +283,8 @@ def analyze_guide(guide, now=None, detail_limit=30):
             coverage[f"{hours}h"] = value
             if value >= hours - 0.1:
                 counts[f"{hours}h"] += 1
+        detail_hours = _union_hours(detailed.get(channel_id, ()), now, now + timedelta(hours=24))
+        full_detail += detail_hours >= 23.9
         found = channel_families(name)
         for fid in found:
             families[fid]["channels"] += 1
@@ -285,15 +293,21 @@ def analyze_guide(guide, now=None, detail_limit=30):
             "channel_id": channel_id[:180], "name": name[:180],
             "canonical_id": canonical_channel(source_id, channel_id, name),
             "families": found, "programmes": len(ranges), "coverage_hours": coverage,
+            "specific_title_hours_24h": detail_hours,
         })
     # Worst 24h gaps first, then stable name order; this is an actionable
     # diagnostic, not a blanket overwrite/guessed B1 stream identity.
     breakdown.sort(key=lambda row: (row["coverage_hours"]["24h"], row["name"].casefold()))
+    detail_gaps = sorted((row for row in breakdown if row["coverage_hours"]["24h"] >= 23.9
+                          and row["specific_title_hours_24h"] < 23.9),
+                         key=lambda row: (row["specific_title_hours_24h"], row["name"].casefold()))
     return {
         "source_id": source_id, "country": COUNTRY_BY_SOURCE.get(source_id, "unknown"),
         "channels": len(breakdown), "valid_programmes": sum(map(len, grouped.values())),
         "invalid_programmes": bad + int(guide.get("invalid_programmes", 0)),
         "generic_programmes": generic, "full_coverage_channels": counts,
+        "channels_with_full_specific_titles_24h": full_detail,
+        "generic_title_gaps": detail_gaps[:detail_limit],
         "channels_needing_attention": breakdown[:detail_limit],
         "unmatched_canonical_channels": sum(not x["canonical_id"] for x in breakdown),
         "matched_canonical_channels": sorted({x["canonical_id"] for x in breakdown if x["canonical_id"]}),
