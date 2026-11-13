@@ -193,3 +193,9 @@ Each of these samples had specific programme titles for every entry that met the
 [Tennis API](https://docs.tennis-api.com/live-event-and-odds) documents a live singles board and upcoming ATP and WTA pages. The optional RapidAPI adapter makes three calls per refresh and uses a local cap of 40 against the documented free allowance of 50 per day. Upcoming coverage is capped at the first 50 per tour. Live state expires after 45 minutes and clears when a successful live-board refresh omits the match. The adapter was tested against synthetic payloads derived from the documented schema. A saved key is needed for an authenticated smoke test. ESPN's terms restrict automated extraction, so its undocumented scoreboard is not integrated. No odds or broadcaster claims are derived from the tennis data.
 
 HAOS deployment is pending. Roll back by restoring the prior app version and scoped backup. No SQLite schema changes.
+
+## Additional sport coverage — 13 November 2026
+
+TheSportsDB daily API samples returned athletics, esports, golf, darts and snooker records. The esports sample included an event with an inconsistent year in its title, so this source remains optional and its entries are provider reports. Bowling and Boxing returned no records in the 14 November sample. Cycling and horse racing were also empty that day. Several subsequent requests returned HTTP 429. Existing F1 sources are Jolpica and OpenF1. Motorcycle coverage uses the existing Motorsport filter, with additional Moto2, Moto3 and superbike classification when supplied.
+
+Added optional Athletics, Bowling, eSports and Boxing filters. Boxing distinguishes explicit PPV and premium labels, and a mixed Fighting record with explicit boxing wording routes to Boxing. No broadcast or access entitlement is inferred. Independent boxing card, ring-walk, regional PPV and bowling sources remain open.

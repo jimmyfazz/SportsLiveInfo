@@ -618,6 +618,19 @@ class IngressExpansionTests(unittest.TestCase):
 
 
 class CoverageFollowupTests(unittest.TestCase):
+    def test_new_sport_categories_and_explicit_boxing_labels(self):
+        self.assertEqual(taxonomy.classify(ev(sport="ESports", competition="BLAST Premier"))["category_id"],
+                         "esports.blast_premier")
+        self.assertEqual(taxonomy.classify(ev(sport="Bowling", competition="PBA Tour"))["category_id"],
+                         "bowling.pba")
+        ppv = taxonomy.classify(ev(sport="boxing", title="Boxing PPV"))
+        premium = taxonomy.classify(ev(sport="boxing", title="Premium boxing"))
+        self.assertIn("ppv", ppv["tags"])
+        self.assertEqual(ppv["category_id"], "boxing.ppv")
+        self.assertEqual(premium["category_id"], "boxing.premium")
+        self.assertNotIn("ppv", premium["tags"])
+        self.assertNotIn("Boxing", providers.THESPORTSDB_DEFAULT_SPORTS)
+
     def test_generic_guide_is_not_counted_as_specific_title_coverage(self):
         guide = {"channels": {"one": "One"}, "programmes": [
             {"channel_id": "one", "title": "TBA", "start_utc": NOW.isoformat(),

@@ -39,10 +39,12 @@ B1G_PRIORITY_GROUP = {
     "cricket": "Cricket", "golf": "Golf", "boxing": "Boxing", "basketball": "Basketball", "mma": "MMA",
     "snooker": "Snooker", "darts": "Darts", "american_football": "American football", "ice_hockey": "Ice hockey",
     "baseball": "Baseball", "cycling": "Cycling", "athletics": "Athletics", "motorsport": "Other motorsport",
+    "bowling": "Bowling", "esports": "Esports",
     "horse_racing": "Horse racing", "handball": "Handball", "volleyball": "Volleyball",
     "aussie_rules": "Australian rules football", "netball": "Netball", "other": "Other sport",
 }
-COMPETITION_PRIORITY_GROUP = {"motorsport.f1": "Formula 1", "motorsport.motogp": "Motorbike racing"}
+COMPETITION_PRIORITY_GROUP = {"motorsport.f1": "Formula 1", "motorsport.motogp": "Motorbike racing",
+                              "motorsport.moto2_moto3": "Motorbike racing", "motorsport.superbikes": "Motorbike racing"}
 
 ATTRIBUTION = {
     "jolpica": ("Formula 1 data from the Jolpica (Ergast-compatible) API", "CC BY-NC-SA 4.0"),
