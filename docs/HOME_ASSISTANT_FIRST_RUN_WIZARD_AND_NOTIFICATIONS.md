@@ -1,8 +1,11 @@
 # SportsLiveInfo Home Assistant App — first-run setup wizard, credentials, scheduler, GitHub and notifications
 
+> **Current documentation context — reviewed 12 November 2026.** Basic setup, Save/Test, schedule and publishing UI exist. Advanced state/coverage controls and persistent notifications below are acceptance requirements, not all current controls. Source candidates named in the specification are not all implemented.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Specification date:** 12 November 2026  
 **Decision:** MANDATORY for the planned private Home Assistant OS App on the always-on home mini PC (direct HAOS installation, no Proxmox).  
-**Status:** detailed implementation specification, **NOT built, installed or runtime tested**.  
+**Status:** partially implemented in v0.3.0: provider Save/Test, setup completion, Ingress dashboard, scheduler, diagnostics and GitHub walkthrough/GET test exist. Full specification acceptance, persistent notifications and actual HAOS runtime remain unverified. See [current status](CURRENT_STATUS.md).
 **Audience:** developers, coding agents, UI designers and test engineers.
 
 ## Executive requirement
@@ -19,7 +22,7 @@ On errors at any future time, use discreet **Home Assistant notifications outsid
 
 ## Scope clarification — avoid irrelevant API key fields
 
-A forensic review of the B1G repository confirmed that Android exposes **API-Sports**, **TMDB** and **OMDb** as optional user-entered third-party API keys. This Home Assistant App wizard is for **sport fixtures + UK sports EPG only**: offer API-Sports and additional enabled sports-specific APIs, authorised keyless XMLTV source configuration and the separate GitHub publication token. **Never solicit TMDB or OMDb credentials, IPTV account/server passwords, M3U provider tokens, VOD poster/hero artwork keys or TheSportsDB public test key in this wizard.** TheSportsDB crests/standings remain a B1G local feature for now.
+A forensic review of the B1G repository confirmed that Android exposes **API-Sports**, **TMDB** and **OMDb** as optional user-entered third-party API keys. This Home Assistant App wizard is for **sport fixtures + full international EPG, with UK/France priority**: offer API-Sports and additional enabled sports-specific APIs, authorised keyless XMLTV source configuration and the separate GitHub publication token. **Never solicit TMDB or OMDb credentials, IPTV account/server passwords, M3U provider tokens, VOD poster/hero artwork keys or TheSportsDB public test key in this wizard.** TheSportsDB crests/standings remain a B1G local feature for now.
 
 In the UK TV step, expose curated source entries for farleyflex and other inspected UK sports EPG sources with latest source version/last programme window, verification/redistribution status and **optional** enablement if lawful. Farleyflex generates via a 06:00 UTC scheduled workflow, but recent actual commits landed hours later; provide a **check for new upstream source revision** schedule after 06:00 UTC rather than assuming the 05:00 feed already contains today's latest update. Public EPG publishing defaults OFF until source programme-data rights cleared. See [forensic source audit](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md).
 
@@ -107,7 +110,7 @@ The separate TV-source step includes:
 
 ## 5. GitHub feed destination — separately saved
 
-**Source code remains** `jimmyfazz/SportsLiveInfo` **PRIVATE**. Proposed output is a DIFFERENT, separate public static-data repository, not yet created or authorised. Never automatically make a repo public or create a publishing target without owner approval.
+**Source code remains** `jimmyfazz/SportsLiveInfo` **PRIVATE**. The daily output destination is the DIFFERENT, PUBLIC `jimmyfazz/LiveSports-EPG` repository, checked README-only on 12 November 2026. Its existence does not approve source redistribution or authorize live publication. Never automatically make a repo public or create a publishing target without owner approval.
 
 GitHub setup screen fields:
 - `GitHub account/owner`: default suggestion `jimmyfazz`, editable.

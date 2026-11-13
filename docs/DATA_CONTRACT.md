@@ -1,6 +1,9 @@
 # Canonical JSON and API contract — proposal v0.1
 
-> **Historical example, superseded in implementation by** [FEED_CONTRACTS_AND_PUBLICATION.md](FEED_CONTRACTS_AND_PUBLICATION.md) and the frozen JSON Schema files that Codex and Claude will create. Programme, broadcaster, events and source identity are separate domains, UK/FR/international, not solely a sports-only v0.1 shape.
+> **Superseded reference — reviewed 12 November 2026.** Preserved as an earlier proposal, not installation or current wire-format instructions. Use the master roadmap, implemented sli/1.0 contract and private local App operator guide. UK-only/optional-B1/Proxmox-primary assumptions are superseded.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
+> **Historical example, superseded in implementation by** [FEED_CONTRACTS_AND_PUBLICATION.md](FEED_CONTRACTS_AND_PUBLICATION.md) the implemented [sli/1.0 contract](FEED_CONTRACT_SLI_V1.md) and existing `../schemas/*.schema.json` files. Programme, broadcaster, events and source identity are separate domains, UK/FR/international, not solely a sports-only v0.1 shape.
 
 **Not an implemented API.** Fixtures and broadcasts are distinct linked entities. All instants end in Z and are UTC. UK display dates/times use Europe/London. Unknown is null or explicit state, never an invented value.
 

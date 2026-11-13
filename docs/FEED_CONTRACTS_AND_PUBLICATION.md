@@ -1,8 +1,11 @@
 # Versioned feed schemas, provenance, licence gates and crash-safe publishing
 
+> **Current documentation context — reviewed 12 November 2026.** Concrete paths and fields are implemented in FEED_CONTRACT_SLI_V1.md and schemas/. The broader per-field rights, EPG programme and public-deployment state machine below remains required design, not fully implemented behavior.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 > **Implemented contract:** the concrete, versioned feed is now [`FEED_CONTRACT_SLI_V1.md`](FEED_CONTRACT_SLI_V1.md) (`sli/1`, content-addressed `v1/` layout, atomic Git Data API publishing, schemas and golden fixtures). Where layout or versioning here differs, `sli/1` wins; rights and safety rules here still apply.
 
-**Normative design 1.0 — 12 Nov 2026.** Read with `MASTER_IMPLEMENTATION_ROADMAP.md`. Output is intended for a separately approved public feed after rights checks. **No public feed or Home Assistant WAN access is presently enabled.**
+**Normative design 1.0 — 12 Nov 2026.** Read with `MASTER_IMPLEMENTATION_ROADMAP.md`. The PUBLIC daily-feed repository is `jimmyfazz/LiveSports-EPG`, checked README-only; authorized live publication and rights checks remain open. SportsLiveInfo requires no new public Home Assistant/App endpoint or WAN port. Existing owner-authenticated remote administration is separate.
 
 ## 1. Consumers and transport
 
@@ -25,7 +28,7 @@
 
 **Consumer-local:** B1 account, streamId, playlist URL/host, hidden categories/channels, manual mapping/source override, playback URL/credential are NEVER in public feed or central catalogue. B1 reads public service metadata and matches locally.
 
-## 3. Proposed feed directory and object contracts (golden fixtures still to be coded)
+## 3. Superseded illustrative layout (not the implemented wire format)
 
     /
       manifest.json                       # small discovery pointer, published last
@@ -80,7 +83,7 @@ The placeholder hashes and byte sizes above MUST NOT be deployed; implementation
 States: `COLLECTING` -> `VALIDATING` -> `RIGHTS_CHECKED` -> `BUILDING` -> `UPLOADING_ASSETS` -> `VERIFYING_REMOTE_ASSETS` -> `COMMITTING_MANIFEST` -> `WAITING_FOR_PUBLIC_DEPLOYMENT` -> `VERIFYING_PUBLIC` -> `PUBLISHED`. On any failure keep old manifest and last-good, persist fault diagnostic and bounded retry.
 
 - Build new full snapshot offline; validate schema, licence mask, size, freshness, no secrets; compute hashes before upload.
-- Commit new immutable assets under `assets/{revision}/`; validate GitHub/API upload success. Do not delete old assets in same release.
+- Commit new immutable assets under `assets/{revision}/`; validate GitHub/API upload success. Retain all assets referenced by the retained ten manifests; the current writer removes older unreferenced history in the same atomic commit.
 - Update manifest **only after asset upload**, preferably one commit that adds all assets and switches the manifest if atomic repo-tree commit can be used. Do not confuse Git atomic commit with instantaneous GitHub Pages CDN propagation.
 - Read the **public Pages endpoint** and validate each referenced asset hash/bytes before declaring deployed. If Pages/CDN serves new manifest before an asset, client may retry with bounded backoff then retain last-good revision. Client must not mix assets from different manifest revisions.
 - Schedule 05:00 UK availability as an **objective**, not a hard guarantee. Upstream farleyflex source may only publish after 06:00 UTC and be delayed hours. An earlier 5-day guide can still serve morning with last-success timestamp and later verified refresh.
@@ -94,7 +97,7 @@ For each adapter declare `allowed_local_test`, `allowed_private_internal`, `allo
 - No source without legal approval may contribute programme descriptions or source-derived schedule corrections to world-readable public JSON. Changing JSON formatting/shortening title does **not** magically remove contractual restrictions.
 - OpenLigaDB ODbL data may permit publication subject to attribution/share-alike/database requirements; third-party icons not covered. SportsAPI, SportAPI.ai, Jolpica, Boxerbook and EPG collectors need individual contractual review for each use, not assumed from API key availability.
 - Keep a machine-readable allowlist in private config and test negative paths; only an administrator can enable approved_public and must record approval evidence. A published output must not contain sources tagged blocked.
-- The private SportsLiveInfo source repo need not become public. A public data repo must be explicitly created/approved separately by owner after all gates; GitHub Free does not provide Pages for a private source repo.
+- The private SportsLiveInfo source repo need not become public. The PUBLIC daily-data repo is `jimmyfazz/LiveSports-EPG`; publication must be separately authorized after rights and validation gates; GitHub Free does not provide Pages for a private source repo.
 - If rights clearance fails, publish only permitted channel/fixture facts and use local device-owned EPG. **No change to the owner’s no-WAN-ingress decision.**
 
 ## 7. Safe importer and exporter boundaries

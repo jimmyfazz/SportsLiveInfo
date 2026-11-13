@@ -25,8 +25,20 @@ LONDON = ZoneInfo("Europe/London")
 # Minimum seconds between calls to one provider (published per-minute limits).
 PACING = {"thesportsdb": 2.1, "football_data": 6.5, **{n: 6.1 for n in providers.SPORTS if n.startswith("api_sports")}}
 DAY_HORIZON = {**{n: 7 for n in providers.SPORTS if n.startswith("api_sports")}, "thesportsdb": 3}
-SAFE_ERRORS = (ValueError, RuntimeError, TimeoutError, OSError, json.JSONDecodeError)
+SAFE_ERRORS = (ValueError, RuntimeError, TimeoutError, OSError, EOFError,
+               json.JSONDecodeError, TypeError, KeyError, OverflowError, ET.ParseError)
 FEED_RETAIN = 10  # published manifests (and the assets they reference) kept for slow/offline TVs
+
+
+class _NoGitHubRedirect(urllib.request.HTTPRedirectHandler):
+    """Never forward a GitHub publishing token through an HTTP redirect."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError("Unexpected GitHub API redirect; refusing to forward publishing credentials")
+
+
+def _github_open(request, timeout=30):
+    """Authenticated GitHub API request without following any redirects."""
+    return urllib.request.build_opener(_NoGitHubRedirect()).open(request, timeout=timeout)
 
 
 class QuotaExhausted(RuntimeError):
@@ -37,9 +49,9 @@ class Engine:
     def __init__(self, store):
         self.store = store
         self._busy = threading.Lock()
-        self._last_slot = None
         self._scheduler_stop = threading.Event()
         self._last_call = {}
+        self._pace_lock = threading.Lock()
 
     def collect(self):
         if not self._busy.acquire(blocking=False):
@@ -59,25 +71,38 @@ class Engine:
         guides = [n for n, on in conf["epg"].items() if on and n in providers.EPG]
         # Each sports provider is its own lane; EPG guides share one sequential
         # lane so several large XMLTV parses never run at once on the mini PC.
+        successes = 0
         with ThreadPoolExecutor(max_workers=max(1, min(6, len(sports) + 1)), thread_name_prefix="sli-lane") as pool:
             futures = [pool.submit(self._collect_sport, name, conf) for name in sports]
             if guides:
                 futures.append(pool.submit(lambda: [self._collect_epg(name) for name in guides]))
             for future in futures:
                 try:
-                    future.result()
-                except Exception as exc:  # A lane bug must not stop the others or the materialiser.
+                    result = future.result()
+                    if isinstance(result, list):
+                        successes += sum(bool(item) for item in result)
+                    else:
+                        successes += bool(result)
+                except Exception as exc:  # A crashed lane must not mask missing data.
                     LOGGER.error("Collector lane failed (%s)", type(exc).__name__)
                     self.store.job("collector", "lane_error", type(exc).__name__)
+        attempted = len(sports) + len(guides)
+        if not successes:
+            state = "failed" if attempted else "no_sources"
+            self.store.job("collector", state, "%d of %d enabled sources refreshed; last-good retained" %
+                           (successes, attempted))
+            return False
         self._materialize()
-        self.store.job("collector", "finished")
+        state = "finished" if successes == attempted else "degraded"
+        self.store.job("collector", state, "%d of %d sources refreshed; older last-good retained as needed" %
+                       (successes, attempted))
         github = conf["github"]
         if github.get("enabled") and github.get("auto_publish") and conf.get("publication_approvals"):
             try:
                 self.publish()
             except (ValueError, RuntimeError, OSError) as exc:
                 self.store.job("publisher", "failed", str(exc)[:140])
-        return True
+        return bool(successes)
 
     # ---- request planning -------------------------------------------------
     def _days(self, name, previous, today):
@@ -142,12 +167,16 @@ class Engine:
         return plan
 
     def _pace(self, name):
+        # Protect rate pacing across parallel provider lanes, including those
+        # using the same API-Sports key under different product endpoints.
+        family = providers.SPORT_FAMILY.get(name, name)
         gap = PACING.get(name)
-        if gap:
-            wait = self._last_call.get(name, 0) + gap - time.monotonic()
-            if wait > 0:
-                time.sleep(wait)
-        self._last_call[name] = time.monotonic()
+        with self._pace_lock:
+            if gap:
+                wait = self._last_call.get(family, 0) + gap - time.monotonic()
+                if wait > 0:
+                    time.sleep(wait)
+            self._last_call[family] = time.monotonic()
 
     def _request(self, name, item, limit):
         try:
@@ -155,7 +184,42 @@ class Engine:
         except RuntimeError as exc:
             raise QuotaExhausted(str(exc)) from None
         self._pace(name)
-        return item["decode"](providers.fetch(item["url"], item["headers"], max_bytes=item["max_bytes"]))
+        raw = providers.fetch(item["url"], item["headers"], max_bytes=item["max_bytes"])
+        # API-Sports responses can advertise multiple pages. Collect them
+        # completely (within quota), or reject the scope and retain last-good;
+        # never pass an incomplete free-plan page off as a full schedule.
+        if name.startswith("api_sports"):
+            payload = json.loads(raw)
+            paging = payload.get("paging", {}) if isinstance(payload, dict) else {}
+            if isinstance(paging, dict):
+                current, total = int(paging.get("current") or 1), int(paging.get("total") or 1)
+                if total > 20 or current != 1 or total < 1:
+                    raise ValueError("Unsupported or excessive provider pagination")
+                if total > 1:
+                    records = payload.get("response")
+                    if not isinstance(records, list):
+                        raise ValueError("Incomplete provider response")
+                    records = list(records)
+                    for page in range(2, total + 1):
+                        try:
+                            self.store.increment(name, limit)
+                        except RuntimeError as exc:
+                            raise QuotaExhausted(str(exc)) from None
+                        self._pace(name)
+                        separator = "&" if "?" in item["url"] else "?"
+                        page_url = item["url"] + separator + urllib.parse.urlencode({"page": page})
+                        more = json.loads(providers.fetch(page_url, item["headers"],
+                                                           max_bytes=item["max_bytes"]))
+                        if (not isinstance(more, dict) or more.get("errors")
+                                or not isinstance(more.get("response"), list)
+                                or int((more.get("paging") or {}).get("current") or 0) != page
+                                or int((more.get("paging") or {}).get("total") or 0) != total):
+                            raise ValueError("Incomplete or conflicting provider page")
+                        records.extend(more["response"])
+                    payload["response"] = records
+                    payload["paging"] = {"current": total, "total": total}
+                    raw = json.dumps(payload).encode()
+        return item["decode"](raw)
 
     @staticmethod
     def _legacy_scope(name, event):
@@ -170,7 +234,7 @@ class Engine:
         _, _, key_name, daily_limit = providers.SPORTS[name]
         if key_name and not conf["keys"].get(key_name):
             self.store.job(name, "needs_key", "Add a provider API key in Sources")
-            return
+            return False
         today = datetime.now(LONDON).date()
         previous = self.store.snapshot("sports:" + name)
         plan = self._plan(name, conf, today, previous)
@@ -195,20 +259,24 @@ class Engine:
         if not succeeded:
             self.store.job(name, "failed", "%s: source unavailable, invalid or over budget" % (errors[0] if errors else "NoRequest"))
             LOGGER.warning("Sports source %s failed (%s)", name, errors[0] if errors else "no request")
-            return
+            return False
         cutoff = datetime.now(timezone.utc) - timedelta(days=2)
-        kept = []
+        # A 200 OK with a partial free-plan response does NOT prove all other
+        # fixtures in that competition/day have disappeared. Keep unexpired
+        # old IDs, then allow new records for the same IDs to supersede them.
+        # This avoids deleting events when a source omits a competition/page.
+        by_id = {}
         for event in (previous["data"]["events"] if previous else []):
-            scope = event.get("fetch_scope") or self._legacy_scope(name, event)
-            if scope == "*" or scope in succeeded:
-                continue
             try:
                 if datetime.fromisoformat(event["start_utc"]) < cutoff:
                     continue
+                by_id[event["id"]] = event
             except (KeyError, ValueError, TypeError):
                 continue
-            kept.append(event)
-        events = kept + [e for s in succeeded for e in scopes[s]]
+        for scope in succeeded:
+            for event in scopes[scope]:
+                by_id[event["id"]] = event
+        events = list(by_id.values())
         # A successful zero-result response might be valid offseason or the
         # limits of free coverage. Never declare zero sport everywhere.
         self.store.save_snapshot("sports:" + name, {"events": events, "source_id": name, "complete": "unknown",
@@ -217,6 +285,7 @@ class Engine:
         state = "partial" if failed else ("ok" if events else "no_events_reported")
         self.store.job(name, state, "%d event records; %d/%d request scopes refreshed (provider coverage not guaranteed)" % (
             len(events), len(succeeded), len(succeeded) + len(failed)))
+        return True
 
     def _collect_epg(self, name):
         _, url = providers.EPG[name]
@@ -227,7 +296,7 @@ class Engine:
             parsed = providers.decode_xmltv(raw, name, max_programmes=max_programmes)
             if not parsed["programmes"]:
                 self.store.job(name, "empty", "Guide contains no valid programme rows; retaining old data")
-                return
+                return False
             # Enrichment/coverage report is local only and non-destructive;
             # no guessed EPG ID is ever exposed as an IPTV playable stream.
             quality = analyze_guide(parsed)
@@ -238,15 +307,40 @@ class Engine:
             # A guide with no programme in the next 24h is not a successful forward update.
             if not has_future:
                 self.store.job(name, "stale", "No guide programmes cover the next 24h; retaining last-good")
-                return
+                return False
+            # HTTP 200 does not imply a complete guide. Protect against a
+            # partial/truncated-but-parseable upstream rebuild.
+            previous = self.store.snapshot("epg:" + name)
+            if previous:
+                until = now + timedelta(days=1)
+                def forward_count(rows):
+                    count = 0
+                    for programme in rows:
+                        try:
+                            if (datetime.fromisoformat(programme["end_utc"]) > now
+                                    and datetime.fromisoformat(programme["start_utc"]) < until):
+                                count += 1
+                        except (KeyError, ValueError, TypeError, OverflowError):
+                            # Ignore corrupt/legacy old entries; never crash
+                            # the entire guide refresh during an upgrade.
+                            continue
+                    return count
+                before = forward_count(previous["data"].get("programmes", []))
+                after = forward_count(parsed["programmes"])
+                if before >= 30 and after * 4 < before:
+                    self.store.job(name, "coverage_collapse",
+                                   "New guide lost over 75% of forward programme records; keeping last-good")
+                    return False
             self.store.save_snapshot("epg:" + name, parsed)
             self.store.save_snapshot("epg-quality:" + name, quality)
             self.store.job(name, "ok", "%d channels; %d programmes; %d invalid; %d with 24h guide; %d recognised services" % (
                 len(parsed["channels"]), len(parsed["programmes"]), parsed["invalid_programmes"],
                 quality["full_coverage_channels"]["24h"], len(quality["matched_canonical_channels"])))
+            return True
         except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, json.JSONDecodeError, ET.ParseError) as exc:
             self.store.job(name, "failed", type(exc).__name__ + ": source unavailable or invalid")
             LOGGER.warning("EPG source %s failed (%s)", name, type(exc).__name__)
+            return False
 
     # ---- materialisation --------------------------------------------------
     def _materialize(self, now=None):
@@ -356,9 +450,11 @@ class Engine:
                 continue
             local = datetime.now(LONDON)
             key = local.strftime("%Y-%m-%d %H:%M")
-            if local.strftime("%H:%M") in conf.get("schedule", []) and self._last_slot != key:
-                self._last_slot = key
-                self.start_collection()
+            if local.strftime("%H:%M") in conf.get("schedule", []):
+                if self.store.claim_scheduler_slot(key):
+                    if not self.start_collection():
+                        # Worker already running: allow a retry within this minute.
+                        self.store.release_scheduler_slot(key)
 
     def preview_feed(self, out_dir=None):
         """Build the full sli/1 feed locally (no upload) for inspection and B1G testing."""
@@ -379,6 +475,58 @@ class Engine:
         self.store._put("feed_preview", summary)
         self.store.job("publisher", "preview", "Feed %s built locally: %d assets" % (manifest["revision"], len(manifest["assets"])))
         return manifest
+
+    def test_github_destination(self):
+        """Read-only check that the saved fine-grained token reaches its target.
+
+        A GET does not prove Contents:write. This intentionally never commits,
+        modifies repository settings, or attempts to publish unlicensed data.
+        """
+        target = self.store.config()["github"]
+        owner, repository, branch, token = (target.get(k, "") for k in
+                                            ("owner", "repository", "branch", "token"))
+        if not token:
+            raise ValueError("Save your GitHub token first, then run Test Connection")
+        if not all(isinstance(s, str) and s and len(s) <= 80
+                   and all(ch.isalnum() or ch in "._-" for ch in s)
+                   for s in (owner, repository, branch)):
+            raise ValueError("Save a valid GitHub owner, repository and branch first")
+        url = "https://api.github.com/repos/%s/%s" % (owner, repository)
+        headers = {"Authorization": "Bearer " + token,
+                   "Accept": "application/vnd.github+json",
+                   "User-Agent": "SportsLiveInfo/0.3"}
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with _github_open(req, timeout=12) as response:
+                info = json.loads(response.read(64_000))
+            if info.get("full_name", "").casefold() != (owner + "/" + repository).casefold():
+                raise ValueError("GitHub returned a different repository")
+            if info.get("private") is not False:
+                raise ValueError("The feed destination must be a public repository")
+            perms = info.get("permissions")
+            if isinstance(perms, dict) and perms.get("push") is False:
+                raise ValueError("Token appears to lack repository write permission; select Contents: Read and write")
+            ref = urllib.request.Request(
+                url + "/git/ref/heads/" + urllib.parse.quote(branch, safe=""),
+                headers=headers)
+            with _github_open(ref, timeout=12) as response:
+                branch_info = json.loads(response.read(64_000))
+            if branch_info.get("ref") != "refs/heads/" + branch:
+                raise ValueError("GitHub did not confirm the requested feed branch")
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401:
+                raise ValueError("GitHub rejected the saved token (401); check or regenerate it") from None
+            if exc.code == 403:
+                raise ValueError("GitHub denied access (403); check token repository selection, permissions or expiry") from None
+            if exc.code == 404:
+                raise ValueError("Feed repository or branch was not found (404); check owner, repository and branch") from None
+            raise ValueError("GitHub connection returned HTTP %d" % exc.code) from None
+        except (TimeoutError, urllib.error.URLError, OSError):
+            raise ValueError("Could not reach GitHub; check internet access and try again") from None
+        except (TypeError, KeyError, AttributeError, json.JSONDecodeError):
+            raise ValueError("GitHub returned an unexpected response") from None
+        return ("GitHub token authenticated and public feed branch readable. "
+                "Read-only check passed; Contents:write is proven only by an authorised publication.")
 
     def publish(self):
         """Publish the sli/1 feed in ONE atomic commit; EPG programme text is never copied.
@@ -433,7 +581,7 @@ class Engine:
                                          headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
                                                   "User-Agent": "SportsLiveInfo/0.3", "Content-Type": "application/json"})
             try:
-                with urllib.request.urlopen(req, timeout=30) as res:
+                with _github_open(req, timeout=30) as res:
                     return json.loads(res.read(2_000_000))
             except urllib.error.HTTPError as exc:
                 raise RuntimeError("GitHub API rejected %s request (%d)" % (method, exc.code)) from None

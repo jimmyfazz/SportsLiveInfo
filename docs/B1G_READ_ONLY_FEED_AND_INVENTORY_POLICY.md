@@ -1,5 +1,8 @@
 # Confirmed design decision: B1G devices are read-only consumers
 
+> **Current documentation context — reviewed 12 November 2026.** This is the required TV security boundary. The central feed builder exists; an installed B1G reader, safe inventory workflow and ten-TV acceptance are not established by this review.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Decision date:** 12 November 2026. **Confirmed by owner.** Implement this as an architecture and security invariant. No B1G TV writes to GitHub, holds a GitHub API token, registers an API account, or exposes an inbound endpoint.
 
 ## Data flow

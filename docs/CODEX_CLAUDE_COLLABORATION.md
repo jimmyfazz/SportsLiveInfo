@@ -1,6 +1,10 @@
 # Operating protocol for Codex and Claude Code — independent terminals, coordinated deliverables
+
+> **Current documentation context — reviewed 12 November 2026.** Worktree/file ownership and reciprocal review rules remain in force. The initial scaffold/contract phases and illustrative paths below are historical planning; extend the existing v0.3.0 modules and contracts.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Mandatory instructions for both agents — 12 November 2026**  
-**Baseline:** `SportsLiveInfo` private GitHub repository. In this plan, BOTH the comprehensive international EPG engine and the comprehensive multi-sport/event/broadcast engine are first-class, parallel deliverables. Existing private B1G is a separate repo with an Android read-only feed consumer.
+**Baseline:** `SportsLiveInfo` private GitHub repository. In this plan, BOTH the comprehensive international EPG engine and the comprehensive multi-sport/event/broadcast engine are first-class, parallel deliverables. Existing private B1G is a separate repo; its read-only Android feed consumer remains a required integration, not a verified implementation in this review.
 
 ## 0. Read order and authoritative instructions
 
@@ -70,9 +74,11 @@ F. Only mark P6 complete after **both EPG Guide and sport rail** acceptance repo
 
 **Review:** other agent reviews domain/contract/security changes; all tests pass before merge; never silently merge incompatible JSON. If two PRs touch same file, merge owner PR then rebase other and rerun tests. Keep a dated handover report `docs/IMPLEMENTATION_PROGRESS.md` updated after merges with actual commit IDs and verified state.
 
-## 5. CLI development and test commands (targets, not existing commands yet)
+## 5. Current commands and future CLI targets
 
-Proposed once scaffold built:
+Current source checks are `python3.12 -m compileall -q sportsliveinfo/src` and `PYTHONPATH=sportsliveinfo/src python3.12 -m unittest discover -s tests -v`. See [CURRENT_STATUS.md](CURRENT_STATUS.md) for the latest passing offline suite and remaining live acceptance gates. Source is in `sportsliveinfo/src/sportsliveinfo/`; the ownership paths in §2 are target modular paths, not existing folders.
+
+The following pip/pytest/general CLI commands remain future targets, not working setup instructions:
 
     python -m pip install -e '.[dev]'
     python -m pytest -q
@@ -97,7 +103,7 @@ No app-store publication or external distribution is assumed; owner uses ten per
 - TMDB/OMDb/VOD artwork APIs explicitly stay on B1; abandon central metadata proxy/relaying work. These keys have nothing to do with SportsLiveInfo.
 - Never move IPTV credentials, B1 playlist server, streams or real channel inventory into GitHub. Optional owner's manual sanitised export can be imported privately into HAOS.
 - Do not scrape pages that prohibit it or use developer trials with scrambled sample data as factual evidence.
-- GitHub publishing is outbound-only and disabled pending actual rights. A private code repo plus separate public feed is a **proposed** topology, not a grant of permissions to republish.
+- GitHub publishing is outbound-only and disabled pending actual rights. A private code repo plus separate public feed is the **confirmed** topology, not a grant of permissions to republish.
 - GitHub Pages is for static files; no API server magic. Reader caches and public manifest revisions must handle delays.
 
 ## 7. Machine-readable progress and transparent blockers

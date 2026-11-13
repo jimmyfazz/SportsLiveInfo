@@ -51,7 +51,12 @@ class UI(BaseHTTPRequestHandler):
         LOGGER.info("Ingress %s %s", self.command, self.client_address[0])
 
     def _allowed(self):
-        return os.environ.get("SLI_DEV") == "1" or self.client_address[0] in ("172.30.32.2", "127.0.0.1", "::1")
+        # Home Assistant Ingress is the sole production entry point; use an
+        # explicit admin-configured proxy IP set, never a spoofable HTTP header.
+        peers = os.environ.get("SLI_INGRESS_TRUSTED_IPS", "172.30.32.2,127.0.0.1,::1")
+        trusted = {address.strip() for address in peers.split(",") if address.strip()}
+        return (os.environ.get("SLI_DEV") == "1"
+                or self.client_address[0] in trusted)
 
     def _headers(self, code=200, content_type="text/html; charset=utf-8"):
         self.send_response(code)
@@ -98,7 +103,11 @@ class UI(BaseHTTPRequestHandler):
         if not self._allowed():
             self._headers(403)
             return
-        size = int(self.headers.get("Content-Length", "0"))
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+        except (TypeError, ValueError):
+            self._headers(400)
+            return
         if size < 0 or size > 12_000:
             self._headers(413)
             return
@@ -160,6 +169,11 @@ class UI(BaseHTTPRequestHandler):
                 if value("remove") == "on":
                     updates["token"] = ""
                 self.store.configure({"github": updates})
+                page = "publishing"
+            elif action == "test_github":
+                # Authenticate and inspect the SAVED destination; never commit.
+                # Saving a token and testing its connection are separate actions.
+                message = self.engine.test_github_destination()
                 page = "publishing"
             elif action == "schedule":
                 times = []
@@ -417,12 +431,44 @@ class UI(BaseHTTPRequestHandler):
 
     def publishing(self, config):
         github = config["github"]
-        form = '<label>GitHub owner</label><input name="owner" type="text" value="%s" required><label>Separate public feed repository name</label><input name="repository" type="text" value="%s" placeholder="SportsLiveInfoFeed" required><label>Branch</label><input name="branch" type="text" value="%s" required><label>Fine-grained GitHub publishing token</label><input name="token" type="password" autocomplete="new-password" placeholder="%s"><label><input type="checkbox" name="remove" value="on"> Remove saved token</label>' % (e(github.get("owner")), e(github.get("repository")), e(github.get("branch")), "Saved — enter replacement only" if github.get("token") else "Token (only rights-cleared feed repository)")
+        form = '<label>GitHub owner</label><input name="owner" type="text" value="%s" required><label>Separate public feed repository name</label><input name="repository" type="text" value="%s" placeholder="LiveSports-EPG" required><label>Branch</label><input name="branch" type="text" value="%s" required><label>Fine-grained GitHub publishing token</label><input name="token" type="password" autocomplete="new-password" placeholder="%s"><label><input type="checkbox" name="remove" value="on"> Remove saved token</label>' % (e(github.get("owner")), e(github.get("repository")), e(github.get("branch")), "Saved — enter replacement only" if github.get("token") else "Token (only rights-cleared feed repository)")
         form += '<label><input type="checkbox" name="enabled" value="on" %s> Enable publishing</label>' % ("checked" if github.get("enabled") else "")
         form += '<label><input type="checkbox" name="auto_publish" value="on" %s> Publish automatically after every scheduled refresh</label><button type="submit">Save GitHub settings</button>' % ("checked" if github.get("auto_publish") else "")
-        body = '<h2>Outbound GitHub distribution</h2><p>Only SportsLiveInfo on Home Assistant will write to GitHub. B1G TVs remain read-only; no incoming connections to Home Assistant are needed.</p>'
+        body = '<h2>Outbound GitHub distribution</h2><p>Only SportsLiveInfo on Home Assistant will write to GitHub. B1G TVs remain read-only; no incoming connections to Home Assistant are needed.</p><p>Confirmed public data repository: <a href="https://github.com/jimmyfazz/LiveSports-EPG" rel="noopener noreferrer" target="_blank">jimmyfazz/LiveSports-EPG</a>. This is the JSON output destination, not the Home Assistant App installation repository. No feed has been published yet.</p>'
         body += '<div class="alert error">Public publishing requires documented permission to redistribute every selected source. No programme guide source has been cleared for public export; EPG copying is disabled. No sporting source has been approved by default.</div>'
+        body += (
+            '<section class="card" style="margin-top:16px"><h2>Set up your GitHub publishing token</h2>'
+            '<p>You only need one fine-grained personal access token on this Home Assistant installation. '
+            'Do not put it in GitHub files or on any of the B1G televisions.</p>'
+            '<ol>'
+            '<li>Open <a href="https://github.com/settings/personal-access-tokens/new" '
+            'target="_blank" rel="noopener noreferrer">GitHub: Generate a fine-grained token</a> '
+            '(sign in to your <strong>jimmyfazz</strong> account).</li>'
+            '<li>Give it a descriptive name such as <strong>SportsLiveInfo Publisher</strong>. '
+            'Set an expiry (for example 90 days); make a note to renew it before it expires.</li>'
+            '<li>Choose <strong>Resource owner: jimmyfazz</strong>. Under Repository access choose '
+            '<strong>Only select repositories</strong> and select <strong>LiveSports-EPG</strong> only. '
+            'Do not choose All repositories or the private SportsLiveInfo source repository.</li>'
+            '<li>Under Repository permissions, set <strong>Contents: Read and write</strong>. '
+            'Leave other permissions at their defaults, then click <strong>Generate token</strong>.</li>'
+            '<li>Copy the token from GitHub into the masked field below. '
+            'Keep owner <strong>jimmyfazz</strong>, repository <strong>LiveSports-EPG</strong> '
+            'and branch <strong>main</strong>. Click <strong>Save GitHub settings</strong>.</li>'
+            '<li>Click <strong>Test saved GitHub connection</strong>. This checks authentication, '
+            'public repository access and branch existence without creating or publishing any files. '
+            'A read-only test cannot fully establish write access; this is confirmed only by a '
+            'rights-approved actual publication.</li>'
+            '<li>Keep <strong>Enable publishing</strong> and <strong>Publish automatically</strong> '
+            'unticked until programme/event redistribution permissions have been reviewed. '
+            'Later, preview the feed before enabling publishing. '
+            'Only authorised source-derived data may be published.</li>'
+            '</ol>'
+            '<p class="help">If the token expires or is revoked, create a replacement token in GitHub '
+            'and paste it here; Save changes only the provided token. The existing one is not shown '
+            'after saving. Any Home Assistant backup containing tokens is sensitive.</p></section>'
+        )
         body += '<section class="card">' + self._form("github", form) + '<div class="divider"></div><p class="help">Even after enabling publishing, a permission gate will reject an export until a source is explicitly approved in the backend rights register. Saved token: %s.</p>' % ("yes" if github.get("token") else "no") + '</section>'
+        body += '<section class="card" style="margin-top:16px"><h3>Connection check (no upload)</h3><p>Save the token and destination first. Testing never enables publication or changes GitHub contents.</p>' + self._form("test_github", '<button class="secondary" type="submit">Test saved GitHub connection</button>') + '</section>'
         preview = self.store._get("feed_preview") or {}
         state = self.store._get("feed_state") or {}
         body += '<section class="card" style="margin-top:16px"><h2>B1G feed (format sli/1)</h2><p>One atomic GitHub commit per revision: taxonomy, channel registry, guide catalogue, eight daily event files, today grouping and source health, all referenced by <code>v1/manifest.json</code>. Assets are content-addressed, so TVs download only what changed. EPG programme text and unverified channel candidates are never included.</p>'

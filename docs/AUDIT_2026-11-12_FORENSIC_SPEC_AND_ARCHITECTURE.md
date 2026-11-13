@@ -1,4 +1,8 @@
 # Forensic audit: SportsLiveInfo specification, source feasibility, skeleton and delivery readiness
+
+> **Historical audit / receipt — reviewed 12 November 2026.** Preserved against its stated original revision. Findings, branch/merge positions, provider claims and pass counts below are historical, not freshly verified current facts. Current source is v0.3.0; the combined review attempted 86 tests (81 passed, five errors, three of those environment-blocked). Use CURRENT_STATUS for resolved/remaining work; no new live source, licence or device verification occurred.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Date:** 12 November 2026  
 **Audit scope:** All 20 tree entries on `jimmyfazz/SportsLiveInfo` main `d375ced20f3333f8162efd3a52778c7753c476e2` at inspection; previous code-based audit of `jimmyfazz/B1` main and its Android EPG/Sports Today pipeline; contemporary provider and Home Assistant documentation.  
 **Evidence categories:** CODE = directly read implementation; DOC = existing project specification; OFFICIAL = vendor/maintainer documentation; HYPOTHESIS = requires runtime validation; LICENCE-UNVERIFIED = externally accessible but reuse not established.  

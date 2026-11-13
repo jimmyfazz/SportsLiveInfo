@@ -1,5 +1,8 @@
 # AGENTS.md — controlling instructions for Codex, Claude and other development agents
 
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](docs/CURRENT_STATUS.md).
+
 ## READ BEFORE CODE
 
 1. [Master implementation roadmap](docs/MASTER_IMPLEMENTATION_ROADMAP.md) — **normative phases and dual-product scope**.
@@ -12,6 +15,10 @@
 7. [B1 channel identity](docs/CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md), [subscription regions](docs/SUBSCRIPTION_DRIVEN_MULTIREGION_EPG.md), [B1 read-only](docs/B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md).
 
 Later owner decisions override historical UK-only or optional-B1 language in older files. **Products E (international EPG) and S (multi-sport events) are independently comprehensive, equally mandatory deliverables.** A correct 10-card rail does not complete the EPG; a good EPG does not complete events.
+
+## New priority: operator setup and supplementary EPG contract (12 Nov 2026)
+
+Read [forensic publishing/token/EPG/sports manifest audit](docs/FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md) before changing token setup, the `sli/1` exporter or B1G channel mapping. Publishing now has an in-app fine-grained token walkthrough and GET-only test. A test of the saved token is **not** authorisation to publish and cannot fully prove write permission. `sli/1` still sends **no EPG programme rows**; a proposed additive, rights-cleared `epg_supplements` contract and B1G's non-destructive local rendering are needed. Do not claim full EPG delivery based on the channel catalogue. Never republish third-party programme titles/descriptions without approval.
 
 ## Locked decisions
 
@@ -52,4 +59,4 @@ Later owner decisions override historical UK-only or optional-B1 language in old
 5. Outbound-only rights-approved asset/manifest delivery, versioned B1 consumer, local channel match with hidden/account state, ten-TV validation.
 6. Independent objective acceptance on EPG completeness and sport event accuracy.
 
-**Current development status (12 Nov 2026):** v0.1.0 installable Home Assistant OS App scaffold exists under `sportsliveinfo/` (Supervisor config, Dockerfile, Ingress dashboard and first-run settings, persistent SQLite, background quota-aware F1/football and UK/FR EPG adapters, private last-good and diagnostics). `PYTHONPATH=sportsliveinfo/src python -m unittest discover -s tests -v`: **7/7 passed locally**; direct localhost Ingress smoke test passed. **Actual HAOS install/image build, live provider accuracy, full broadcaster canonicalization, source rights clearance, HA notifications, B1G reader and ten-TV acceptance NOT YET VERIFIED/COMPLETE.** Continue work packages against this actual source, not an imagined empty skeleton. Do not claim completed international coverage.
+**Current development status (reviewed 12 Nov 2026):** Experimental **v0.3.0** source is present, including expanded sports/EPG candidates, SQLite, Ingress UI, scheduling, `sli/1.0` preview/publisher and suggestion-only EPG enrichment. Read [CURRENT_STATUS.md](docs/CURRENT_STATUS.md) first for the pinned baseline and exact evidence: **88 tests pass on Python 3.12.15**; socket tests use the in-memory HTTP-handler transport when loopback binds are denied. Do not reuse historical 7/19/43/55 counts as current. Actual HAOS/Docker acceptance, live accuracy, redistribution rights, verified broadcaster mapping, notifications and B1G device acceptance remain open. The source/installation repo stays private; the public daily-feed repo is `jimmyfazz/LiveSports-EPG`, checked README-only. Follow [private local installation](sportsliveinfo/DOCS.md). Existing authenticated owner HA remote access does not authorize public App exposure or TV connections to HA.

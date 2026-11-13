@@ -2,22 +2,21 @@
 import json
 import os
 import tempfile
-import threading
 import unittest
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
+
+from ingress_test_support import IngressTestClient
 
 from sportsliveinfo.guide import analyze_guide, canonical_channel, normalized_name
 from sportsliveinfo.providers import (
     api_sports_events, football_data_events, f1_events, openligadb_events,
 )
 from sportsliveinfo.engine import Engine
-from sportsliveinfo.server import UI
 from sportsliveinfo.storage import Store
 
 
@@ -103,36 +102,26 @@ class EngineProgressTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_ingress_pages_and_form_csrf(self):
-        from http.server import ThreadingHTTPServer
-        from sportsliveinfo.server import UI
-        import threading
-        server = ThreadingHTTPServer(("127.0.0.1", 0), UI)
-        server.store = self.store
-        server.engine = Engine(self.store)
-        server.csrf = "test-csrf-only-for-local-unit-test"
-        worker = threading.Thread(target=server.serve_forever, daemon=True)
-        worker.start()
-        base = "http://127.0.0.1:%d/" % server.server_address[1]
+        client = IngressTestClient(self.store, "test-csrf-only-for-local-unit-test")
+        base = client.base
         try:
             for page, expected in [("guide", "International EPG coverage"),
                                    ("events", "Sporting events"),
                                    ("sources", "Test connection"),
                                    ("health", "Provider health")]:
-                with urllib.request.urlopen(base + "?page=" + page, timeout=3) as response:
+                with client.open(base + "?page=" + page, timeout=3) as response:
                     self.assertIn(expected, response.read().decode("utf-8"))
             body = urllib.parse.urlencode({"action": "finish", "csrf": "wrong"}).encode()
             with self.assertRaises(urllib.error.HTTPError) as rejected:
-                urllib.request.urlopen(urllib.request.Request(base, body, method="POST"), timeout=3)
+                client.open(urllib.request.Request(base, body, method="POST"), timeout=3)
             self.assertEqual(rejected.exception.code, 403)
             self.assertFalse(self.store.config()["setup_complete"])
-            body = urllib.parse.urlencode({"action": "finish", "csrf": server.csrf}).encode()
-            with urllib.request.urlopen(urllib.request.Request(base, body, method="POST"), timeout=3) as response:
+            body = urllib.parse.urlencode({"action": "finish", "csrf": client.server.csrf}).encode()
+            with client.open(urllib.request.Request(base, body, method="POST"), timeout=3) as response:
                 self.assertIn("SportsLiveInfo", response.read().decode("utf-8"))
             self.assertTrue(self.store.config()["setup_complete"])
         finally:
-            server.shutdown()
-            server.server_close()
-            worker.join(timeout=3)
+            client.close()
 
     def test_legacy_settings_gain_new_source_without_replacing_saved_credentials(self):
         self.store._put("config", {"setup_complete": True, "sports": {"jolpica": False},

@@ -1,18 +1,22 @@
 # SportsLiveInfo public feed contract — format `sli/1`
-**Status:** IMPLEMENTED in SportsLiveInfo v0.3.0 (`feed.py`, `engine.publish`, `schemas/`, golden fixtures, 55 local tests). **No feed repository has been created and nothing has been published.** The B1G reader is designed (see the B1 repo, `docs/SPORTSLIVEINFO_FEED_READER_IMPLEMENTATION_2026-11-12.md`) but **not implemented**.
-**Supersedes** the proposed layout in `FEED_CONTRACTS_AND_PUBLICATION.md` §2 for asset paths and versioning. The rights, state-machine and safety rules there remain in force.
+
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
+**Status:** v0.3.0 source implements `sli/1.0`, schemas, golden fixtures, preview and atomic writer. Current verification: [CURRENT_STATUS.md](CURRENT_STATUS.md), 88 tests passed on Python 3.12.15; HTTP handler tests use an in-memory transport because loopback bind is denied here. The public daily-feed repo `jimmyfazz/LiveSports-EPG` was README-only when checked. The source/installation repo `jimmyfazz/SportsLiveInfo` stays private. B1G reader/device acceptance remains unverified.
+**Supersedes** the proposed layout in `FEED_CONTRACTS_AND_PUBLICATION.md` §3 for asset paths and versioning. The rights, state-machine and safety rules there remain in force.
 
 ---
 
 ## 1. Goal
 
-**Build the B1G reader once; thereafter every SportsLiveInfo improvement in coverage, sports, competitions, channels or guides reaches all ten TVs with no B1G release.** This holds because:
+**Design goal:** a compatible data-driven B1G reader should receive added events, taxonomy entries and identity metadata without a new release. New capabilities, programme-supplement rendering, unsupported rules and breaking changes can require reader updates. This is a contract goal, not tested device behavior:
 
 1. **Everything a TV needs to classify, label, order and match is data in the feed**, not code in B1G. That covers sports, competitions, national rows, tags, live-state rules, priority groups, the channel registry, normalisation rules, families, the guide catalogue and the display policy.
 2. **Compatibility rules are strict.** Minor versions only add things; readers ignore what they don't know and fall back safely for unknown values.
-3. **Time-relative state is computed on the TV.** A feed published at 17:00 still shows the right "live now" at 20:00.
+3. **Time-relative state is computed on the TV.** A cached schedule can support an explicitly qualified time estimate later; stale provider live status is not proof of actual play.
 4. **Assets are content-addressed.** Unchanged assets keep their URL, so TVs download only what changed and can cache immutably.
-5. **Publication is atomic.** One Git commit adds all new assets plus the manifest, so a TV can never see a manifest pointing at missing files.
+5. **Publication is atomic.** One Git commit adds all new assets plus the manifest, so the Git tree changes consistently. Raw/Pages caching may still delay individual files; readers must verify every asset and retain last-good.
 
 ## 2. Layout (feed repository, served via GitHub Pages or raw)
 
@@ -59,15 +63,15 @@ SportsLiveInfo **must not** make a breaking change inside `v1/`. A future `v2/` 
 
 ## 5. Rights and privacy (unchanged laws)
 
-- Events are published only from sources listed in `publication_approvals`. Others are omitted and named in `rights.events.omitted_unapproved_sources`.
+- Events are published only when the primary source and every fused contributor are listed in `publication_approvals`. Others are omitted and reported. This conservative source-level gate is not the complete per-field licensing model in the design.
 - Events use a **field whitelist** (`feed.EVENT_FIELDS`). EPG programme text, EPG-derived broadcast candidates, fetch scopes and live state never leave the HA box.
-- `broadcasts` appear only when `broadcast_verified` is true (rule pending owner sign-off).
+- `broadcasts` appear only when `broadcast_verified` is true, `broadcast_verification_rule` is `approved_v1`, and evidence is present. A reviewed independent rule and real evidence remain acceptance gates; a boolean alone is insufficient.
 - The feed never contains stream URLs, provider credentials, user lineups, hidden channels or IP addresses. The guide catalogue lists only public guide URLs.
 
 ## 6. Publishing
 
 - **Manual:** Ingress → Publishing → *Build feed preview (no upload)* writes the exact feed to `/data/feed-preview/`. *Publish feed now* commits it.
-- **Automatic:** tick *Publish automatically after every scheduled refresh*. It runs only when publishing is enabled and at least one source is approved.
+- **Automatic:** tick *Publish automatically after every scheduled refresh*. It is attempted after collection only when enabled and approved sources exist, with at least one successful source refresh; `publish()` additionally requires setup, token and a sports snapshot.
 - **One commit per revision** via the GitHub Git Data API (blobs → tree with base → commit → ref update, no force). Only new assets are uploaded; an unchanged revision is skipped. The last 10 manifests and every asset they reference are retained; older ones are deleted in the same commit.
 - **Token:** fine-grained, contents read/write on the feed repository only.
 
@@ -81,6 +85,6 @@ SportsLiveInfo **must not** make a breaking change inside `v1/`. A future `v2/` 
 ## 8. Owner prerequisites before the first TV reads the feed
 
 1. Install and test SportsLiveInfo on the HAOS mini PC; Test-connect the sources you want.
-2. Approve the sources whose public redistribution you accept (`publication_approvals`).
-3. Create a public feed repository (separate from this private repo) with GitHub Pages on its default branch, plus a fine-grained token. Enter both on the Publishing page.
-4. Publish once. Give the feed base URL to the B1G reader setting (one value; all later updates flow automatically).
+2. Obtain and record documented redistribution permission and required attribution for every contributing source before configuring `publication_approvals`; personal acceptance alone is not a licence grant.
+3. The public feed repository [jimmyfazz/LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) already exists. In the Home Assistant Publishing page use owner `jimmyfazz`, repository `LiveSports-EPG`, branch `main`. Set up a fine-grained token restricted to **that repository only** with Contents read/write, and enable GitHub Pages if choosing the Pages address. A public raw-content URL is also possible once the JSON files actually exist; neither URL is live yet.
+4. After test/rights gates, perform an authorized publication and anonymously verify manifest plus every referenced hash/byte count. Implement and validate the B1G reader before configuring its eventual feed setting; that reader is not verified by this repository review.

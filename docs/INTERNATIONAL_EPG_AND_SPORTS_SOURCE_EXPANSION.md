@@ -1,4 +1,8 @@
 # International EPG and worldwide sporting-event source strategy
+
+> **Current documentation context — reviewed 12 November 2026.** Current source has 27 EPG candidates and 16 sports adapter entries. The larger provider strategy below includes research-only candidates; external endpoint, quota and terms claims retain their original research date.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
 **Research and specification:** 12 November 2026. **Status:** candidate sources, not live integrations or granted redistribution licences. **Products E and S have equal importance.**
 
 ## A. Discovery strategy: EPG and sport are independent

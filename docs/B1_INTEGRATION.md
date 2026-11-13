@@ -1,12 +1,15 @@
-# Potential B1 Android IPTV integration (optional future phase)
+# Required B1G Android read-only integration
 
-This repository remains **independent** from the B1 application. B1 is one potential consumer of authorised sports information. Do not modify B1 until the standalone aggregator works and can be tested against live permitted inputs.
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+
+This repository remains **independent** from the B1 application. B1G integration is a mandatory delivery target for both international EPG and sports events; device acceptance remains outstanding. Do not modify B1 until the standalone aggregator works and can be tested against live permitted inputs.
 
 ## Verified B1 code audit and integration scope (12 November 2026)
 
 Full source-based specification: **[B1 forensic EPG, Sports Today and API inventory](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md)**.
 
-B1's enhanced UK sport EPG source is farleyflex XMLTV, not API-Sports. API-Sports independently verifies football fixtures; TheSportsDB is a separately cached public-key team crest/standings dependency. Android Settings has API-Sports, TMDB and OMDb credential inputs. **Centralise only sport-fixture providers and, where authorised, common UK sport EPG information.** TMDB/OMDb, VOD posters and hero art remain local B1G. Xtream/M3U/Stalker passwords and user-provider XMLTV URLs never go to the central feed.
+B1's enhanced UK sport EPG source is farleyflex XMLTV, not API-Sports. API-Sports independently verifies football fixtures; TheSportsDB is a separately cached public-key team crest/standings dependency. Android Settings has API-Sports, TMDB and OMDb credential inputs. **Centralise only sport-fixture providers and, where authorised, common international full-channel EPG information, with UK/France priority.** TMDB/OMDb, VOD posters and hero art remain local B1G. Xtream/M3U/Stalker passwords and user-provider XMLTV URLs never go to the central feed.
 
 The user has prioritised **accurate detailed UK sporting TV EPG programmes AND the correct B1G Sports Today playable channel**. Implement a two-product, separately licensed feed: versioned daily events, plus licensed verified programme correction deltas (or no public delta if rights absent). Treat existing B1 provider EPG as a safe independent fallback. Source mapping is keyed by provider/service identity, not literal URL. Do not append a lower-priority source and assume generic programmes will be upgraded; use validated same-channel/same-interval quality promotion, retaining explicit local user selections and source provenance.
 
@@ -18,7 +21,7 @@ The user has prioritised **accurate detailed UK sporting TV EPG programmes AND t
 
 ## Required shared broadcaster-ID registry and two-stage B1G mapping
 
-See [canonical channel identity and EPG allocation specification](CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md). SportsLiveInfo publishes rights-approved canonical channel IDs, source-specific XMLTV-ID crosswalks, source/version/confidence information and verified programme/fixture-to-channel links. B1G's current account-scoped `streamId` mapping remains local. The local matcher must prioritise explicit user mapping, validated exact provider ID, source-aware curated aliases, strict unique-name matching, and only then conservative fuzzy **suggestions**, with hard negative variant/country/region checks. Show unmatched candidates for manual resolution; never silently choose a wrong stream. Preserves `ChannelVisibilityStore.visibleLiveCategoriesForAccount`, `EpgChannelMappingStore` source binding and auto-suppression, and no TV GitHub write/API keys. Current hardcoded farleyflex source URL alias rules must be explicitly migrated to safe canonical `source_id` identity, not blindly applied to all feed URLs.
+See [canonical channel identity and EPG allocation specification](CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md). The current builder can export canonical channel IDs, source crosswalks and guide metadata. Verified programme/fixture-to-channel evidence remains incomplete; no public programme rows are exported. The required B1G integration must consume only rights-approved metadata and independently verified links. B1G's current account-scoped `streamId` mapping remains local. The local matcher must prioritise explicit user mapping, validated exact provider ID, source-aware curated aliases, strict unique-name matching, and only then conservative fuzzy **suggestions**, with hard negative variant/country/region checks. Show unmatched candidates for manual resolution; never silently choose a wrong stream. Preserves `ChannelVisibilityStore.visibleLiveCategoriesForAccount`, `EpgChannelMappingStore` source binding and auto-suppression, and no TV GitHub write/API keys. Current hardcoded farleyflex source URL alias rules must be explicitly migrated to safe canonical `source_id` identity, not blindly applied to all feed URLs.
 
 ## Proposed sports rail
 
