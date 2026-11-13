@@ -15,6 +15,8 @@
 - Add Hong Kong Now Sports and beIN channel identities and reject conflicting explicit country prefixes. Display non-UK markets on provisional channel matches.
 - Commit related dashboard snapshots together and show a collector failure if the combined write fails.
 - Skip expired guide programmes before comparing fixture titles to programme text.
+- Read dashboard snapshots together and fetch only provider timestamps where the feed health report needs no raw payload.
+- Validate key changes before saving provider toggles, then save both together.
 - Keep the same App slug and persistent SQLite path for in-place updates. The feed fixture updates the producer version and channel registry.
 
 ## Documentation reconciliation — 12 November 2026 (no runtime version change)

@@ -135,9 +135,22 @@ class Store:
             return config
 
     def snapshot(self, product):
+        return self.read_snapshots(products=(product,)).get(product)
+
+    def read_snapshots(self, *, products=(), timestamps_only=()):
+        """Read requested snapshots in one SQLite statement, omitting large payloads when possible."""
+        names = tuple(dict.fromkeys((*products, *timestamps_only)))
+        if not names:
+            return {}
+        full = ",".join("?" for _ in products) or "NULL"
+        requested = ",".join("?" for _ in names)
         with self._lock, self._db() as db:
-            row = db.execute("SELECT updated_at,data FROM snapshots WHERE product=?", (product,)).fetchone()
-            return {"updated_at": row[0], "data": json.loads(row[1])} if row else None
+            rows = db.execute(
+                f"SELECT product, updated_at, CASE WHEN product IN ({full}) THEN data END "
+                f"FROM snapshots WHERE product IN ({requested})", (*products, *names)
+            ).fetchall()
+        return {name: {"updated_at": updated_at, "data": json.loads(data) if data is not None else None}
+                for name, updated_at, data in rows}
 
     def save_snapshot(self, product, data):
         self.save_snapshots({product: data})

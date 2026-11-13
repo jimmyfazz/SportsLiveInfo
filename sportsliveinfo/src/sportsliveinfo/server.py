@@ -143,17 +143,19 @@ class UI(BaseHTTPRequestHandler):
                 name = value("provider")
                 if name not in providers.SPORTS:
                     raise ValueError("Unknown sports provider")
-                self.store.configure({"sports": {name: value("enabled") == "on"}})
-                # Keys are stored by provider account, so one API-Sports key serves every API-Sports sport.
+                page = "sources"
+                update = {"sports": {name: value("enabled") == "on"}}
+                # One API-Sports key serves every API-Sports sport.
                 key_name = providers.SPORTS[name][2]
                 secret = value("key")
-                if secret and key_name:
+                if key_name:
                     if len(secret) > 512:
                         raise ValueError("API key exceeds safe length")
-                    self.store.configure({"keys": {key_name: secret}})
-                if value("remove") == "on" and key_name:
-                    self.store.configure({"keys": {key_name: ""}})
-                page = "sources"
+                    if value("remove") == "on":
+                        update["keys"] = {key_name: ""}
+                    elif secret:
+                        update["keys"] = {key_name: secret}
+                self.store.configure(update)
             elif action == "bulk_sources":
                 page = "sources"
                 section, allowed = bulk_providers(value("group"))
@@ -278,9 +280,8 @@ class UI(BaseHTTPRequestHandler):
         return head + body + '<div class="footer">%s · Local-first operation · No public access to Home Assistant · No TV write access to GitHub</div></main></body></html>' % e(__version__)
 
     def dashboard(self, config):
-        sport = self.store.snapshot("sports")
-        epg = self.store.snapshot("epg")
-        today = self.store.snapshot("today")
+        snapshots = self.store.read_snapshots(products=("sports", "epg", "today"))
+        sport, epg, today = (snapshots.get(name) for name in ("sports", "epg", "today"))
         events = sport["data"]["events"] if sport else []
         sources = epg["data"]["sources"] if epg else []
         day = today["data"] if today else {}

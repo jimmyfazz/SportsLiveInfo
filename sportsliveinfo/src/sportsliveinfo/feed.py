@@ -171,7 +171,14 @@ def build_feed(store, now=None, previous_revision=None):
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     conf = store.config()
     approved = set(conf.get("publication_approvals", []))
-    snap = store.snapshot("sports")
+    enabled_sports = [name for name in providers.SPORTS if conf["sports"].get(name)]
+    enabled_guides = [name for name in providers.EPG if conf["epg"].get(name)]
+    snapshots = store.read_snapshots(
+        products=("sports", *("epg-quality:" + name for name in enabled_guides)),
+        timestamps_only=(*("sports:" + name for name in enabled_sports),
+                         *("epg:" + name for name in enabled_guides)),
+    )
+    snap = snapshots.get("sports")
     all_events = snap["data"]["events"] if snap else []
     # In a fused fixture, the primary source may be approved while another
     # source supplied a participant/time/status. Until field-level lineage is
@@ -224,7 +231,7 @@ def build_feed(store, now=None, previous_revision=None):
             for sport, cats in sorted(groups.items(), key=lambda kv: taxonomy.sport_order(kv[0]))],
     }
     add("today", today_doc, "sli.today/1", True, date=window[0], records=len(todays))
-    add("health", health_document(store, conf), "sli.health/1", False)
+    add("health", health_document(store, conf, snapshots), "sli.health/1", False)
 
     revision = hashlib.sha256("".join(a["sha256"] for a in assets).encode()).hexdigest()[:20]
     schedule = sorted(conf.get("schedule", []))
@@ -274,7 +281,7 @@ def _interval_minutes(schedule):
     return max(gaps)
 
 
-def health_document(store, conf):
+def health_document(store, conf, snapshots):
     jobs = store.recent_jobs(300)
     latest = {}
     for job in jobs:
@@ -284,14 +291,14 @@ def health_document(store, conf):
         for name in registry:
             if not enabled.get(name):
                 continue
-            snap = store.snapshot(("sports:" if kind == "sports" else "epg:") + name)
+            snap = snapshots.get(kind + ":" + name)
             job = latest.get(name, {})
             rows.append({"id": name, "kind": kind, "label": registry[name][0], "state": job.get("state", "unknown"),
                          "last_attempt": job.get("time"), "last_success": snap["updated_at"] if snap else None,
                          "upstream_family": providers.SPORT_FAMILY.get(name) if kind == "sports" else providers.EPG_FAMILY.get(name)})
     guides = []
     for name, on in conf["epg"].items():
-        quality = store.snapshot("epg-quality:" + name) if on else None
+        quality = snapshots.get("epg-quality:" + name) if on else None
         if quality:
             q = quality["data"]
             guides.append({"id": name, "market": q.get("country"), "channels": q.get("channels", 0),

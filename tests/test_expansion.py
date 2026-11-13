@@ -366,6 +366,15 @@ class EngineExpansionTests(unittest.TestCase):
         self.assertEqual(len(snap["scopes_ok"]), 2)
         self.assertEqual(len(snap["scopes_failed"]), 4)
 
+    def test_batch_read_can_fetch_guide_timestamp_without_decoding_payload(self):
+        self.store.save_snapshots({"sports": {"events": []}, "epg:farleyflex": {"programmes": [1]}})
+        snapshots = self.store.read_snapshots(products=("sports", "today"), timestamps_only=("epg:farleyflex",))
+        self.assertEqual(snapshots["sports"]["data"], {"events": []})
+        self.assertIsNone(snapshots["epg:farleyflex"]["data"])
+        self.assertEqual(snapshots["sports"]["updated_at"], snapshots["epg:farleyflex"]["updated_at"])
+        self.assertNotIn("today", snapshots)
+        self.assertEqual(self.store.snapshot("epg:farleyflex")["data"], {"programmes": [1]})
+
     def test_snapshot_batch_rolls_back_if_second_write_fails(self):
         self.store.save_snapshot("sports", {"events": ["previous"]})
         with sqlite3.connect(self.store.path) as db:
@@ -457,6 +466,13 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertNotIn("shared-secret", sources)
         self.assertIn("EPG Share HK1", sources)
         self.assertIn("Setanta", sources)
+
+    def test_invalid_key_does_not_apply_provider_toggle(self):
+        self.store.configure({"sports": {"football_data": True}, "keys": {"football_data": "saved-key"}})
+        response = self.post({"action": "sports", "provider": "football_data", "key": "x" * 513})
+        self.assertIn("API key exceeds safe length", response)
+        self.assertTrue(self.store.config()["sports"]["football_data"])
+        self.assertEqual(self.store.config()["keys"]["football_data"], "saved-key")
 
     def test_bulk_source_saves_keep_keys_and_other_groups(self):
         self.store.configure({"sports": {"football_data": True},
