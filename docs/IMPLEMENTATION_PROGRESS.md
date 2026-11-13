@@ -262,6 +262,46 @@ TheSportsDB daily API samples returned athletics, esports, golf, darts and snook
 
 Added optional Athletics, Bowling, eSports and Boxing filters. Boxing distinguishes explicit PPV and premium labels, and a mixed Fighting record with explicit boxing wording routes to Boxing. No broadcast or access entitlement is inferred. Independent boxing card, ring-walk, regional PPV and bowling sources remain open.
 
+## Event-to-channel matcher benchmark — 13 November 2026
+
+Work branch: `codex/event-channel-matcher-2026-11-13`, based on deployed main `c71b954`.
+
+Implemented stricter event/team matching (distinctive team tokens and exact aliases; generic directional tokens do not identify a side), competition-age/gender variant checks, sport-appropriate channel filtering, radio/shopping rejection, and stable channel resolution through the broadcaster registry, optional public iptv-org dictionary and curated identity graph. No guide text or private channel inventory is stored in this repository.
+
+Reproduced the requested inputs: `LiveSports-EPG` revision `1fe6052e6bcaa722b30d` (14 and 15 November event assets) and the three supplied public XMLTV guides. Parsing used `providers.decode_xmltv()` with a 160,000-programme cap; the largest guide parsed 101,618 rows. The event assets contain 2,521 records; the measured high-priority team-fixture cohort is 172 records (two or more participants, taxonomy priority ≤20). This cohort definition is explicit and is **not** the handover's 38-fixture denominator, whose selection rule was not supplied; therefore the earlier “1 of 38” baseline is not directly comparable and is not claimed as reproduced.
+
+On this cohort, 6 fixtures had strict team-title guide hits and all 6 resolve to stable channel ids after the change (10 candidate channel links; 5 via registry and 5 via public dictionary). The prior run on the same downloaded inputs found the same 6 title hits but only 1 mapped fixture and 5 `matching_channel_unmapped`; the new mapping path recovers those five. No emitted candidate used a radio/shopping channel or a channel with an incompatible sport family. Synthetic tests cover these hard negatives, generic “North/West” names, age/gender variants, dictionary identity and curated identity mapping.
+
+Measured proxy precision is 6/6 fixture-title hits meeting the strict team/title and channel-sport eligibility rules, and 10/10 emitted channel candidates have a stable registry/dictionary mapping. This is **not independently verified broadcaster/stream precision**: XMLTV proves only that a guide lists the event on a channel, not that the provider's stream carries it. The observed cohort hit rate is 6/172 (3.5%), but most cohort fixtures may not appear in these guides; it must not be described as guide-present recall. Of the six observed title hits, the matcher maps all six (6/6 guide-title-hit mapping recall). No false positive was observed in this sample; sample size is small.
+
+Validation: `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests -v` — 205 tests passed; `PYTHONPATH=sportsliveinfo/src python3 -m compileall -q sportsliveinfo/src tests` — passed. The raw feeds, guide names/programme text and benchmark script were kept outside the repository.
+
+### Review fixes — 13 November 2026 (Claude, on the same branch)
+
+The review found four defects on real guides, plus two recall gaps found while measuring. All are fixed, with synthetic regression tests (each new test was confirmed to fail on the original PR code):
+
+| Defect | Effect before | Fix |
+|---|---|---|
+| Timeshift collapse | "ITV1 +1" etc. resolved through the dictionary to the base channel id, so a +1 channel could be offered as the live broadcast | `+1/+2` channels are never sport-eligible; a dictionary hit on a timeshift name or feed is discarded |
+| Two ids for one service | The same ITV1 broadcast appeared as both `gb.itv.one` (registry) and `ITV1.uk` (dictionary) | When a guide channel has both a registry id and a unique dictionary id, every channel resolving to that dictionary id is reported under the registry id |
+| Guide decorations | "Brighton & Hove Albion v Liverpool 14.11", "[NEW]" and "⚽ [EPL] Chelsea" never matched | Trailing dates, bracket tags and pictogram league badges are dropped before matching |
+| Women-only competitions | "Live WSL: Tottenham Hotspur v Everton" was rejected for a women's fixture (no women marker in the title) | WSL, NWSL, SWPL, WBBL and AFLW imply the women's variant; the team key ignores the feed's "W" (checked separately) |
+| Club suffix added by the guide | "Exeter City v Cheltenham **Town**" did not match the feed's "Cheltenham" | A guide side may add generic suffixes (Town, Rovers, Hove Albion) only when the feed's own suffix words are present, so "Manchester City" never matches "Manchester United" |
+
+**Re-measured** on the same three public UK guides with `LiveSports-EPG` revision `1a30246` (14–15 November events), dictionary built from the public iptv-org CSVs:
+
+- **Labelled real broadcasts:** 14 of 14 matched (before the fixes: 6). The set is 2 EFL League Two matches on Sky Sports, 4 WSL matches on Sky Sports and BBC One, 2 internationals on BBC Two, 4 rugby internationals on ITV1, EFL League One on Sky Sports+, and Scottish League One on BBC Alba.
+- **Precision:** 19 events with 22 channel candidates. Every candidate was checked by hand against a live guide listing; all 22 are correct. The unlabelled finds are 3 A-League Women matches, a Women's FA Cup tie and an NWSL match on TNT Sports.
+- **Hard negatives:** no radio, shopping or +1 candidates, and no event listed under two ids for one service.
+- **Known remaining miss:** UFC 334. The feed gives a start time 8 h before the guide listing, and the time window was deliberately not loosened.
+- **Reverse check:** most live fixtures listed on UK channels that remain unmatched have no feed event at all (WSL 15 Nov, Big Bash, Abu Dhabi T10, the ODIs, the Rugby League World Cup). Those are event-coverage gaps, not matcher gaps.
+
+The same caveat applies: a guide listing is not stream verification.
+
+Validation: `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` passed 210 tests; `compileall` passed. The benchmark inputs and script stay outside the repository.
+
+**Pending owner decision D8:** whether the public feed may carry these guide-listed but unverified event→channel links as canonical ids plus confidence (never programme text), or whether they must remain private on Home Assistant. No links have been published. HA backup and deployment have not been performed.
+
 ## Mobile Overview
 
 The Overview now puts refresh status and controls ahead of four linked metrics, separates provider-reported and estimated live counts, and uses readable source rows with the latest collection outcome and saved import time. The mobile navigation has three main tabs and a More menu. Desktop retains the full navigation. API usage remains in Diagnostics.

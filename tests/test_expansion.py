@@ -267,7 +267,7 @@ class TodayAndBroadcastTests(unittest.TestCase):
             self.assertEqual(linking.live_state(event, NOW), "time_tbc")
 
     def test_candidate_time_boundaries_and_source_order(self):
-        first = _guide("farleyflex", "skysportsmainevent.uk", "First name", [
+        first = _guide("farleyflex", "skysportsmainevent.uk", "Sky Sports Main Event First", [
             dict(self.ko, start_utc="2026-11-14T12:00:00+00:00",
                  end_utc="2026-11-14T18:00:00+00:00", title="Arsenal v Manchester City")])
         second = _guide("mjh_sky_uk", "x", "Sky Sports Main Event", [
@@ -276,7 +276,7 @@ class TodayAndBroadcastTests(unittest.TestCase):
         status, candidates = linking.broadcast_candidates(
             [self.match], {"farleyflex": first, "mjh_sky_uk": second}, NOW)["m1"]
         self.assertEqual(status, "multi_guide_match")
-        self.assertEqual(candidates[0]["channel_name"], "First name")
+        self.assertEqual(candidates[0]["channel_name"], "Sky Sports Main Event First")
         second["programmes"][0]["end_utc"] = "2026-11-14T15:29:59+00:00"
         self.assertEqual(linking.broadcast_candidates([self.match], {"mjh_sky_uk": second}, NOW), {})
 

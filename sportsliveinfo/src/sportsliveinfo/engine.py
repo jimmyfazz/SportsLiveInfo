@@ -708,7 +708,13 @@ class Engine:
             for _ in guide_sources:
                 pass
         gaps = {}
-        links = linking.broadcast_candidates(eligible, guide_sources, now, gaps=gaps)
+        dictionary_snapshot = self.store.snapshot("channel-dictionary") or {}
+        identity_snapshot = self.store.snapshot("channel-identity") or {}
+        dictionary_document = (dictionary_snapshot.get("data") or {}).get("document")
+        identity_document = (identity_snapshot.get("data") or {}).get("document")
+        links = linking.broadcast_candidates(eligible, guide_sources, now, gaps=gaps,
+                                             dictionary_document=dictionary_document,
+                                             identity_document=identity_document)
         for event in eligible:
             status, candidates = links.get(event["id"], ("none", []))
             event["broadcast_status"] = status
