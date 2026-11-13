@@ -13,18 +13,17 @@ from datetime import date, datetime, timedelta, timezone
 # Sources whose terms have not been verified for public republication are LOCAL ONLY.
 # Every EPG source is disabled by default; URLs marked "verify" must pass the
 # Ingress "Test EPG" button before being enabled.
+# Retired 13 Nov 2026: fr_programmetv, fr_telerama, iptvorg_sky_uk, iptvorg_foxtel_au. iptv-org no longer
+# hosts pre-built guides (HTTP 404 from the collector); iptv-epg.org and EPGShare cover the same markets.
 EPG = {
     "farleyflex": ("UK sports · farleyflex", "https://raw.githubusercontent.com/farleyflex/epg-guide/main/epg.xml"),
     "uk_freeview": ("UK free-to-air · Freeview-EPG (dp247)", "https://raw.githubusercontent.com/dp247/Freeview-EPG/master/epg.xml"),
     "epgshare_uk": ("UK broad · EPG Share UK1 (verify)", "https://epgshare01.online/epgshare01/epg_ripper_UK1.xml.gz"),
     "epgshare_ie": ("Ireland · EPG Share IE1 (verify)", "https://epgshare01.online/epgshare01/epg_ripper_IE1.xml.gz"),
     "epgshare_fr": ("France broad · EPG Share FR1 (verify)", "https://epgshare01.online/epgshare01/epg_ripper_FR1.xml.gz"),
-    "fr_programmetv": ("France · programme-tv.net via iptv-org (verify); iptv-org pre-built guides may be discontinued", "https://iptv-org.github.io/epg/guides/fr/programme-tv.net.epg.xml.gz"),
-    "fr_telerama": ("France · Télérama via iptv-org (verify); iptv-org pre-built guides may be discontinued", "https://iptv-org.github.io/epg/guides/fr/telerama.fr.epg.xml.gz"),
     "fr_xmltv": ("France · XMLTV France (racacax/XML-TV-Fr)", "https://xmltvfr.fr/xmltv/xmltv_fr.xml.gz"),
     # Feeds already offered by the B1G Android backup-guide list (SkyGuideScene.backupFeeds).
     "mjh_sky_uk": ("UK Sky · Matt Huisman (B1G backup feed)", "https://i.mjh.nz/SkyUK/epg.xml.gz"),
-    "iptvorg_sky_uk": ("UK Sky · iptv-org sky.com (B1G backup feed; verify); iptv-org pre-built guides may be discontinued", "https://iptv-org.github.io/epg/guides/uk/sky.com.epg.xml.gz"),
     "epgtalk_uk": ("UK national · EPGTalk (B1G suggested feed)", "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/UK_guide.xml.gz"),
     "epgtalk_sports": ("Sports · EPGTalk (B1G suggested feed)", "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz"),
     "iptv_epg_fr": ("France · IPTV-EPG.org (B1G; terms not explicit)", "https://iptv-epg.org/files/epg-fr.xml.gz"),
@@ -37,7 +36,6 @@ EPG = {
     "iptv_epg_es": ("Spain · IPTV-EPG.org", "https://iptv-epg.org/files/epg-es.xml.gz"),
     "iptv_epg_nl": ("Netherlands · IPTV-EPG.org", "https://iptv-epg.org/files/epg-nl.xml.gz"),
     "iptv_epg_ca": ("Canada · IPTV-EPG.org", "https://iptv-epg.org/files/epg-ca.xml.gz"),
-    "iptvorg_foxtel_au": ("Australia · iptv-org Foxtel (B1G backup feed; verify, may be discontinued)", "https://iptv-org.github.io/epg/guides/au/foxtel.com.au.epg.xml.gz"),
     # International sports lineups named in the B1G 10 Nov sports-coverage register entry.
     "epgshare_hk": ("Hong Kong · EPG Share HK1 — Now Sports/beIN (verify)", "https://epgshare01.online/epgshare01/epg_ripper_HK1.xml.gz"),
     "iptv_epg_hk": ("Hong Kong · IPTV-EPG.org (verify)", "https://iptv-epg.org/files/epg-hk.xml.gz"),
@@ -80,8 +78,6 @@ EPG_LIMITS = {
     "epgshare_ie": (30_000_000, 200_000), "epgshare_us": (60_000_000, 300_000),
     "epgshare_hk": (30_000_000, 200_000), "epgshare_my": (30_000_000, 200_000),
     "fr_xmltv": (30_000_000, 250_000), "mjh_sky_uk": (40_000_000, 250_000),
-    "iptvorg_sky_uk": (40_000_000, 250_000), "epgtalk_uk": (40_000_000, 250_000),
-    "iptvorg_foxtel_au": (40_000_000, 250_000),
 }
 EPG_LIMITS.update({"epgshare_" + cc.lower(): (40_000_000, 250_000) for cc in EPGSHARE_MARKETS})
 EPG_DAILY_REQUEST_LIMIT = 4
@@ -91,11 +87,13 @@ EPG_EXPANDED_LIMITS = {
     "fr_xmltv": 85_000_000, "epgshare_ca": 85_000_000, "epgshare_us": 95_000_000,
     "iptv_epg_gb": 95_000_000, "iptv_epg_ca": 95_000_000, "epgtalk_uk": 115_000_000,
 }
-# Remove only the fixed external marker in these publishers' prologues.
-XMLTV_DTD_SOURCES = frozenset({"fr_xmltv", "epgtalk_uk", "epgtalk_sports"})
+# The standard XMLTV prologue names an *external* DTD that the parser never fetches.
+# Remove only that exact marker at the start of the file, for every source; an
+# internal subset ("[...]"), entities or a second DOCTYPE are still refused.
+XMLTV_DTD_SOURCES = frozenset({"fr_xmltv", "epgtalk_uk", "epgtalk_sports"})  # historical; now applied to all
 _XMLTV_DTD_PROLOGUE = re.compile(
     rb'\A((?:\xef\xbb\xbf)?(?:<\?xml [^<>]*\?>)?[ \t\r\n]*)'
-    rb'<!DOCTYPE tv SYSTEM "xmltv.dtd">'
+    rb'<!DOCTYPE tv SYSTEM "[A-Za-z0-9:/._-]{0,120}xmltv\.dtd">'
 )
 
 # name -> (label, base URL, shared key name or None, conservative daily call budget)
@@ -331,7 +329,7 @@ def decode_xmltv(raw, source, max_expanded=None, max_programmes=100_000,
     root = None
     with stream:
         for event, node in ET.iterparse(
-                _LimitedXmlInput(stream, max_expanded, source in XMLTV_DTD_SOURCES),
+                _LimitedXmlInput(stream, max_expanded, True),
                 events=("start", "end")):
             if root is None:
                 root = node

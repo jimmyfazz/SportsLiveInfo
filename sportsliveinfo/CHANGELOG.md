@@ -2,6 +2,27 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.8 — UK and Europe channel identification
+
+- New optional **channel identity dictionary** for UK and Europe, built from the public-domain iptv-org database. It is off until you enable it under Sources. When on, it downloads about 3 MB at most once a day, using conditional requests and keeping the last good copy.
+  - It covers about 10,000 channels and 13,000 regional, HD and +1 feeds, with alternative names, rebrands, closures, genre and website.
+  - Pan-regional channels such as beIN, DAZN and Eurosport are included through feeds that broadcast into Europe, with region codes expanded to countries.
+  - It is published as feed asset `dictionary` (format `sli/1.2`, capability `channel_dictionary`). A reference resolver gives B1G the exact lookup order and confidence rules.
+- **Measured on a real 7,701-channel UK and Europe lineup** (private, not committed): channels identified by name rose from 37.9 % to 54.8 %. Every one of 70 hand-checked matches was correct. Examples: France 50 → 61 %, Spain 0 → 59 %, Italy 38 → 72 %, Scandinavia 12 → 43 %.
+- **Provider prefix grammar:** "|NO|", "VIP RU |", "C+PL|", "ES TI|", "[M+]", "(VF)/(OP)/(M)", "[IT-EN]" and "[Multi-Language]" are now understood. Mis-encoded accents ("DÃ©couverte") are repaired, broken-export fragments are removed, and French "et" is treated as "&". A bare country code such as "IT " is removed only when it matches the channel's own market, so "Al Jazeera" and "De Ochtend" are untouched.
+- Guides that start with the standard `<!DOCTYPE tv SYSTEM "xmltv.dtd">` prologue are now accepted from every source; embedded DTDs and entities are still refused. This is the likely cause of the Matt Huisman Sky UK, NZ and Sydney and EPGShare NZ failures. Guide failures now give a specific reason: blocked declaration, not XMLTV, empty, not well-formed, or truncated.
+- Retired four dead guides that iptv-org no longer hosts (HTTP 404): programme-tv and Télérama (France), Sky UK and Foxtel. iptv-epg.org and EPGShare cover the same markets. Retired sources disappear from saved choices automatically.
+
+## 0.3.7 — Channel identity across guides
+
+- New channel identity graph. After each guide refresh, channels in different guides that show the same programmes at the same times, and whose names agree apart from decoration (HD, TV, country prefixes), are linked as one service. B1G can then use another guide's data for a provider channel whose guide ID comes from a different guide family.
+- +1 and +2 channels are detected from schedules shifted by exactly 60 or 120 minutes and published as timeshift links to their base channel.
+- Never merged: +1/+2, Sports+/plus, channel numbers, UK regions (including ROI and Channel Islands) and language feeds. Different names with identical schedules (rebrands, aliases, sister channels) are listed for owner review on the EPG coverage page and are not published.
+- New optional feed asset `identity` (`sli.identity/1`, capability `channel_identity`); feed format `sli/1.1`. Old readers ignore it. Only channel ids, names and timeshift relations are published; programme data never leaves Home Assistant.
+- Channel names: the matching key now understands common provider conventions. It ignores a trailing "*", "(UK)", "(From 19:00 UK)", "(Live Event Only)", "(X)/(D)/(M)", " - HEVC", and 50fps/HDR/VIP/RAW anywhere in the trailing run. It also reads a leading "(FR)"-style country and decodes HTML entities. It keeps "(IE)" as the Irish feed, bracketed markets and cities, and beIN feed letters. Measured on a real household lineup (private, not committed), UK/IE linear name matches against three real guides rose from 25 % to 46 %. No published matching case changed.
+- Every channel is kept. New reference display labels give a tidy base name plus variant tags (4K, FHD, HD, SD, HDR, fps, HEVC, Ireland, "from hh:mm", Events only, VIP/RAW/Backup/Alt, Alt feed, Source X/D/M). Identical visible names are numbered in provider order. The rules are published in the `channels` asset (`display_variants`) so B1G can follow them exactly. On a 27,084-entry lineup every entry kept a distinct label.
+- Tested on three real UK guides (922 channels, 159,514 programmes). 181 services were linked across 402 guide channels and 59 timeshifts were found, with no false merges after manual review. 26 pairs were held back for owner review.
+
 ## 0.3.6 — Reliable publishing feedback
 
 - Publish feed now runs in the background. The Publishing page shows progress, refreshes itself and reports the result. Previously the request blocked for 15–25 s with no feedback, repeated clicks queued, and a failure reason was lost when the browser stopped waiting.

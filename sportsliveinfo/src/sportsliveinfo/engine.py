@@ -19,7 +19,7 @@ from functools import partial
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import feed, linking, providers, taxonomy
+from . import dictionary, feed, identity, linking, providers, taxonomy
 from .storage import utcnow
 from .guide import analyze_guide
 
@@ -106,7 +106,19 @@ def _guide_failure(exc):
     if detail in ("Provider response exceeded configured size limit", "XMLTV decompressed past safety limit",
                   "XMLTV channel count exceeded safety limit", "XMLTV programme count exceeded safety limit"):
         return "Guide exceeded an import size or record limit"
-    if isinstance(exc, (ValueError, EOFError, ET.ParseError)):
+    specific = {
+        "XMLTV declarations and entities are not allowed":
+            "Guide contains a DTD declaration or entity that the importer blocks for safety",
+        "Not an XMLTV programme guide": "Download is not an XMLTV guide (wrong root element)",
+        "Empty XMLTV input": "Guide download was empty",
+    }
+    if detail in specific:
+        return specific[detail]
+    if isinstance(exc, ET.ParseError):
+        return "Guide is not well-formed XML (parse error)"
+    if isinstance(exc, EOFError):
+        return "Guide download was truncated (incomplete gzip)"
+    if isinstance(exc, ValueError):
         return "Guide was empty, invalid or blocked by source safety checks"
     return "Guide request or import failed"
 
@@ -178,18 +190,28 @@ class Engine:
         deferrals = 0
         with ThreadPoolExecutor(max_workers=max(1, min(6, len(sports) + 1)), thread_name_prefix="sli-lane") as pool:
             futures = [pool.submit(self._collect_sport, name, conf) for name in sports]
+            epg_future = None
             if guides:
                 collect_epg = partial(self._collect_epg, scheduled=True) if scheduled else self._collect_epg
-                futures.append(pool.submit(lambda: [collect_epg(name) for name in guides]))
+                epg_future = pool.submit(lambda: [collect_epg(name) for name in guides])
+                futures.append(epg_future)
+            guides_refreshed = 0
             for future in futures:
                 try:
                     result = future.result()
+                    if future is epg_future:
+                        guides_refreshed = sum(item is True for item in result)
                     results = result if isinstance(result, list) else [result]
                     successes += sum(bool(item) for item in results)
                     deferrals += sum(item is None for item in results)
                 except Exception as exc:  # A crashed lane must not mask missing data.
                     LOGGER.error("Collector lane failed (%s)", type(exc).__name__)
                     self.store.job("collector", "lane_error", type(exc).__name__)
+        if scope in ("both", "epg") and conf.get("dictionary", {}).get("iptvorg"):
+            self._refresh_dictionary()
+        if guides_refreshed:
+            # Only when at least one guide changed; an all-failed run keeps the previous identity graph.
+            self._refresh_identity([n for n, on in conf["epg"].items() if on and n in providers.EPG])
         attempted = len(sports) + len(guides)
         if attempted and deferrals == attempted:
             self.store.job("collector", "deferred", f"{label}: all {attempted} sources deferred; last-good retained")
@@ -522,6 +544,34 @@ class Engine:
         if limit < daily_limit and self.store.usage().get(provider, 0) < daily_limit:
             raise QuotaExhausted("Remaining guide requests reserved for scheduled refreshes")
         raise QuotaExhausted("Local daily guide request budget exhausted; resets at 00:00 UTC")
+
+    def _refresh_dictionary(self):
+        """Public-domain channel dictionary: at most daily, conditional requests, last good kept on failure."""
+        try:
+            status = dictionary.refresh(self.store)
+            if status != "fresh":
+                meta = (self.store.snapshot("channel-dictionary") or {}).get("data", {}).get("meta", {})
+                self.store.job("dictionary", "ok", "Channel dictionary %s (%s channels, %s feeds for UK and Europe)" % (
+                    status, meta.get("channels", "?"), meta.get("feeds", "?")))
+        except Exception as exc:
+            LOGGER.warning("Channel dictionary refresh failed (%s)", type(exc).__name__)
+            self.store.job("dictionary", "failed", "Channel dictionary not refreshed (%s); previous version kept"
+                           % (_guide_failure(exc) if isinstance(exc, (ValueError, RuntimeError, TimeoutError)) else type(exc).__name__))
+
+    def _refresh_identity(self, names):
+        """Link channels across stored guides by schedule (private); never breaks a collection."""
+        try:
+            document, report = identity.build_from_store(self.store, names)
+            self.store.save_snapshot("channel-identity", {"document": document, "report": report})
+            stats = report["stats"]
+            self.store.job("identity", "ok", "%d services linked across %d guides (%d guide channels); "
+                           "%d timeshifts; %d pairs for owner review" % (
+                               stats["clusters"], stats["guides"], stats["linked_channels"],
+                               stats["timeshifts"], stats["suggestions"]))
+        except Exception as exc:
+            LOGGER.exception("Channel identity refresh failed")
+            self.store.job("identity", "failed", "Channel identity not refreshed (%s); previous result kept"
+                           % type(exc).__name__)
 
     def _collect_epg(self, name, *, scheduled=False):
         _, url = providers.EPG[name]

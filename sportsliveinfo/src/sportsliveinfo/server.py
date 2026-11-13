@@ -259,7 +259,7 @@ class UI(BaseHTTPRequestHandler):
         page = "dashboard" if self.store.config()["setup_complete"] else "sources"
         message = "Settings saved"
         page = {"sports": "sources", "bulk_sources": "sources", "options": "sources",
-                "epg": "sources", "test_source": "sources", "github": "publishing",
+                "epg": "sources", "test_source": "sources", "dictionary": "sources", "github": "publishing",
                 "test_github": "publishing", "approvals": "publishing", "publish": "publishing",
                 "preview_feed": "publishing", "schedule": "scheduler"}.get(action, page)
         try:
@@ -316,6 +316,10 @@ class UI(BaseHTTPRequestHandler):
                 raise ValueError("Unknown EPG source")
             self.store.configure({"epg": {name: value("enabled") == "on"}})
             return "sources", message
+        if action == "dictionary":
+            self.store.configure({"dictionary": {"iptvorg": value("iptvorg") == "on"}})
+            return "sources", ("Channel dictionary enabled; it downloads with the next EPG refresh"
+                               if value("iptvorg") == "on" else "Channel dictionary disabled")
         if action == "test_source":
             kind, name = value("kind"), value("provider")
             if kind not in ("sports", "epg") or name not in (providers.SPORTS if kind == "sports" else providers.EPG):
@@ -585,6 +589,7 @@ class UI(BaseHTTPRequestHandler):
         body += '<h2 style="margin-top:28px">International television EPG sources</h2><p>Sources marked "verify" use a URL pattern that must pass Test EPG first. Optional, private guide collection only. Public re-publication of third-party programme text is DISABLED until verified rights are available. Source quality, geography and licence restrictions vary.</p><div class="grid">'
         body += self._bulk_sources(config, "epg", "Private EPG guides",
                                    "Test unfamiliar guides before enabling them. Saving makes no provider requests.")
+        body += self._dictionary_card(config)
         body += '</div><details class="group"><summary>Guide connection tests and last results</summary><div class="grid">'
         for name, (label, url) in providers.EPG.items():
             test_button = self._form("test_source", '<button class="secondary" type="submit">Test EPG (downloads guide)</button>',
@@ -792,6 +797,63 @@ class UI(BaseHTTPRequestHandler):
             body += '<p>No events match this filter.</p>'
         return body + '</section>'
 
+    def _dictionary_card(self, config):
+        """Opt-in public-domain channel dictionary (iptv-org database) for UK and Europe."""
+        enabled = bool(config.get("dictionary", {}).get("iptvorg"))
+        snapshot = self.store.snapshot("channel-dictionary")
+        meta = (snapshot or {}).get("data", {}).get("meta", {}) if snapshot else {}
+        status = ("Last checked %s · %s channels and %s feeds for UK and Europe" % (
+            e(when(meta.get("checked_at"))), e(meta.get("channels", "?")), e(meta.get("feeds", "?")))
+                  if meta.get("checked_at") else "Not downloaded yet; it is fetched with the next EPG refresh after enabling.")
+        form = ('<label><input type="checkbox" name="iptvorg" value="on" %s> Use the iptv-org channel database '
+                '(public domain; about 3 MB once a day from raw.githubusercontent.com)</label>'
+                '<button type="submit">Save channel dictionary</button>') % ("checked" if enabled else "")
+        return ('</div><section class="card" style="margin-top:16px"><h3>Channel identity dictionary (UK and Europe)</h3>'
+                '<p>Matches channel names, alternative names, regional/HD/+1 feeds, rebrands and closures to standard '
+                'channel ids used by many guides, within each channel\'s country. B1G uses it to find the right guide for '
+                'channels without a matching guide id, and to describe channels that no guide carries. Ambiguous names '
+                'are never applied automatically.</p><p class="sub">%s</p>%s</section><div class="grid">') % (
+            status, self._form("dictionary", form))
+
+    def _identity_card(self):
+        """Schedule-based channel identity across guides: results and the owner review queue."""
+        snapshot = self.store.snapshot("channel-identity")
+        if not snapshot:
+            return ('<section class="card" style="margin-bottom:14px"><h3>Channel identity across guides</h3>'
+                    '<p class="help">Built after the next EPG refresh. Channels that show the same programmes at the '
+                    'same times in different guides are linked, so B1G can use another guide\'s data for the same channel.</p></section>')
+        report = snapshot["data"].get("report", {})
+        document = snapshot["data"].get("document", {})
+        stats = report.get("stats", {})
+        body = ('<section class="card" style="margin-bottom:14px"><h3>Channel identity across guides</h3>'
+                '<p class="sub">Updated %s · %s guides · %s channels compared · <strong>%s services linked</strong> '
+                '(%s guide channels) · %s timeshift (+1/+2) links · %s pairs for review</p>') % (
+            e(when(snapshot.get("updated_at"))), e(stats.get("guides", 0)), e(stats.get("channels_fingerprinted", 0)),
+            e(stats.get("clusters", 0)), e(stats.get("linked_channels", 0)), e(stats.get("timeshifts", 0)),
+            e(stats.get("suggestions", 0)))
+        body += ('<p class="help">Linked only when names agree apart from decoration (HD, TV, prefixes) and schedules '
+                 'agree; +1, Sports+, numbers, regions and languages are never merged. Only channel ids and names are '
+                 'published (asset <code>identity</code>); programme data never leaves Home Assistant.</p>')
+        linked = [c for c in document.get("channels", []) if len(c.get("members", [])) > 1]
+        if linked:
+            body += '<details><summary>Linked services (%d)</summary><table><tr><th>Service</th><th>Names in guides</th><th>Guides</th></tr>' % len(linked)
+            for c in linked[:150]:
+                body += '<tr><td><code>%s</code></td><td>%s</td><td>%s</td></tr>' % (
+                    e(c["id"]), e(" / ".join(c.get("names", []))),
+                    e(", ".join(sorted({m["source_id"] for m in c["members"]}))))
+            body += '</table></details>'
+        suggestions = report.get("suggestions", [])
+        if suggestions:
+            body += ('<details><summary>Needs your review (%d)</summary><p class="help">Same schedules, different names: '
+                     'rebrands, aliases or sister channels. These are <strong>not</strong> linked automatically.</p>'
+                     '<table><tr><th>Guide channel</th><th>Guide channel</th><th>Schedule agreement</th></tr>') % len(suggestions)
+            for row in suggestions[:60]:
+                body += '<tr><td>%s <small>(%s)</small></td><td>%s <small>(%s)</small></td><td>%d%%</td></tr>' % (
+                    e(row.get("a_name")), e((row.get("a") or ["?"])[0]), e(row.get("b_name")),
+                    e((row.get("b") or ["?"])[0]), round(100 * float(row.get("schedule_agreement", 0))))
+            body += '</table></details>'
+        return body + '</section>'
+
     def guide(self):
         body = '<h2>International EPG coverage</h2><p>Private guide analysis: distinguish a real 24-hour programme schedule from a feed that merely responds successfully. Canonical IDs are conservative hints; actual IPTV stream mapping remains local to B1G.</p>'
         epg = (self.store.snapshot("epg") or {}).get("data", {})
@@ -807,6 +869,14 @@ class UI(BaseHTTPRequestHandler):
                     e(providers.EPG.get(name, (name,))[0]), e(f"{hours:.0f} h" if isinstance(hours, (int, float)) else "Unknown"),
                     e(row["window_matches"]), e(row["exclusive_matches"]))
             body += '</table></section>'
+        body += self._identity_card()
+        dsnap = self.store.snapshot("channel-dictionary")
+        dmeta = (dsnap or {}).get("data", {}).get("meta", {}) if dsnap else {}
+        if dmeta.get("channels"):
+            body += ('<section class="card" style="margin-bottom:14px"><h3>Channel identity dictionary</h3><p class="sub">'
+                     'iptv-org database (public domain) · %s channels, %s feeds for UK and Europe · checked %s · '
+                     'published as feed asset <code>dictionary</code></p></section>') % (
+                e(dmeta["channels"]), e(dmeta.get("feeds", 0)), e(when(dmeta.get("checked_at"))))
         any_source = False
         for name, (label, _) in providers.EPG.items():
             snapshot = self.store.snapshot("epg-quality:" + name)

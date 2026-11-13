@@ -1,6 +1,6 @@
 name: SportsLiveInfo
 slug: sportsliveinfo
-version: "0.3.6"
+version: "0.3.8"
 description: International television EPG and multi-sport event intelligence
 url: https://github.com/jimmyfazz/SportsLiveInfo
 arch:

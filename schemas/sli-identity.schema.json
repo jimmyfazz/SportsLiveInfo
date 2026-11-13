@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sli-identity.schema.json",
+  "title": "SportsLiveInfo channel identity graph (sli.identity/1)",
+  "description": "Guide channels linked by schedule agreement. Channel ids, display names and timeshift relations only; never programme data. Generated '<mk>.auto.*' ids are stable only within one revision: use them as join keys, never store them.",
+  "type": "object",
+  "required": ["schema", "method", "rules", "channels", "timeshifts", "sources"],
+  "properties": {
+    "schema": {"const": "sli.identity/1"},
+    "method": {"type": "string"},
+    "rules": {"type": "object", "required": ["merge_requires", "never_merged", "reader_use"]},
+    "channels": {"type": "array", "items": {"type": "object", "required": ["id", "market", "curated", "names", "members"],
+      "properties": {"id": {"type": "string", "pattern": "^[a-z]{2}\\.[a-z0-9_.]+$"}, "market": {"type": "string", "pattern": "^[A-Z]{2}$"},
+                     "curated": {"type": "boolean"}, "names": {"type": "array", "items": {"type": "string"}},
+                     "members": {"type": "array", "items": {"type": "object", "required": ["source_id", "channel_id"]}}}}},
+    "timeshifts": {"type": "array", "items": {"type": "object", "required": ["source_id", "channel_id", "offset_minutes", "base"],
+      "properties": {"offset_minutes": {"enum": [60, 120]}, "base": {"type": "object", "required": ["source_id", "channel_id"]}}}},
+    "sources": {"type": "array", "items": {"type": "object", "required": ["source_id", "source_url"],
+      "properties": {"source_url": {"type": "string", "pattern": "^https://"}}}}
+  }
+}

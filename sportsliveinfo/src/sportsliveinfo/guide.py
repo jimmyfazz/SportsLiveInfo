@@ -5,6 +5,7 @@ All programme text remains in the private HAOS database until rights are cleared
 """
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import html
 import re
 import unicodedata
 
@@ -191,10 +192,51 @@ CHANNEL_FAMILIES = [
 ]
 _FAMILY_PATTERNS = [(fid, label, re.compile(pattern)) for fid, label, pattern in CHANNEL_FAMILIES]
 
-DECORATION = re.compile(r"\s*[\[(](?:vip|sd|hd|fhd|uhd|4k|hevc|backup|back up|alt|b|raw|multi|50 ?fps|60 ?fps|1080p|720p)[\])]\s*", re.I)
-TRAILING_JUNK = re.compile(r"\s+(?:vip|backup|50 ?fps|60 ?fps)$", re.I)
-QUALITY_SUFFIX = re.compile(r"\s+(?:hd|fhd|sd|uhd|4k|hevc|h265|h264|2160p|1080p|720p)$", re.I)
+DECORATION = re.compile(r"\s*[\[(](?:vip|sd|hd|fhd|uhd|4k|hdr|hevc|backup|back up|alt|b|raw|multi|50 ?fps|60 ?fps|1080p|720p)[\])]\s*", re.I)
+# Provider annotations that never change the service. Exact forms only: a bracketed market
+# code or a city in brackets is market/location identity and must survive.
+ANNOTATION = re.compile(r"\s*\((?:uk|gb|x|d|m|from [^)]*|(?:live )?events? only|live event only)\)\s*", re.I)
+IRISH_FEED = re.compile(r"\s*\((?:ie|roi)\)\s*", re.I)
+TRAILING_JUNK = re.compile(r"\s+(?:vip|backup|raw|50 ?fps|60 ?fps)$", re.I)
+QUALITY_SUFFIX = re.compile(r"\s+(?:hd|fhd|sd|uhd|4k|hdr|hevc|h265|h264|2160p|1080p|720p|vip|backup|raw|50 ?fps|60 ?fps)$", re.I)
 COUNTRY_PREFIX = re.compile(r"^(uk|gb|fr|france|ie|irl|us|usa|ca|can|au|aus|nz|hk|hkg|my|mys|sg|ge|geo|pt|pl|gr|in|pk|ar|ara|arabic|mena|int|sports)\s*(?:[|:\-])\s*", re.I)
+BRACKET_COUNTRY = re.compile(r"^\((uk|gb|fr|ie|us|ca|au|nz|hk|my|sg|ge|pt|pl|gr|in|pk)\)\s*", re.I)
+# European provider prefixes: only with "|" or ":" (or a spaced " - ") after the code, so
+# names such as "No-Limit TV" or "De Ochtend" survive.
+_EU = r"(?:de|at|ch|es|it|nl|be|se|sw|no|dk|fi|tr|trk|al|ro|bg|hu|cz|sk|ru|ukr|lu|pt|pl|gr|fr|uk|ie)"
+_LEADING_MARKERS = re.compile(
+    r"^\s*(?:[\u2022\u25cf\u2605\-]+\s*)?(?:"
+    r"\|" + _EU + r"\|\s*|\[" + _EU + r"\]\s*|\[m\+\]\s*|\((?:vf|op|m|c\+fr|c\+pl)\)\s*|ti\s*[|:]\s*|"
+    r"(?:vip\s+)?(?:c\+)?" + _EU + r"(?:\s+ti)?\s*[|:]+\s*|" + _EU + r"\s+-\s+|\(" + _EU + r"\)\s*)", re.I)
+_LANGUAGE_TAG = re.compile(r"\s*\[(?:[a-z]{2}(?:-[a-z]{2})?|multi-?language)\]\s*", re.I)
+_EXPORT_JUNK = re.compile(r'^[^"]{0,80}",\s*')
+# Bare upper-case market codes ("IT Rai Movie") are stripped only when they match the
+# channel's market (market_key); "Al Jazeera" or "No Limit" are never touched.
+BARE_MARKET_CODES = {"GB": {"UK", "GB"}, "IE": {"IE"}, "FR": {"FR", "BE", "CH"}, "DE": {"DE", "AT", "CH"},
+                     "ES": {"ES"}, "IT": {"IT"}, "PT": {"PT"}, "NL": {"NL", "BE"}, "PL": {"PL"},
+                     "SE": {"SE", "SW"}, "NO": {"NO"}, "DK": {"DK"}, "FI": {"FI"}, "TR": {"TR", "TRK"},
+                     "GR": {"GR"}, "RO": {"RO"}, "BG": {"BG"}, "HU": {"HU"}, "CZ": {"CZ"}, "SK": {"SK"},
+                     "AL": {"AL"}, "RU": {"RU"}, "UA": {"UKR", "UA"}}
+
+
+def repair_text(text):
+    """Undo common mis-encoding ("DÃ©couverte" -> "Découverte") and broken-export junk."""
+    value = str(text)
+    if "\u00c3" in value or "\u00c2" in value:
+        try:
+            value = value.encode("latin-1").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+    return _EXPORT_JUNK.sub("", value)
+
+
+def _strip_leading_markers(value):
+    for _ in range(4):
+        new = _LEADING_MARKERS.sub("", value, count=1)
+        if new == value:
+            break
+        value = new
+    return value
 COUNTRY_PREFIX_ALIASES = {
     "uk": "gb", "france": "fr", "irl": "ie", "usa": "us", "can": "ca",
     "aus": "au", "hkg": "hk", "mys": "my", "geo": "ge",
@@ -205,15 +247,22 @@ GENERIC_PROGRAMME = re.compile(r"^(?:live (?:football|sport|sports|rugby|cricket
 
 def normalized_name(name):
     """Remove safe decorations while retaining identity-bearing service variants."""
-    value = unicodedata.normalize("NFKD", str(name))
+    value = _strip_leading_markers(repair_text(html.unescape(str(name))))
+    value = _LANGUAGE_TAG.sub(" ", value)
+    value = unicodedata.normalize("NFKD", value)
     value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    value = value.replace("*", " ")
+    irish = bool(IRISH_FEED.search(value))     # Irish feed of a UK service: identity-bearing, kept as "roi"
+    value = IRISH_FEED.sub(" ", value)
+    value = ANNOTATION.sub(" ", value)
     value = DECORATION.sub(" ", value.replace("\u00ae", "").replace("\u2122", ""))
     value = value.casefold().replace("&", " and ").strip()
+    value = re.sub(r"\s+et\s+", " and ", value)          # French "Chasse et Peche" = "Chasse & Peche"
+    value = BRACKET_COUNTRY.sub("", value)
     value = COUNTRY_PREFIX.sub("", value)
     value = SPACES.sub(" ", value)
-    value = TRAILING_JUNK.sub("", value)
     while True:
-        new = QUALITY_SUFFIX.sub("", value).strip()
+        new = re.sub(r"\s*[-|:]$", "", TRAILING_JUNK.sub("", QUALITY_SUFFIX.sub("", value))).strip()
         if new == value:
             break
         value = new
@@ -223,7 +272,66 @@ def normalized_name(name):
     value = re.sub(r"\bitv\s*([1-4])\b", r"itv \1", value)
     value = re.sub(r"\brte\s*2\b", "rte 2", value)
     value = value.replace("be in sports", "bein sports")
-    return SPACES.sub(" ", value).strip()
+    value = SPACES.sub(" ", value).strip()
+    return value + " roi" if irish and value else value
+
+
+# ---- Display variants: keep every provider channel, label the difference sensibly ----
+# Matching (normalized_name) deliberately ignores quality copies so they share one
+# guide. Display must do the opposite: every channel stays selectable, shown as a
+# tidy base name plus short variant tags. Identity parts (+1, numbers, regions,
+# beIN (G)/(N)/(F), cities) stay in the base name.
+VARIANT_TAGS = (
+    (r"\b(?:uhd|4k|2160p)\b", "4K"), (r"\bfhd\b|\b1080p\b", "FHD"), (r"(?<![fu])\bhd\b|\b720p\b|\u1d34\u1d30", "HD"),
+    (r"\bsd\b", "SD"), (r"\bhdr\b", "HDR"), (r"\b(50|60)\s?fps\b", "{0}fps"), (r"\b(?:hevc|h\.?265)\b", "HEVC"),
+    (r"\((?:ie|roi)\)", "Ireland"), (r"\(from ([^)]*?)(?:\s+uk)?\)", "from {0}"),
+    (r"\((?:live )?events? only\)|\(live event only\)", "Events only"),
+    (r"\bvip\b", "VIP"), (r"\braw\b", "RAW"), (r"\b(?:backup|back up)\b", "Backup"), (r"\balt\b", "Alt"),
+    (r"\*", "Alt feed"), (r"\(x\)", "Source X"), (r"\(d\)", "Source D"), (r"\(m\)", "Source M"),
+)
+_VARIANT_STRIP = re.compile(r"\s*(?:\((?:uk|gb|ie|roi|x|d|m|from [^)]*|(?:live )?events? only|live event only)\)"
+                            r"|[\[(](?:vip|hd|fhd|sd|uhd|4k|hevc)[\])])\s*", re.I)
+_VARIANT_WORDS = re.compile(r"(?<=\S)\s+-?\s*(?:uhd/?|4k|2160p|fhd|1080p|hd|720p|sd|hdr|hevc|h\.?265|50\s?fps|60\s?fps|vip|raw|"
+                            r"backup|alt)(?=\s|$)", re.I)
+_DISPLAY_PREFIX = re.compile(r"^\s*(?:(?:uk|gb|us|ca|fr|de|ie|au)\s*[-|:]|4k\s*\|)\s*", re.I)
+
+
+def channel_variant(name):
+    """{"base", "tags", "label"} for display. Never used to merge or hide channels."""
+    original = html.unescape(str(name))
+    tags = []
+    for pattern, label in VARIANT_TAGS:
+        match = re.search(pattern, original, re.I)
+        if match:
+            text = label.format(*(g.strip() for g in match.groups())) if match.groups() else label
+            if text not in tags:
+                tags.append(text)
+    base = _VARIANT_STRIP.sub(" ", original.replace("*", " "))
+    base = _DISPLAY_PREFIX.sub("", base)
+    stripped = _VARIANT_WORDS.sub(" ", base)
+    base = stripped if stripped.strip(" -|:/") else base       # never strip a name down to nothing
+    base = SPACES.sub(" ", base).strip(" -|:/")
+    return {"base": base, "tags": tags, "label": " · ".join([base] + tags)}
+
+
+def display_labels(names):
+    """Labels for one category in provider order; identical labels are numbered (· 2, · 3)."""
+    seen = defaultdict(int)
+    out = []
+    for name in names:
+        label = channel_variant(name)["label"]
+        seen[label] += 1
+        out.append(label if seen[label] == 1 else "%s · %d" % (label, seen[label]))
+    return out
+
+
+def market_key(name, market):
+    """normalized_name after removing a bare upper-case code that equals the channel's market."""
+    value = repair_text(html.unescape(str(name)))
+    match = re.match(r"^\s*([A-Z]{2,3})\s+(?=\S)", value)
+    if match and match.group(1) in BARE_MARKET_CODES.get(str(market or "").upper(), ()):
+        value = re.sub(r"^\s*[|:\-]+\s*", "", value[match.end():])
+    return normalized_name(value)
 
 
 def canonical_channel(source_id, epg_id, display_name):

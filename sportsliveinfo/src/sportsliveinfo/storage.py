@@ -24,6 +24,8 @@ DEFAULT = {
     "github": {"owner": "jimmyfazz", "repository": "LiveSports-EPG", "branch": "main",
                "token": "", "enabled": False, "auto_publish": False},
     "publication_approvals": [],
+    # Optional public-domain channel identity dictionary (iptv-org database); off until the owner enables it.
+    "dictionary": {"iptvorg": False},
 }
 
 
@@ -89,6 +91,11 @@ class Store:
         # Older installs saved an empty repository placeholder. Populate only
         # that placeholder for the original owner; never change an explicitly
         # configured alternative owner, repo, publishing flag, key or token.
+        # Sources retired from the catalogue (e.g. guides whose host stopped publishing)
+        # disappear from saved choices; nothing else in the saved config changes.
+        for section, registry in (("sports", providers.SPORTS), ("epg", providers.EPG)):
+            if isinstance(config.get(section), dict):
+                config[section] = {k: v for k, v in config[section].items() if k in registry}
         target = config.get("github")
         if (isinstance(target, dict) and target.get("owner") == "jimmyfazz"
                 and not target.get("repository")):
@@ -114,6 +121,8 @@ class Store:
                     if key == "github" and any(k not in expected or type(v) is not type(expected[k])
                                                for k, v in value.items()):
                         raise ValueError("Unsupported publication setting")
+                    if key == "dictionary" and any(k not in expected or type(v) is not bool for k, v in value.items()):
+                        raise ValueError("Unknown dictionary source or invalid enabled state")
                     if key == "keys" and any(not isinstance(v, str) for v in value.values()):
                         raise ValueError("Provider keys must be text")
                     if key == "options":

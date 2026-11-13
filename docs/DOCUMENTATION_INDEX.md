@@ -23,6 +23,7 @@ SportsLiveInfo is the public App source repository. LiveSports-EPG is the separa
 | [docs/B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md](B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md) | Current specification / guide |
 | [docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md) | Historical audit / receipt |
 | [docs/B1_INTEGRATION.md](B1_INTEGRATION.md) | Current specification / guide |
+| [docs/B1G_INTEGRATION_FEEDBACK_BACKLOG_2026-11-13.md](B1G_INTEGRATION_FEEDBACK_BACKLOG_2026-11-13.md) | Backlog: producer improvements and B1G feedback import |
 | [docs/CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md](CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md) | Current specification / guide |
 | [docs/CODEX_B1G_SUBSCRIPTION_INVENTORY_HANDOVER.md](CODEX_B1G_SUBSCRIPTION_INVENTORY_HANDOVER.md) | Current specification / guide |
 | [docs/CODEX_CLAUDE_COLLABORATION.md](CODEX_CLAUDE_COLLABORATION.md) | Current specification / guide |

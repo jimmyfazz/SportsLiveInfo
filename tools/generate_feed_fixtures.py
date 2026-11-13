@@ -92,10 +92,43 @@ GUIDE = {"source_id": "farleyflex", "channels": {"skysportsmainevent.uk": "Sky S
                          "end_utc": "2026-11-14T17:15:00+00:00", "title": "Live Premier League",
                          "subtitle": "Arsenal v Manchester City", "is_live": True, "is_repeat": False}]}
 
+# A second guide naming the same service differently, plus its +1, so the
+# identity graph (sli.identity/1) is exercised. Programme titles never leave
+# the collector; only the resulting channel ids appear in the fixture.
+_IDENTITY_TITLES = ["Soccer Saturday Preview", "Fantasy Football Club", "Monday Night Football Replay",
+                    "Premier League Review", "Saturday Night Football", "Goals Reloaded Special",
+                    "Rugby Union Weekly", "Cricket Masterclass Session", "Golf Highlights Tonight", "Boxing Countdown Show"]
+
+
+def _schedule(channel_id, first_start, offset_minutes=0):
+    rows = []
+    for i, title in enumerate(_IDENTITY_TITLES):
+        start = first_start.replace(hour=0) + __import__("datetime").timedelta(hours=18 + i, minutes=offset_minutes)
+        rows.append({"channel_id": channel_id, "start_utc": start.isoformat(),
+                     "end_utc": (start + __import__("datetime").timedelta(minutes=55)).isoformat(), "title": title})
+    return rows
+
+
+GUIDE["programmes"] += _schedule("skysportsmainevent.uk", NOW)
+GUIDE_B = {"source_id": "epgtalk_uk",
+           "channels": {"SkySpMainEvHD.uk": "UK - Sky Sports Main Event HD", "SkySpMainEv1.uk": "Sky Sports Main Event +1"},
+           "programmes": _schedule("SkySpMainEvHD.uk", NOW) + _schedule("SkySpMainEv1.uk", NOW, offset_minutes=60)}
+
+
+# Tiny public-domain dictionary sample (same shape as the iptv-org database files).
+DICT_CHANNELS = """id,name,alt_names,network,owners,country,categories,is_nsfw,launched,closed,replaced_by,website
+SkySportsMainEvent.uk,Sky Sports Main Event,,,Sky,UK,sports,FALSE,,,,
+CanalPlusSport.fr,Canal+ Sport,,,Canal+,FR,sports,FALSE,1998-08-31,,,
+beINSports1.qa,beIN Sports 1,,,beIN Media Group,QA,sports,FALSE,,,,
+"""
+DICT_FEEDS = """channel,id,name,alt_names,is_main,broadcast_area,timezones,languages,format
+beINSports1.qa,France,France,,FALSE,c/FR,Europe/Paris,fra,1080i
+"""
+
 
 def build():
     """Return (manifest, files) for the fixed fixture day."""
-    from sportsliveinfo import feed
+    from sportsliveinfo import dictionary, feed, identity
     from sportsliveinfo.engine import Engine
     from sportsliveinfo.guide import analyze_guide
     from sportsliveinfo.storage import Store
@@ -103,11 +136,18 @@ def build():
         store = Store(Path(tmp) / "fixture.sqlite3")
         store.configure({"setup_complete": True, "schedule": ["04:00", "12:00", "17:00"],
                          "sports": {name: True for name in SNAPSHOTS} | {"jolpica": True},
-                         "epg": {"farleyflex": True}, "publication_approvals": sorted(SNAPSHOTS)})
+                         "epg": {"farleyflex": True, "epgtalk_uk": True}, "publication_approvals": sorted(SNAPSHOTS),
+                         "dictionary": {"iptvorg": True}})
         for name, events in SNAPSHOTS.items():
             store.save_snapshot("sports:" + name, {"events": events, "source_id": name})
         store.save_snapshot("epg:farleyflex", GUIDE)
         store.save_snapshot("epg-quality:farleyflex", analyze_guide(GUIDE, now=NOW))
+        store.save_snapshot("epg:epgtalk_uk", GUIDE_B)
+        store.save_snapshot("epg-quality:epgtalk_uk", analyze_guide(GUIDE_B, now=NOW))
+        document, report = identity.build_from_store(store, ["farleyflex", "epgtalk_uk"], now=NOW)
+        store.save_snapshot("channel-identity", {"document": document, "report": report})
+        store.save_snapshot("channel-dictionary", {"document": dictionary.build_document(DICT_CHANNELS, DICT_FEEDS),
+                                                   "meta": {"channels": 3}})
         Engine(store)._materialize(now=NOW)
         return feed.build_feed(store, now=NOW)
 

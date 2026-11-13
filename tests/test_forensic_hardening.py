@@ -162,17 +162,22 @@ class XmltvAndNetworkTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             providers.decode_xmltv(gzip.compress(raw), "farleyflex", max_expanded=40)
 
-    def test_only_known_xmltv_prologue_is_removed(self):
+    def test_only_the_standard_xmltv_prologue_is_removed(self):
+        # The standard external xmltv.dtd marker is accepted from every source
+        # (13 Nov: guides such as mjh_sky_uk failed only because of it); every
+        # other declaration stays refused.
         marker = b'<!DOCTYPE tv SYSTEM "xmltv.dtd">'
         prologue = b'<?xml version="1.0" encoding="UTF-8"?>\n' + marker
         body = b'<tv><channel id="sample"><display-name>Sample</display-name></channel></tv>'
-        for source in ("fr_xmltv", "epgtalk_uk", "epgtalk_sports"):
+        for source in ("fr_xmltv", "epgtalk_uk", "epgtalk_sports", "farleyflex", "mjh_sky_uk"):
             with self.subTest(source=source):
                 self.assertEqual(providers.decode_xmltv(gzip.compress(prologue + body), source)["channels"],
                                  {"sample": "Sample"})
+        self.assertEqual(providers.decode_xmltv(b'<!DOCTYPE tv SYSTEM "https://example.org/dtd/xmltv.dtd">' + body,
+                                                "mjh_sky_uk")["channels"], {"sample": "Sample"})
         for data, source in (
-            (prologue + body, "farleyflex"),
             (marker + marker + body, "fr_xmltv"),
+            (b'<!DOCTYPE tv SYSTEM "xmltv.dtd" [<!ENTITY x "unsafe">]>' + body, "farleyflex"),
             (b'<!DOCTYPE tv SYSTEM "https://example.com/external.dtd">' + body, "fr_xmltv"),
             (b'<!DOCTYPE tv [<!ENTITY x "unsafe">]>' + body, "fr_xmltv"),
             ((marker + body).decode().encode("utf-16"), "fr_xmltv"),
