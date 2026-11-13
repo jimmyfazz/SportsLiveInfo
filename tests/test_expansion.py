@@ -555,6 +555,24 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertIn("unsuccessful", engine.test_source("epg", "farleyflex"))
         self.assertEqual(self.store.recent_jobs(1)[0]["details"], "Local daily request budget exhausted")
 
+    def test_today_prioritises_live_and_filters_sport(self):
+        events = [taxonomy.classify(ev(id=name, title=name, sport=sport, status_normalized=state,
+                                       start_utc=start))
+                  for name, sport, state, start in (
+                      ("Upcoming football", "football", "scheduled", "2026-11-14T15:00:00+00:00"),
+                      ("Live football", "football", "live", "2026-11-14T15:30:00+00:00"),
+                      ("Finished football", "football", "finished", "2026-11-14T12:00:00+00:00"),
+                      ("Upcoming basketball", "basketball", "scheduled", "2026-11-14T16:00:00+00:00"),
+                  )]
+        self.store.save_snapshot("today", linking.build_today(events, NOW))
+        page = self.get("?page=today&sport=football")
+        self.assertIn('value="football" selected', page)
+        self.assertNotIn("Upcoming basketball", page)
+        self.assertLess(page.index("Live football"), page.index("Upcoming football"))
+        self.assertLess(page.index("Upcoming football"), page.index("<details><summary>Finished"))
+        self.assertLess(page.index("<details><summary>Finished"), page.index("Finished football"))
+        self.assertIn("Upcoming basketball", self.get("?page=today&sport=unknown"))
+
     def test_mixed_fallback_competitions_on_saved_snapshot(self):
         events = [taxonomy.classify(ev(id=str(i), sport="basketball", competition=competition,
                                        title="Fixture " + str(i)))

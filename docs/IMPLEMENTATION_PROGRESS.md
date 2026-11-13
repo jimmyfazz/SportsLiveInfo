@@ -17,6 +17,10 @@ Follow-up on baseline `49e6795ce7df695ed903afdb901fb7e1e5cb1caa`: Overview reads
 
 Manual refresh follow-up on `0fbbcc6e430eef914563f465fe94076cfcb52e2e`: Overview offers Sports-only and EPG-only refreshes. Both use the existing worker lock and rebuild the dashboard from last-good inputs. Scoped refreshes call only the selected engine and skip automatic publication. Source cards show the last successful refresh, latest recorded activity and remaining local UTC-day requests. The existing scheduled collection path still refreshes both engines. Python 3.12 compile and all 103 tests passed. No provider, schema or source-rights changes. Live HAOS verification remains pending.
 
+Live Today follow-up on `3f689396dd1282a44985856e514c25561b8afa43`: filter the saved UK-day snapshot by sport, put live fixtures first within each competition and show finished, postponed or cancelled fixtures in collapsed details. The view flags a prior-day snapshot and retains the event list. The ordering uses saved provider statuses. Python 3.12 compiled the package and all 104 tests passed. No extra provider calls, data migration or feed contract changes. Live Ingress verification remains pending.
+
+Distribution note, 13 November: GitHub now reports the App source repository as public. The Home Assistant store identifies a GitHub repository installation by a repository-prefixed slug. The existing `local_sportsliveinfo` installation uses its local App files and retains its own data. To test v0.3.1 while keeping that data, use an in-place local update. A move to the repository-backed App needs a separate migration and verification of the saved data before removing the local App. The public daily data feed remains a separate repository.
+
 ## v0.3.1 dashboard maintenance — 12 November 2026
 
 Baseline: private main `56ea1bee0611d1343f4a05f2d7983e146f415606`. The live v0.3.0 HAOS snapshot showed 1,223 sports events and eight EPG guides. This maintenance build fixes the fallback labels, zero rendering and misleading full-coverage rows using existing snapshots. It adds no provider requests, licence changes, schema changes or storage migrations.

@@ -261,7 +261,7 @@ class UI(BaseHTTPRequestHandler):
         if page == "sources":
             body = self.sources(config)
         elif page == "today":
-            body = self.today()
+            body = self.today(query)
         elif page == "events":
             body = self.events(query)
         elif page == "guide":
@@ -419,29 +419,62 @@ class UI(BaseHTTPRequestHandler):
             e(event.get("category_label") or event.get("sport", "")), e(event.get("competition", "")),
             e(event.get("title", "")), e(confidence), e(self._channel_text(event)))
 
-    def today(self):
+    def today(self, query=None):
         snapshot = self.store.snapshot("today")
         day = snapshot["data"] if snapshot else {}
-        body = '<h2>Live action today</h2><p>Today\'s fixtures, races and sessions (UK day), grouped by sport and competition. "Probably live" is estimated from start time and typical duration unless the provider reports live status. Statuses reflect the snapshot time below. Channel names shown are unverified EPG matches.</p>'
+        body = '<h2>Live action today</h2><p>Fixtures, races and sessions for the UK day. Statuses reflect the refresh time below. Channel suggestions are unverified.</p>'
         if not day.get("count"):
             return body + '<section class="card"><p>No events collected for today yet. Enable sources and run a refresh.</p></section>'
         body += '<p class="sub">%s · %s events · %s live or probably live at refresh · generated %s</p>' % (
             e(day.get("date")), e(day.get("count")), e(day.get("live_now", 0)), e(day.get("generated_at")))
-        table_head = '<table><tr><th>UK time</th><th>Category</th><th>Event</th><th>Channel</th></tr>'
-        if day.get("featured"):
-            body += '<section class="card" style="margin-bottom:14px"><h3>Featured: England, home nations &amp; PPV</h3>' + table_head
-            body += ''.join(self._event_row(ev, "%H:%M") for ev in day["featured"]) + '</table></section>'
-        for group in day.get("sports", []):
-            body += '<section class="card" style="margin-bottom:14px"><h3>%s <span class="pill">%s</span></h3>' % (e(group["label"]), e(group["count"]))
+        today = datetime.now(ZoneInfo("Europe/London")).date().isoformat()
+        if day.get("date") and day["date"] != today:
+            body += '<p class="warn">Showing the saved schedule for %s. Refresh sports to update today’s list.</p>' % e(day["date"])
+        groups = day.get("sports", [])
+        sport = (query or {}).get("sport", "")
+        if sport not in {group["sport"] for group in groups}:
+            sport = ""
+        options = "".join('<option value="%s"%s>%s</option>' % (
+            e(group["sport"]), " selected" if group["sport"] == sport else "", e(group["label"]))
+            for group in groups)
+        body += ('<form method="get"><input type="hidden" name="page" value="today">'
+                 '<label for="today-sport">Sport</label><select id="today-sport" name="sport">'
+                 '<option value="">All sports</option>%s</select><button type="submit">Filter</button></form>') % options
+
+        featured = [event for event in day.get("featured", []) if not sport or event.get("sport") == sport]
+        if featured:
+            body += '<section class="card" style="margin-bottom:14px"><h3>Featured: England, home nations &amp; PPV</h3>'
+            body += self._today_rows(featured) + '</section>'
+        for group in groups:
+            if sport and group["sport"] != sport:
+                continue
+            body += '<section class="card" style="margin-bottom:14px"><h3>%s <span class="pill">%s</span></h3>' % (
+                e(group["label"]), e(group["count"]))
             for category in group["categories"]:
                 label = "Other competitions" if category["id"] == group["sport"] + ".other" else category["label"]
-                rows = category["events"][:60]
-                body += '<p><strong>%s</strong> <small>(%s)</small></p>%s' % (e(label), e(category["count"]), table_head)
-                body += ''.join(self._event_row(ev, "%H:%M") for ev in rows) + '</table>'
-                if len(rows) < category["count"]:
-                    body += '<p class="help">Showing %s of %s events. See Sports events for more.</p>' % (
-                        e(len(rows)), e(category["count"]))
+                body += '<p><strong>%s</strong> <small>(%s)</small></p>%s' % (
+                    e(label), e(category["count"]), self._today_rows(category["events"]))
             body += '</section>'
+        return body
+
+    def _today_rows(self, events):
+        table_head = '<table><tr><th>UK time</th><th>Category</th><th>Event</th><th>Channel</th></tr>'
+        closed = {"finished", "probably_finished", "postponed", "cancelled"}
+        live = {"live", "live_probable"}
+        active = sorted((event for event in events if event.get("live_state") not in closed),
+                        key=lambda event: event.get("live_state") not in live)
+        ended = [event for event in events if event.get("live_state") in closed]
+        body = ""
+        for rows, collapsed in ((active, False), (ended, True)):
+            if not rows:
+                continue
+            if collapsed:
+                body += '<details><summary>Finished, postponed or cancelled (%s)</summary>' % e(len(rows))
+            body += table_head + ''.join(self._event_row(event, "%H:%M") for event in rows[:60]) + '</table>'
+            if len(rows) > 60:
+                body += '<p class="help">Showing 60 of %s events. See Sports events for more.</p>' % e(len(rows))
+            if collapsed:
+                body += '</details>'
         return body
 
     def events(self, query=None):
