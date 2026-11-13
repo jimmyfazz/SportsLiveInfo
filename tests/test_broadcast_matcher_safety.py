@@ -112,6 +112,76 @@ class BroadcastMatcherSafetyTests(unittest.TestCase):
         self.assertIsNone(linking._regional_service_id("farleyflex", "Example One East", **args))
         self.assertIsNone(linking._regional_service_id("epgshare_fr", "Example One North", **args))
 
+    def test_timeshift_channels_are_never_live_candidates(self):
+        event = fixture()
+        for name in ("Example Sports Network +1", "Example Sports Network Plus 1"):
+            with self.subTest(name=name):
+                self.assertFalse(linking._channel_sport_eligible("football", name))
+                result = linking.broadcast_candidates(
+                    [event], {"farleyflex": guide([programme("North Harbor v Westshire")], {"example-sports": name})},
+                    START, identity_document=SPORTS_IDENTITY)
+                self.assertNotIn(event["id"], result)
+        # A dictionary timeshift feed must not resolve to its base channel id.
+        document = {"channels": [{"id": "ExampleNetwork.uk", "name": "Example Sports Network", "country": "UK",
+                                  "categories": ["Sports"],
+                                  "feeds": [{"id": "SD", "name": "SD", "main": True, "areas": ["UK"]},
+                                            {"id": "Plus1", "name": "+1", "areas": ["UK"]}]}]}
+        from sportsliveinfo import dictionary
+        resolver = dictionary.Resolver(document)
+        self.assertEqual(linking._dictionary_hit(resolver, "farleyflex", "Example Sports Network")[0],
+                         "ExampleNetwork.uk")
+        self.assertIsNone(linking._dictionary_hit(resolver, "farleyflex", "Example Sports Network +1"))
+
+    def test_registry_and_dictionary_ids_unify_to_one_service_id(self):
+        document = {"channels": [{"id": "ExampleOne.uk", "name": "ITV1", "country": "UK",
+                                  "alt_names": ["Example Regional One"], "categories": ["General"]}]}
+        guides = {"farleyflex": guide([
+            programme("North Harbor v Westshire", "itv1", "ITV1"),
+            programme("North Harbor v Westshire", "regional", "Example Regional One"),
+        ], {"itv1": "ITV1", "regional": "Example Regional One"})}
+        result = linking.broadcast_candidates([fixture()], guides, START, dictionary_document=document)
+        ids = [row["canonical_channel_id"] for row in result["synthetic:event:1"][1]]
+        self.assertEqual(ids, ["gb.itv.one"])
+
+    def test_guide_dates_tags_and_league_badges_are_ignored(self):
+        event = fixture()
+        for title, subtitle in (("Live Football", "North Harbor v Westshire 14.11"),
+                                ("Live: Synthetic Cup [NEW]", "North Harbor v Westshire"),
+                                ("Live: Synthetic Cup", "\u26bd [EPL] North Harbor v \u26bd [EPL] Westshire")):
+            with self.subTest(subtitle=subtitle):
+                result = linking.broadcast_candidates(
+                    [event], {"farleyflex": guide([programme(title, subtitle=subtitle)])}, START,
+                    identity_document=SPORTS_IDENTITY)
+                self.assertIn(event["id"], result)
+
+    def test_womens_only_competition_name_implies_the_womens_variant(self):
+        womens = fixture(title="North Harbor W v Westshire W", competition="Synthetic Women's League",
+                         participants=["North Harbor W", "Westshire W"], participants_short=[])
+        for title in ("Live: WSL", "Live: NWSL"):
+            with self.subTest(title=title):
+                result = linking.broadcast_candidates(
+                    [womens], {"farleyflex": guide([programme(title, subtitle="North Harbor v Westshire")])}, START,
+                    identity_document=SPORTS_IDENTITY)
+                self.assertIn(womens["id"], result)
+        mens = fixture()
+        result = linking.broadcast_candidates(
+            [mens], {"farleyflex": guide([programme("Live: WSL", subtitle="North Harbor v Westshire")])}, START,
+            identity_document=SPORTS_IDENTITY)
+        self.assertNotIn(mens["id"], result)
+
+    def test_guide_may_add_a_club_suffix_but_not_change_it(self):
+        event = fixture(title="Harbor v Westshire", participants=["Harbor", "Westshire"], participants_short=[])
+        result = linking.broadcast_candidates(
+            [event], {"farleyflex": guide([programme("Live: Harbor Town v Westshire & Hove Albion")])}, START,
+            identity_document=SPORTS_IDENTITY)
+        self.assertIn(event["id"], result)
+        city = fixture(title="Harbor City v Westshire", participants=["Harbor City", "Westshire"],
+                       participants_short=[])
+        result = linking.broadcast_candidates(
+            [city], {"farleyflex": guide([programme("Live: Harbor United v Westshire")])}, START,
+            identity_document=SPORTS_IDENTITY)
+        self.assertNotIn(city["id"], result)
+
 
 if __name__ == "__main__":
     unittest.main()

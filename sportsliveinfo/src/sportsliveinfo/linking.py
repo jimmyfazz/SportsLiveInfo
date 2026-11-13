@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from . import dictionary as channel_dictionary, taxonomy
 from .guide import COUNTRY_BY_SOURCE, canonical_channel, channel_families, normalized_name
+from .identity import name_signature
 from .providers import EPG_FAMILY, SPORT_FAMILY
 
 LONDON = ZoneInfo("Europe/London")
@@ -317,6 +318,9 @@ def _identity_members(identity_document):
     return members, clusters
 
 
+_TIMESHIFT_FEED = re.compile(r"(?:plus\s*[12]|\+\s*[12]|timeshift|1hr|2hr)", re.I)
+
+
 def _dictionary_hit(resolver, source_id, display_name):
     market = COUNTRY_BY_SOURCE.get(source_id)
     if resolver is None or not market:
@@ -324,6 +328,9 @@ def _dictionary_hit(resolver, source_id, display_name):
     hit = resolver.resolve(display_name, market)
     if not hit or hit.get("confidence") != "high":
         return None
+    if {"ts1", "ts2"} & name_signature(display_name)[0] or any(
+            entry and entry[1] and _TIMESHIFT_FEED.search(str(entry[1])) for entry in hit.get("ids", [])):
+        return None                       # a timeshift feed must never resolve to its base channel id
     ids = {entry[0] for entry in hit.get("ids", []) if entry and entry[0]}
     if len(ids) != 1:
         return None
@@ -360,6 +367,18 @@ def _channel_identity_index(epg_guides, dictionary_document=None, identity_docum
             if hit:
                 dictionary_by_cluster[cluster_id].add(hit[0])
                 category_by_dictionary_id[hit[0]] = hit[1]
+    # One identity per service: when a guide channel has both a registry id and a
+    # unique dictionary id, every other channel resolving to that dictionary id is
+    # reported under the registry id (e.g. ITV1.uk -> gb.itv.one).
+    registry_for_dictionary = defaultdict(set)
+    if resolver:
+        for source_id, guide in guides:
+            for channel_id, name in (guide.get("channels") or {}).items():
+                registry_id = _registry_channel_id(source_id, channel_id, name)
+                hit = registry_id and _dictionary_hit(resolver, source_id, name)
+                if hit:
+                    registry_for_dictionary[hit[0]].add(registry_id)
+    alias = {dict_id: next(iter(ids)) for dict_id, ids in registry_for_dictionary.items() if len(ids) == 1}
     index = {}
     for source_id, guide in guides:
         for channel_id, name in (guide.get("channels") or {}).items():
@@ -375,11 +394,12 @@ def _channel_identity_index(epg_guides, dictionary_document=None, identity_docum
                 continue
             hit = _dictionary_hit(resolver, source_id, name)
             if hit:
-                index[key] = (hit[0], "dictionary", "high", hit[1])
+                index[key] = (alias.get(hit[0], hit[0]), "dictionary", "high", hit[1])
                 continue
             if cluster_id and len(dictionary_by_cluster.get(cluster_id, ())) == 1:
                 stable_id = next(iter(dictionary_by_cluster[cluster_id]))
-                index[key] = (stable_id, "identity_dictionary", "high", category_by_dictionary_id.get(stable_id, ()))
+                index[key] = (alias.get(stable_id, stable_id), "identity_dictionary", "high",
+                              category_by_dictionary_id.get(stable_id, ()))
     return index, guides
 
 
@@ -422,18 +442,39 @@ def _programme_index(epg_guides, window_start, window_end, *, include_non_matche
                 continue
             if excluded and not include_non_matches:
                 continue
-            parts = [] if excluded else [taxonomy.norm(programme.get(field, "")) for field in ("title", "subtitle")]
+            parts = [] if excluded else [taxonomy.norm(_clean_listing(programme.get(field, ""))) for field in ("title", "subtitle")]
             channel_name = channels.get(channel_id, channel_id)
             rows.append((start, end, [p for p in parts if p], text, bool(programme.get("is_live")), canonical,
                          channel_name, source_id, mapping_method, mapping_confidence, dictionary_categories))
     return rows
 
 
+_LISTING_DATE = re.compile(r"\s+\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\s*$")
+_LISTING_TAG = re.compile(r"\s*[\[(](?:new|live|hd|s|r|repeat|premiere)[\])]\s*", re.I)
+# Some guides prefix team names with a pictogram and league tag ("\u26bd [EPL] Chelsea").
+_LISTING_BADGE = re.compile(r"[\u2600-\u27bf\U0001f300-\U0001faff]\ufe0f?\s*(?:\[[A-Za-z0-9]{2,6}\]\s*)?")
+# Competitions whose name already means the women's game ("Live WSL: Spurs v Everton").
+_WOMENS_COMPETITION = re.compile(r"\b(wsl|wsl 2|barclays wsl|women s super league|womens super league|"
+                                 r"women s championship|womens championship|lionesses|nwsl|swpl|wbbl|aflw)\b")
+
+
+def _clean_listing(value):
+    """Drop guide decorations that are not part of the fixture: a trailing "14.11" date, "[NEW]" or a league badge."""
+    text = _LISTING_BADGE.sub(" ", _LISTING_TAG.sub(" ", str(value or "")))
+    return _LISTING_DATE.sub("", text).strip()
+
+
 def _side_matches(segment, team, allowed):
     words = set(tokens(segment)) - _STOP
     distinctive = set(team) - _GENERIC - _LOW_SIGNAL_TEAM_TOKENS
-    return (bool(distinctive) and "tbc" not in team and distinctive <= words
-            and (words - set(team) - _LOW_SIGNAL_TEAM_TOKENS) <= allowed)
+    extra = words - set(team) - _LOW_SIGNAL_TEAM_TOKENS
+    # A guide may add a club suffix the feed omits ("Cheltenham" -> "Cheltenham Town",
+    # "Brighton" -> "Brighton & Hove Albion"), as same_team allows. Only when the
+    # feed's own suffix words are present too, so "Manchester City" never matches
+    # "Manchester United".
+    if set(team) & _GENERIC <= words:
+        extra -= _GENERIC
+    return (bool(distinctive) and "tbc" not in team and distinctive <= words and extra <= allowed)
 
 
 def _fixture_in(text, home, away, allowed):
@@ -459,7 +500,9 @@ def _team_options(event):
             names.append(short[index])
         keys = []
         for name in names:
-            key = team_key(name)
+            # Age/gender markers ("W", "U21") are checked by _event_identity_variants,
+            # not required inside the team name ("Tottenham Hotspur W" == "Tottenham Hotspur").
+            key = frozenset(team_key(name) - _VARIANT)
             if key and "tbc" not in key and set(key) - _GENERIC - _LOW_SIGNAL_TEAM_TOKENS:
                 if key not in keys:
                     keys.append(key)
@@ -479,6 +522,8 @@ def _event_identity_variants(event):
 
 def _programme_identity_variants(text):
     variants = _tournament_variants(text)
+    if _WOMENS_COMPETITION.search(text):
+        variants.add("women")
     return {"women" if item == "w" else re.sub(r"\s*[- ]\s*", "", item) for item in variants
             if item == "w" or item.startswith("u") or item in _WOMENS_VARIANTS or item == "women"}
 
@@ -488,6 +533,8 @@ def _channel_sport_eligible(sport, channel_name, dictionary_categories=()):
     name = taxonomy.norm(channel_name)
     if not name or _RADIO_OR_SHOPPING.search(name):
         return False
+    if {"ts1", "ts2"} & name_signature(channel_name)[0]:
+        return False                      # +1/+2 channels air the event later; never a live candidate
     families = set()
     # The existing source registry recognises the named UK/European sports
     # families and free-to-air broadcasters. A generic sports label is also
