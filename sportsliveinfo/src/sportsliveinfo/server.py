@@ -735,6 +735,15 @@ class UI(BaseHTTPRequestHandler):
             "".join('<option value="%s" %s>%s</option>' % (e(s), "selected" if s == sport else "", e(taxonomy.SPORTS.get(s, ("Other",))[0])) for s in sports_present),
             "".join('<option value="%s" %s>%s</option>' % (e(c), "selected" if c == category else "", e(label)) for c, label in categories_present),
             e(query.get("q", "")), e(uk_date), " checked" if with_guide else "")
+        contributions = [row for row in data.get("sources", []) if "window_fixtures" in row]
+        if contributions:
+            body += '<details class="card"><summary>Fixture contribution by source</summary><p class="help">Counts are for the full eight-day window after de-duplication. Exclusive fixtures were supplied by just one source.</p>'
+            body += '<table><tr><th>Source</th><th>Fixtures</th><th>Exclusive fixtures</th></tr>'
+            for row in sorted(contributions, key=lambda row: (-row["exclusive_fixtures"], -row["window_fixtures"], row["id"])):
+                name = row["id"]
+                body += '<tr><td>%s</td><td>%s</td><td>%s</td></tr>' % (
+                    e(providers.SPORTS.get(name, (name,))[0]), e(row["window_fixtures"]), e(row["exclusive_fixtures"]))
+            body += '</table></details>'
         body += '<section class="card">%s<h3>%s of %s events</h3><p class="help">%s · Data is private on this Home Assistant instance.</p>' % (
             filters, e(len(shown)), e(len(events)), e(snapshot["updated_at"] if snapshot else "No sporting snapshot yet"))
         body += '<table><tr><th>UK start time</th><th>Category and competition</th><th>Event and sources</th><th>Channel</th></tr>'
@@ -764,6 +773,19 @@ class UI(BaseHTTPRequestHandler):
 
     def guide(self):
         body = '<h2>International EPG coverage</h2><p>Private guide analysis: distinguish a real 24-hour programme schedule from a feed that merely responds successfully. Canonical IDs are conservative hints; actual IPTV stream mapping remains local to B1G.</p>'
+        epg = (self.store.snapshot("epg") or {}).get("data", {})
+        summaries = epg.get("sources", [])
+        rows = [row for row in summaries if "window_matches" in row]
+        if rows:
+            body += '<section class="card"><h3>Guide contribution</h3><p class="help">Fixture and channel pairs across today and the next seven UK dates. Exclusive means only this guide supplied that pair.</p>'
+            body += '<table><tr><th>Guide</th><th>Guide horizon at import</th><th>Matches</th><th>Exclusive matches</th></tr>'
+            for row in sorted(rows, key=lambda row: (-row["exclusive_matches"], -row["window_matches"], row["id"])):
+                name = row["id"]
+                hours = row.get("horizon_hours")
+                body += '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>' % (
+                    e(providers.EPG.get(name, (name,))[0]), e(f"{hours:.0f} h" if isinstance(hours, (int, float)) else "Unknown"),
+                    e(row["window_matches"]), e(row["exclusive_matches"]))
+            body += '</table></section>'
         any_source = False
         for name, (label, _) in providers.EPG.items():
             snapshot = self.store.snapshot("epg-quality:" + name)
@@ -940,7 +962,7 @@ class UI(BaseHTTPRequestHandler):
         enabled = [(n, providers.SPORTS[n][0], providers.SPORTS[n][3], n) for n in providers.SPORTS if config["sports"].get(n)]
         enabled += [(n, providers.EPG[n][0], providers.EPG_DAILY_REQUEST_LIMIT, "epg:" + n) for n in providers.EPG if config["epg"].get(n)]
         if enabled:
-            body += '<table><tr><th>Source</th><th>Last result</th><th>Last success</th><th>Consecutive failures</th><th>Calls today</th></tr>'
+            body += '<table><tr><th>Source</th><th>Last result</th><th>Last success</th><th>Consecutive failures</th><th>Calls today</th><th>Retry after</th></tr>'
             for name, label, limit, ledger in enabled:
                 history = [row for row in by_source.get(name, []) if not row["state"].startswith("test_")]
                 last = history[0] if history else {}
@@ -952,10 +974,16 @@ class UI(BaseHTTPRequestHandler):
                         break
                 product = ("sports:" if name in providers.SPORTS else "epg:") + name
                 snap = self.store.read_snapshots(timestamps_only=(product,)).get(product)
-                body += '<tr><td>%s</td><td class="%s">%s</td><td>%s</td><td class="%s">%d</td><td>%d / %d</td></tr>' % (
+                calls = usage.get(ledger, 0)
+                retry_at = self.store._get("sports_backoff:" + name) if name in providers.SPORTS else None
+                if calls >= limit:
+                    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                    retry_at = max(retry_at or "", midnight.isoformat())
+                retry = self._uk_timestamp(retry_at) if retry_at and retry_at > now.isoformat() else "—"
+                body += '<tr><td>%s</td><td class="%s">%s</td><td>%s</td><td class="%s">%d</td><td>%d / %d</td><td>%s</td></tr>' % (
                     e(label), STATE_CLASS.get(last.get("state"), ""), e(last.get("state", "not run yet")),
                     e(when(snap["updated_at"], now)) if snap else "never", "critical" if fails >= 3 else "", fails,
-                    usage.get(ledger, 0), limit)
+                    calls, limit, e(retry))
             body += '</table>'
         else:
             body += '<p>No source is enabled.</p>'

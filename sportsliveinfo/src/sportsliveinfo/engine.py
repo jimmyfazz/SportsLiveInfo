@@ -253,6 +253,10 @@ class Engine:
                     query = urllib.parse.urlencode({"d": day.isoformat(), "s": sport})
                     plan.append(dict(url=base + "?" + query, scope="%s|%s" % (day.isoformat(), sport),
                                      decode=providers.thesportsdb_events, max_bytes=3_000_000))
+        elif name == "bha_racing":
+            for year in sorted({today.year, (today + timedelta(days=7)).year}):
+                plan.append(dict(url=f"{base}?year={year}", scope=f"season:{year}",
+                                 decode=partial(providers.bha_racing_events, year=year), max_bytes=500_000))
         elif name == "openboxing":
             plan.append(dict(url=base, scope="scheduled_bouts", decode=providers.openboxing_events,
                              max_bytes=1_000_000))
@@ -377,7 +381,7 @@ class Engine:
         cached = set()
         for scope in planned:
             stamp = last_ok.get(scope, "")
-            if name == "openboxing":
+            if name in ("openboxing", "bha_racing"):
                 interval = timedelta(hours=12)
             elif name == "jolpica":
                 interval = timedelta(days=3) if scope == f"season:{today.year + 1}" else timedelta(hours=12)
@@ -433,6 +437,8 @@ class Engine:
         # This avoids deleting events when a source omits a competition/page.
         by_id = {}
         for event in (previous["data"]["events"] if previous else []):
+            if name == "bha_racing" and event.get("fetch_scope") in succeeded:
+                continue
             try:
                 if datetime.fromisoformat(event["start_utc"]) < cutoff:
                     continue
@@ -580,6 +586,26 @@ class Engine:
             LOGGER.warning("EPG source %s failed: %s", name, reason)
             return False
 
+    @staticmethod
+    def _measure_source_contribution(events, sports, guides):
+        sports_by_id = {row["id"]: row for row in sports}
+        guides_by_id = {row["id"]: row for row in guides}
+        for row in sports:
+            row.update(window_fixtures=0, exclusive_fixtures=0)
+        for row in guides:
+            row.update(window_matches=0, exclusive_matches=0)
+        for event in events:
+            contributors = event["sources"]
+            for name in contributors:
+                if name in sports_by_id:
+                    sports_by_id[name]["window_fixtures"] += 1
+                    sports_by_id[name]["exclusive_fixtures"] += int(len(contributors) == 1)
+            for candidate in event["broadcast_candidates"]:
+                guide_ids = candidate["epg_sources"]
+                for name in guide_ids:
+                    guides_by_id[name]["window_matches"] += 1
+                    guides_by_id[name]["exclusive_matches"] += int(len(guide_ids) == 1)
+
     # ---- materialisation --------------------------------------------------
     def _materialize(self, now=None):
         now = now or datetime.now(timezone.utc)
@@ -618,6 +644,7 @@ class Engine:
             event["broadcast_candidates"] = candidates
             if event["id"] in gaps:
                 event["broadcast_gap"] = gaps[event["id"]]
+        self._measure_source_contribution(eligible, sources, guides)
         today = linking.build_today(eligible, now, use_saved_candidates=True)
         generated_at = now.isoformat(timespec="seconds")
         self.store.save_snapshots({
@@ -651,6 +678,7 @@ class Engine:
             summaries.append({"id": name, "channels": channels, "programmes": programmes,
                 "last_success": entry["updated_at"], "country": summary.get("country", "unknown"),
                 "covered_24h": summary.get("full_coverage_channels", {}).get("24h", 0),
+                "horizon_hours": summary.get("horizon_hours"),
                 "unmatched": summary.get("unmatched_canonical_channels", 0),
                 "recognised_services": len(summary.get("matched_canonical_channels", [])),
                 "public_redistribution": False})

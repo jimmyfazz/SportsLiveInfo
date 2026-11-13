@@ -8,6 +8,7 @@
 - Report partial sports scopes, reuse recently fetched future dates and honour provider throttling. Cache Jolpica season calendars between collections.
 - Test ATP, WTA and live tennis separately. Add optional PandaScore esports fixtures and source-scoped UK, US and Canada guide mappings.
 - Match guide listings for upcoming events and show channel, region, guide start time and source. Add optional Open Boxing world title bout dates.
+- Add the official British racing meeting calendar, per-source contribution counts and retry times in Diagnostics.
 
 ## 0.3.4 — Collector and dashboard audit integration
 

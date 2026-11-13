@@ -100,6 +100,37 @@ class SourceRefreshTests(unittest.TestCase):
         self.assertEqual(self.store.recent_jobs(1)[0]["state"], "test_partial")
         self.assertIsNone(self.store.snapshot("sports:tennis_api"))
 
+    def test_bha_calendar_meetings_and_year_boundary(self):
+        day = datetime(2026, 1, 1)
+        entries = []
+        for offset in range(300):
+            stamp = (day + timedelta(days=offset)).strftime("%Y%m%d")
+            entries.append(f"BEGIN:VEVENT\r\nUID:{offset}\r\nDTSTART;VALUE=DATE:{stamp}\r\n"
+                           "SUMMARY:Ascot (Afternoon Jump) / Lingfield (Eveni\r\n ng Flat)\r\nEND:VEVENT\r\n")
+        calendar = ("BEGIN:VCALENDAR\r\nX-WR-CALNAME:British Horseracing Authority Fixture List 2026\r\n"
+                    + "".join(entries) + "END:VCALENDAR\r\n")
+        events = providers.bha_racing_events(calendar.encode(), year=2026)
+        self.assertEqual(len(events), 600)
+        self.assertEqual(events[1]["title"], "Lingfield (Evening Flat)")
+        self.assertEqual(events[1]["start_precision"], "date_only")
+        self.assertFalse(events[1]["broadcast_verified"])
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            providers.bha_racing_events(calendar.replace("".join(entries[1:]), "").encode(), year=2026)
+        plan = self.engine._plan("bha_racing", self.store.config(), datetime(2026, 12, 30).date())
+        self.assertEqual([item["scope"] for item in plan], ["season:2026", "season:2027"])
+        self.assertFalse(self.store.config()["sports"]["bha_racing"])
+
+    def test_contribution_counts_a_shared_fixture_and_shared_channel_once_per_source(self):
+        sports = [{"id": "p1"}, {"id": "p2"}]
+        guides = [{"id": "g1"}, {"id": "g2"}]
+        events = [
+            {"sources": ["p1", "p2"], "broadcast_candidates": [{"epg_sources": ["g1", "g2"]}]},
+            {"sources": ["p1"], "broadcast_candidates": [{"epg_sources": ["g2"]}]},
+        ]
+        self.engine._measure_source_contribution(events, sports, guides)
+        self.assertEqual([(s["window_fixtures"], s["exclusive_fixtures"]) for s in sports], [(2, 1), (1, 0)])
+        self.assertEqual([(g["window_matches"], g["exclusive_matches"]) for g in guides], [(1, 0), (2, 1)])
+
     def test_openboxing_keeps_the_bout_date_without_inventing_time_or_ppv(self):
         rows = [{"boutId": 27, "date": "2026-11-14", "status": "SCHEDULED",
                  "boxers": {"boxerA": {"name": {"first": "A", "last": "B"}}, "boxerB": {"name": "C D"}},

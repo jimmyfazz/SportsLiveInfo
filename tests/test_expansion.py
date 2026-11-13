@@ -462,7 +462,10 @@ class EngineExpansionTests(unittest.TestCase):
         client = IngressTestClient(self.store, "csrf-test", memory=True)
         with client.open(client.base + "?page=events&guide=1") as response:
             page = response.read().decode()
+        self.assertIn("Fixture contribution by source", page)
         self.assertIn("Guide start", page)
+        with client.open(client.base + "?page=guide") as response:
+            self.assertIn("Exclusive matches", response.read().decode())
         self.assertIn("TNT Sports 1", page)
         self.assertNotIn("Leeds", page)
 

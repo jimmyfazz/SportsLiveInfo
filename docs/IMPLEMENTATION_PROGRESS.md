@@ -29,6 +29,12 @@ The local Sports Events view matches listings across today and the following sev
 
 Open Boxing is disabled by default. A live probe of the documented endpoint decoded 14 scheduled world-title bouts, all date-only. Card times, ring walks, non-title bout coverage and event-specific UK broadcaster or PPV evidence remain open. [Open Boxing API](https://www.openboxing.org/api/). The app slug and database schema are unchanged. Home Assistant runtime verification remains pending.
 
+### Source contribution and British racing follow-up
+
+Sports Events counts deduplicated fixtures per source, including how many that source alone supplied. EPG Coverage counts fixture/channel pairs and exclusive matches per guide. Diagnostics shows known quota or throttle retry times in UK time.
+
+The optional British Horseracing Authority adapter uses the calendar download offered by the [official fixture list](https://www.britishhorseracing.com/racing/fixtures/full-year/). The live files produced 1,451 meetings in 2026 and 1,443 in 2027 across 59 venues in each year. Meetings carry dates and session labels. Individual race times and broadcast evidence require separate sources. A successful annual refresh replaces that season only after the calendar passes the structural and date-coverage checks. The source is disabled by default and redistribution still requires review under the existing publication gate. [BHA website terms](https://www.britishhorseracing.com/terms-conditions/).
+
 ## 13 November 2026 — 0.3.4 audit integration
 
 The integration combines mobile/coverage head `17786a8` and audit head `95f79d5`, with selected operator-dashboard behaviour and the older indexing branch’s differential tests. It keeps fixture retention for sources of unknown completeness and the source-specific XMLTV declaration allowlist. Removed the unused launcher, superseded architecture and data-contract proposals, and obsolete golden-feed assets. Earlier revisions remain in Git history.

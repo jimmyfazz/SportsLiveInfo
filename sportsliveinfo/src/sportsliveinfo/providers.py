@@ -1,5 +1,6 @@
 """Small audited provider adapters. No arbitrary-user URL fetch or credential logging."""
 import gzip
+import hashlib
 import io
 import json
 import re
@@ -100,6 +101,7 @@ _XMLTV_DTD_PROLOGUE = re.compile(
 # name -> (label, base URL, shared key name or None, conservative daily call budget)
 TENNIS_API_HOST = "tennis-api-atp-wta-itf.p.rapidapi.com"
 SPORTS = {
+    "bha_racing": ("Horse racing · British Horseracing Authority", "https://crate.horseracing.software/ics/fixtures", None, 4),
     "openboxing": ("Boxing · Open Boxing world title bouts", "https://openboxing.org/api/bouts/scheduled/index.json", None, 4),
     "pandascore": ("Esports · PandaScore", "https://api.pandascore.co/matches/upcoming", "pandascore", 24),
     "tennis_api": ("Tennis · Tennis API (RapidAPI)", f"https://{TENNIS_API_HOST}/tennis/v2/extend/api/events", "tennis_api", 40),
@@ -128,6 +130,7 @@ API_SPORTS_SPORT = {
     "api_sports_afl": "aussie_rules",
 }
 SOURCE_NOTES = {
+    "bha_racing": "Official British meeting dates and session labels. First-race times and TV availability require separate evidence. Private collection.",
     "openboxing": "Scheduled world title bouts with dates. Card times, ring walks and UK broadcaster or PPV access need a separate source.",
     "pandascore": "Optional PandaScore token. Upcoming fixtures only. The first 100 matches are collected; coverage may be partial. Private collection.",
     "tennis_api": "Optional RapidAPI key. Live singles and the first 50 upcoming matches per tour, when supplied. Check the RapidAPI plan for endpoint access and quota. Private collection.",
@@ -592,6 +595,52 @@ def api_sports_mma_events(data, source_id="api_sports_mma"):
         except (ValueError, KeyError, TypeError, OverflowError):
             continue
     return events
+
+
+def bha_racing_events(data, *, year):
+    """Decode the BHA year download, which lists one all-day entry per date."""
+    text = data.decode("utf-8-sig").replace("\r\n", "\n")
+    text = re.sub(r"\n[ \t]", "", text)
+    lines = text.strip().splitlines()
+    if (not lines or lines[0] != "BEGIN:VCALENDAR" or lines[-1] != "END:VCALENDAR"
+            or f"X-WR-CALNAME:British Horseracing Authority Fixture List {year}" not in lines):
+        raise ValueError("Unexpected BHA calendar or season")
+    events = {}
+    for entry in re.findall(r"(?m)^BEGIN:VEVENT$\n(.*?)^END:VEVENT$", text, re.DOTALL):
+        if re.search(r"(?m)^STATUS:CANCELLED$", entry):
+            continue
+        start = re.search(r"(?m)^DTSTART;VALUE=DATE:(\d{8})$", entry)
+        title = re.search(r"(?m)^SUMMARY:(.+)$", entry)
+        if not start or not title:
+            continue
+        try:
+            day = date.fromisoformat(start[1])
+        except ValueError:
+            continue
+        if day.year != year:
+            continue
+        for meeting in title[1].split(" / "):
+            course, separator, session = meeting.strip().rpartition(" (")
+            if not separator or not session.endswith(")"):
+                continue
+            course = re.sub(r"\\([,;\\])", r"\1", course).strip()
+            session = session[:-1].strip()
+            if not course or not session:
+                continue
+            identity = hashlib.sha256(f"{course.casefold()}|{session.casefold()}".encode()).hexdigest()[:16]
+            event_id = f"bha:{day.isoformat()}:{identity}"
+            events[event_id] = {
+                "id": event_id, "source_id": "bha_racing", "sport": "horse_racing", "event_type": "meeting",
+                "competition": "British horse racing", "title": f"{course} ({session})", "session": session,
+                "venue": course, "country": "United Kingdom", "start_utc": f"{day.isoformat()}T12:00:00+00:00",
+                "start_precision": "date_only", "status_normalized": "scheduled",
+                "broadcasts": [], "broadcast_verified": False,
+            }
+    # A full-year download must resemble a full-year calendar before its
+    # successful scope can replace the previous season.
+    if len({event["start_utc"] for event in events.values()}) < 300:
+        raise ValueError("BHA calendar has incomplete annual coverage")
+    return list(events.values())
 
 
 def openboxing_events(data):
