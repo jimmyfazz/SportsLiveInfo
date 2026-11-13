@@ -53,6 +53,67 @@ class CandidateIndexTests(unittest.TestCase):
                                              {"farleyflex": guide(rows)}, BASE)
         self.assertEqual(actual, {})
 
+    def test_formula_one_matches_only_the_numbered_practice_session(self):
+        evs = [dict(event("fp1"), sport="motorsport", competition="Formula 1", session="practice1"),
+               dict(event("fp2"), sport="motorsport", competition="Formula 1", session="practice2"),
+               dict(event("moto"), sport="motorsport", competition="MotoGP", session="practice2")]
+        rows = [programme(BASE - timedelta(minutes=10), BASE + timedelta(hours=2), "Live F1 Practice 2")]
+        result = linking.broadcast_candidates(evs, {"farleyflex": guide(rows)}, BASE)
+        self.assertEqual(set(result), {"fp2"})
+        self.assertEqual(result["fp2"][1][0]["match_basis"], "epg_f1_session")
+
+    def test_named_tournaments_match_live_titles_and_agree_on_the_session(self):
+        cases = [
+            ("cycling", "Tour de France", "Live Tour de France Stage 12", "Live Tour de France Stage 13", {"stage": 12}),
+            ("golf", "The Masters Round 2", "Live Golf: The Masters Round 2", "Live Snooker: The Masters Round 2", {}),
+            ("snooker", "World Snooker Championship Day 2", "Live World Championship Snooker Day 2",
+             "Live World Snooker Championship Day 3", {}),
+            ("darts", "Premier League Darts Night 4", "Live Darts Premier League Night 4",
+             "Live Premier League Darts Night 5", {}),
+            ("athletics", "World Athletics Championships Evening", "Live World Athletics Championships Evening",
+             "Live World Athletics Indoor Championships Evening", {}),
+            ("horse_racing", "Cheltenham Festival Afternoon", "Live Racing: Cheltenham Afternoon",
+             "Live Racing: Cheltenham Evening", {}),
+        ]
+        for sport, title, good, bad, fields in cases:
+            with self.subTest(sport=sport):
+                fixture = dict(event("fixture"), sport=sport, title=title, participants=[], **fields)
+                good_row = programme(BASE - timedelta(minutes=20), BASE + timedelta(hours=2), good)
+                bad_row = dict(good_row, title=bad)
+                def match(row):
+                    return linking.broadcast_candidates([fixture], {"farleyflex": guide([row])}, BASE)
+                self.assertEqual(match(good_row)["fixture"][1][0]["match_basis"], "epg_tournament_session")
+                self.assertFalse(match(bad_row))
+                self.assertFalse(match(dict(good_row, is_repeat=True)))
+                self.assertFalse(match(dict(good_row, title=good + " Highlights")))
+                self.assertFalse(match(dict(good_row, title=good.removeprefix("Live "), is_live=False)))
+
+    def test_tournament_match_excludes_wrong_gender_and_unknown_start(self):
+        row = programme(BASE, BASE + timedelta(hours=2), "Live Tour de France Femmes Stage 12")
+        mens = dict(event("mens"), sport="cycling", title="Tour de France Stage 12", participants=[])
+        womens = dict(mens, id="womens", title="Women's Tour de France Stage 12")
+        unknown = dict(womens, id="unknown", start_precision="date_only")
+        result = linking.broadcast_candidates([mens, womens, unknown], {"farleyflex": guide([row])}, BASE)
+        self.assertEqual(set(result), {"womens"})
+
+    def test_reports_guide_gaps_without_promoting_an_unmapped_listing(self):
+        row = programme(BASE - timedelta(minutes=15), BASE + timedelta(hours=2))
+        unknown = dict(row, channel_id="unknown-channel")
+        cases = [
+            ({}, "no_guide_data"),
+            ({"farleyflex": guide([dict(row, start_utc=(BASE - timedelta(days=2)).isoformat(),
+                                      end_utc=(BASE - timedelta(days=2) + timedelta(hours=2)).isoformat())])},
+             "outside_guide_dates"),
+            ({"farleyflex": guide([unknown])}, "matching_channel_unmapped"),
+            ({"farleyflex": guide([dict(unknown, is_repeat=True)])}, "no_recognised_guide_slot"),
+            ({"farleyflex": guide([dict(row, title="Live: Leeds v Hull")])}, "fixture_title_unmatched"),
+        ]
+        for guides, reason in cases:
+            with self.subTest(reason=reason):
+                gaps = {}
+                self.assertEqual(linking.broadcast_candidates([event("e")], iter(guides.items()), BASE, gaps=gaps), {})
+                self.assertEqual(gaps, {"e": reason})
+
     def test_large_guide_avoids_full_cross_product(self):
         # 480 slots over 120 hours, 30 events (old code did ~14,400
         # _matches calls). Every event is given a matching EPG row.

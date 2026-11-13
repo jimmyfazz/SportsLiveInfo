@@ -10,7 +10,7 @@ import secrets
 import threading
 import urllib.parse
 from collections import OrderedDict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -24,7 +24,7 @@ LIVE_LABELS = {"live": "LIVE", "live_probable": "Probably live", "upcoming": "Up
                "probably_finished": "Probably finished", "postponed": "Postponed", "cancelled": "Cancelled",
                "time_tbc": "Time TBC", "unknown": "Unknown"}
 STATE_CLASS = {"ok": "ok", "finished": "ok", "test_ok": "ok", "submitted": "ok", "preview": "ok", "unchanged": "ok",
-               "partial": "warn", "degraded": "warn", "stale": "warn", "empty": "warn", "needs_key": "warn",
+               "partial": "warn", "deferred": "warn", "test_deferred": "warn", "test_partial": "warn", "degraded": "warn", "stale": "warn", "empty": "warn", "needs_key": "warn",
                "no_events_reported": "warn", "coverage_collapse": "warn", "failed": "critical", "test_failed": "critical",
                "lane_error": "critical", "error": "critical"}
 ICON_PATHS = (Path(__file__).parent / "icon.png", Path(__file__).resolve().parents[2] / "icon.png")
@@ -438,9 +438,9 @@ class UI(BaseHTTPRequestHandler):
         jobs = self.store.recent_jobs(1, provider="collector")
         if jobs:
             job = jobs[0]
-            state = {"started": "Refreshing…", "degraded": "Partial refresh", "finished": "Refresh complete"}.get(
+            state = {"started": "Refreshing…", "degraded": "Partial refresh", "deferred": "Refresh deferred", "finished": "Refresh complete"}.get(
                 job["state"], job["state"].replace("_", " ").capitalize())
-            tone = {"degraded": "warn", "failed": "critical", "finished": "ok"}.get(job["state"], "")
+            tone = {"degraded": "warn", "deferred": "warn", "failed": "critical", "finished": "ok"}.get(job["state"], "")
             result += '<p><strong class="%s">%s</strong> · %s · <a href="?page=health">Details</a></p>' % (
                 tone, e(state), e(self._uk_timestamp(job["time"])))
             if job["details"]:
@@ -483,7 +483,8 @@ class UI(BaseHTTPRequestHandler):
                 status = {"ok": "Refreshed", "partial": "Partially refreshed",
                           "no_events_reported": "No events returned", "failed": "Refresh failed",
                           "stale": "Stale guide", "empty": "Empty guide",
-                          "coverage_collapse": "Coverage dropped", "needs_key": "Key required"}.get(
+                          "coverage_collapse": "Coverage dropped", "needs_key": "Key required",
+                          "deferred": "Refresh deferred", "unchanged": "Using saved data"}.get(
                               state, state.replace("_", " ").capitalize() if state else "Awaiting refresh")
                 result += '<details><summary>%s <span class="pill">%s</span></summary>' % (e(label), e(status))
                 result += '<p class="sub">Last successful import · %s</p>' % e(self._uk_timestamp(entry.get("last_success")))
@@ -538,7 +539,7 @@ class UI(BaseHTTPRequestHandler):
         latest = {}
         for job in self.store.recent_jobs(300):
             latest.setdefault(job["provider"], job)
-        body = '<h2>Sporting event APIs</h2><p>Keys are entered once on Home Assistant, never on the ten televisions. Each Save preserves keys for other providers; no-key services are clearly labelled. One API-Sports key serves every API-Sports sport (each sport has its own free daily allowance).</p><div class="grid">'
+        body = '<h2>Sporting event APIs</h2><p>Keys are entered once on Home Assistant, never on the ten televisions. Each Save preserves keys for other providers; no-key services are clearly labelled. One API-Sports key serves every API-Sports sport. Provider allowances depend on the sport and plan.</p><div class="grid">'
         body += self._bulk_sources(config, "keyless_sports", "Sports providers without API keys",
                                    "Choose sources individually or tick all, then save the group once.")
         body += '</div><details class="group"><summary>Sports provider settings and connection tests</summary><div class="grid">'
@@ -554,7 +555,9 @@ class UI(BaseHTTPRequestHandler):
                 content = self._form("sports", content)
             else:
                 content += '<p class="ok">No API key required · conservative daily budget: %d calls</p>' % limit
-            test_button = self._form("test_source", '<button class="secondary" type="submit">Test connection (uses 1 quota call)</button>',
+            test_label = ("Test ATP, WTA and live (up to 3 calls)" if name == "tennis_api"
+                          else "Test connection (uses 1 quota call)")
+            test_button = self._form("test_source", '<button class="secondary" type="submit">%s</button>' % e(test_label),
                 '<input type="hidden" name="kind" value="sports"><input type="hidden" name="provider" value="%s">' % e(name))
             body += '<section class="card"><h3>%s</h3><p class="help">Endpoint: %s</p>%s%s</section>' % (
                 e(label), e(urllib.parse.urlsplit(url).hostname), self._source_status(
@@ -591,19 +594,41 @@ class UI(BaseHTTPRequestHandler):
         except (ValueError, KeyError, TypeError):
             return "Unconfirmed"
 
-    @staticmethod
-    def _channel_text(event):
+    def _channel_cell(self, event):
         if event.get("broadcast_verified"):
-            return ", ".join(str(c.get("name", "")) for c in event.get("broadcasts", []) if isinstance(c, dict)) or "Verified"
+            names = ", ".join(str(c.get("name", "")) for c in event.get("broadcasts", []) if isinstance(c, dict))
+            return e(names or "Verified")
         candidates = event.get("broadcast_candidates") or []
-        if candidates:
-            names = []
-            for candidate in candidates[:3]:
-                name = candidate.get("channel_name", "")
-                market = candidate.get("canonical_channel_id", "").partition(".")[0].upper()
-                names.append(f"{name} ({market})" if market and market != "GB" else name)
-            return "EPG match (unverified): " + ", ".join(names)
-        return "Not verified"
+        if not candidates:
+            return e({
+                "time_unconfirmed": "Fixture time TBC",
+                "fixture_inactive": "Fixture postponed or cancelled",
+                "fixture_title_unmatched": "No fixture match in available guides",
+                "matching_channel_unmapped": "Matching listing on an unmapped channel",
+                "no_guide_data": "No saved guide data",
+                "outside_guide_dates": "Outside available guide dates",
+                "no_recognised_guide_slot": "No usable guide slot on recognised channels",
+            }.get(event.get("broadcast_gap"), "Not verified"))
+        items = []
+        for candidate in candidates:
+            name = candidate.get("channel_name", "")
+            market = candidate.get("canonical_channel_id", "").partition(".")[0].upper()
+            coverage = self._uk_time({"start_utc": candidate.get("programme_start_utc")})
+            source_ids = candidate.get("epg_sources", [])
+            sources = ", ".join(providers.EPG.get(source, (source,))[0] for source in source_ids)
+            family_count = len({providers.EPG_FAMILY.get(source, source) for source in source_ids})
+            if family_count < len(source_ids):
+                sources += " · %d guides share %d upstream %s" % (
+                    len(source_ids), family_count, "source" if family_count == 1 else "sources")
+            basis = {"epg_title_teams": "Fixture title", "epg_f1_session": "F1 session",
+                     "epg_tournament_session": "Named event or session"}.get(candidate.get("match_basis"))
+            items.append("<li>%s · %s<br><small>Guide start %s · %s%s</small></li>" %
+                         (e(name), e(market), e(coverage), e(sources), " · " + e(basis) if basis else ""))
+        first = candidates[0]
+        first_market = first.get("canonical_channel_id", "").partition(".")[0].upper()
+        return '<details><summary>EPG match (unverified) · %s (%s)%s</summary><ul>%s</ul></details>' % (
+            e(first.get("channel_name", "")), e(first_market),
+            " +%d" % (len(candidates) - 1) if len(candidates) > 1 else "", "".join(items))
 
     def _event_row(self, event, fmt="%d %b %H:%M %Z", show_sport=False):
         sources = event.get("sources") or [event.get("source_id", "")]
@@ -622,7 +647,7 @@ class UI(BaseHTTPRequestHandler):
         sub = "" if not competition or competition == event.get("category_label") else competition
         return '<tr><td>%s%s</td><td>%s<br><small>%s</small></td><td>%s%s</td><td>%s</td></tr>' % (
             e(self._uk_time(event, fmt)), pill, e(event.get("title", "")), e(confidence),
-            e(category), ('<br><small>%s</small>' % e(sub)) if sub else "", e(self._channel_text(event)))
+            e(category), ('<br><small>%s</small>' % e(sub)) if sub else "", self._channel_cell(event))
 
     def today(self, query=None):
         snapshot = self.store.snapshot("today")
@@ -699,6 +724,7 @@ class UI(BaseHTTPRequestHandler):
         data = snapshot["data"] if snapshot else {}
         events = data.get("events", [])
         sport, category, text = query.get("sport", ""), query.get("category", ""), query.get("q", "").casefold()
+        with_guide = query.get("guide") == "1"
         uk_date = query.get("date", "")
         try:
             uk_date = date.fromisoformat(uk_date).isoformat()
@@ -712,12 +738,22 @@ class UI(BaseHTTPRequestHandler):
         shown = [ev for ev in events if (not sport or ev.get("sport") == sport)
                  and (not category or ev.get("category_id") == category)
                  and (not uk_date or self._event_day(ev) == uk_date)
+                 and (not with_guide or ev.get("broadcast_candidates") or ev.get("broadcast_verified"))
                  and (not text or text in ("%s %s %s" % (ev.get("title", ""), ev.get("competition", ""), " ".join(ev.get("participants") or []))).casefold())]
-        body = '<h2>Sporting events</h2><p>Independent sports fixtures, races and sessions for the next eight UK days, de-duplicated across sources. This view does not claim a broadcaster unless a separately verified source has supplied one.</p>'
-        filters = '<form method="get"><input type="hidden" name="page" value="events"><div class="formrow"><div><label for="f-sport">Sport</label><select id="f-sport" name="sport"><option value="">All sports</option>%s</select></div><div><label for="f-cat">Competition</label><select id="f-cat" name="category"><option value="">All competitions</option>%s</select></div><div><label for="f-q">Team or competition</label><input id="f-q" type="text" name="q" value="%s" placeholder="e.g. England, Arsenal, Six Nations"></div><div><label for="f-date">UK date</label><input id="f-date" name="date" type="date" value="%s"></div><button type="submit">Filter</button></div></form>' % (
+        body = '<h2>Sporting events</h2><p>Independent sports fixtures, races and sessions for the next eight UK days, de-duplicated across sources. Open an EPG match to see the service, region, guide start time and source.</p>'
+        filters = '<form method="get"><input type="hidden" name="page" value="events"><div class="formrow"><div><label for="f-sport">Sport</label><select id="f-sport" name="sport"><option value="">All sports</option>%s</select></div><div><label for="f-cat">Competition</label><select id="f-cat" name="category"><option value="">All competitions</option>%s</select></div><div><label for="f-q">Team or competition</label><input id="f-q" type="text" name="q" value="%s" placeholder="e.g. England, Arsenal, Six Nations"></div><div><label for="f-date">UK date</label><input id="f-date" name="date" type="date" value="%s"></div><label><input type="checkbox" name="guide" value="1"%s> With channel information</label><button type="submit">Filter</button></div></form>' % (
             "".join('<option value="%s" %s>%s</option>' % (e(s), "selected" if s == sport else "", e(taxonomy.SPORTS.get(s, ("Other",))[0])) for s in sports_present),
             "".join('<option value="%s" %s>%s</option>' % (e(c), "selected" if c == category else "", e(label)) for c, label in categories_present),
-            e(query.get("q", "")), e(uk_date))
+            e(query.get("q", "")), e(uk_date), " checked" if with_guide else "")
+        contributions = [row for row in data.get("sources", []) if "window_fixtures" in row]
+        if contributions:
+            body += '<details class="card"><summary>Fixture contribution by source</summary><p class="help">Counts are for the full eight-day window after de-duplication. Exclusive fixtures were supplied by just one source.</p>'
+            body += '<table><tr><th>Source</th><th>Fixtures</th><th>Exclusive fixtures</th></tr>'
+            for row in sorted(contributions, key=lambda row: (-row["exclusive_fixtures"], -row["window_fixtures"], row["id"])):
+                name = row["id"]
+                body += '<tr><td>%s</td><td>%s</td><td>%s</td></tr>' % (
+                    e(providers.SPORTS.get(name, (name,))[0]), e(row["window_fixtures"]), e(row["exclusive_fixtures"]))
+            body += '</table></details>'
         body += '<section class="card">%s<h3>%s of %s events</h3><p class="help">%s · Data is private on this Home Assistant instance.</p>' % (
             filters, e(len(shown)), e(len(events)), e(snapshot["updated_at"] if snapshot else "No sporting snapshot yet"))
         body += '<table><tr><th>UK start time</th><th>Category and competition</th><th>Event and sources</th><th>Channel</th></tr>'
@@ -735,6 +771,8 @@ class UI(BaseHTTPRequestHandler):
                 if 1 <= target <= page_count:
                     params = urllib.parse.urlencode({"page": "events", "sport": sport, "category": category,
                                                      "q": query.get("q", ""), "date": uk_date, "p": target})
+                    if with_guide:
+                        params += "&guide=1"
                     links.append('<a href="?%s">%s</a>' % (e(params), label))
             body += '<p class="help">Page %d of %d · %s</p>' % (page, page_count, " · ".join(links))
         if not events:
@@ -745,6 +783,19 @@ class UI(BaseHTTPRequestHandler):
 
     def guide(self):
         body = '<h2>International EPG coverage</h2><p>Private guide analysis: distinguish a real 24-hour programme schedule from a feed that merely responds successfully. Canonical IDs are conservative hints; actual IPTV stream mapping remains local to B1G.</p>'
+        epg = (self.store.snapshot("epg") or {}).get("data", {})
+        summaries = epg.get("sources", [])
+        rows = [row for row in summaries if "window_matches" in row]
+        if rows:
+            body += '<section class="card"><h3>Guide contribution</h3><p class="help">Fixture and channel pairs across today and the next seven UK dates. Exclusive means only this guide supplied that pair.</p>'
+            body += '<table><tr><th>Guide</th><th>Guide horizon at import</th><th>Matches</th><th>Exclusive matches</th></tr>'
+            for row in sorted(rows, key=lambda row: (-row["exclusive_matches"], -row["window_matches"], row["id"])):
+                name = row["id"]
+                hours = row.get("horizon_hours")
+                body += '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>' % (
+                    e(providers.EPG.get(name, (name,))[0]), e(f"{hours:.0f} h" if isinstance(hours, (int, float)) else "Unknown"),
+                    e(row["window_matches"]), e(row["exclusive_matches"]))
+            body += '</table></section>'
         any_source = False
         for name, (label, _) in providers.EPG.items():
             snapshot = self.store.snapshot("epg-quality:" + name)
@@ -919,23 +970,30 @@ class UI(BaseHTTPRequestHandler):
             by_source.setdefault(row["provider"], []).append(row)
         body += '<section class="card" style="margin-top:16px"><h3>Enabled sources</h3>'
         enabled = [(n, providers.SPORTS[n][0], providers.SPORTS[n][3], n) for n in providers.SPORTS if config["sports"].get(n)]
-        enabled += [(n, providers.EPG[n][0], 4, "epg:" + n) for n in providers.EPG if config["epg"].get(n)]
+        enabled += [(n, providers.EPG[n][0], providers.EPG_DAILY_REQUEST_LIMIT, "epg:" + n) for n in providers.EPG if config["epg"].get(n)]
         if enabled:
-            body += '<table><tr><th>Source</th><th>Last result</th><th>Last success</th><th>Consecutive failures</th><th>Calls today</th></tr>'
+            body += '<table><tr><th>Source</th><th>Last result</th><th>Last success</th><th>Consecutive failures</th><th>Calls today</th><th>Retry after</th></tr>'
             for name, label, limit, ledger in enabled:
-                history = by_source.get(name, [])
+                history = [row for row in by_source.get(name, []) if not row["state"].startswith("test_")]
                 last = history[0] if history else {}
                 fails = 0
                 for row in history:
                     if row["state"] in ("failed", "test_failed"):
                         fails += 1
-                    elif row["state"] not in ("test_ok",):
+                    elif row["state"] != "deferred":
                         break
-                snap = self.store.snapshot(("sports:" if name in providers.SPORTS else "epg:") + name)
-                body += '<tr><td>%s</td><td class="%s">%s</td><td>%s</td><td class="%s">%d</td><td>%d / %d</td></tr>' % (
+                product = ("sports:" if name in providers.SPORTS else "epg:") + name
+                snap = self.store.read_snapshots(timestamps_only=(product,)).get(product)
+                calls = usage.get(ledger, 0)
+                retry_at = self.store._get("sports_backoff:" + name) if name in providers.SPORTS else None
+                if calls >= limit:
+                    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                    retry_at = max(retry_at or "", midnight.isoformat())
+                retry = self._uk_timestamp(retry_at) if retry_at and retry_at > now.isoformat() else "—"
+                body += '<tr><td>%s</td><td class="%s">%s</td><td>%s</td><td class="%s">%d</td><td>%d / %d</td><td>%s</td></tr>' % (
                     e(label), STATE_CLASS.get(last.get("state"), ""), e(last.get("state", "not run yet")),
                     e(when(snap["updated_at"], now)) if snap else "never", "critical" if fails >= 3 else "", fails,
-                    usage.get(ledger, 0), limit)
+                    calls, limit, e(retry))
             body += '</table>'
         else:
             body += '<p>No source is enabled.</p>'

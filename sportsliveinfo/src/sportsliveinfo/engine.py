@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
+from email.utils import parsedate_to_datetime
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from pathlib import Path
@@ -46,6 +47,33 @@ def _github_open(request, timeout=30):
 
 class QuotaExhausted(RuntimeError):
     pass
+
+
+def _sports_failure(exc):
+    if isinstance(exc, providers.ProviderRejected):
+        return str(exc)
+    if isinstance(exc, providers.UpstreamHTTPError):
+        return {401: "HTTP 401: check the saved key", 403: "HTTP 403: check key access or plan",
+                429: "HTTP 429: provider rate limit"}.get(exc.status, f"Upstream HTTP {exc.status}")
+    match = re.fullmatch(r"HTTP ([1-5][0-9]{2}) from upstream", str(exc))
+    if match:
+        return f"Upstream HTTP {match[1]}"
+    if str(exc) == "Upstream network request failed" or isinstance(exc, TimeoutError):
+        return "Upstream connection failed or timed out"
+    return "Invalid or unsupported provider response"
+
+
+def _retry_time(exc, now):
+    value = getattr(exc, "retry_after", None)
+    if value:
+        try:
+            return now + timedelta(seconds=max(10, int(value)))
+        except (ValueError, OverflowError):
+            try:
+                return max(now + timedelta(seconds=10), parsedate_to_datetime(value).astimezone(timezone.utc))
+            except (ValueError, TypeError, OverflowError):
+                pass
+    return now + timedelta(minutes=30)
 
 
 def _guide_failure(exc):
@@ -99,15 +127,15 @@ class Engine:
         finally:
             self._busy.release()
 
-    def _collect_locked(self, scope="both"):
+    def _collect_locked(self, scope="both", *, scheduled=False):
         try:
-            return self._collect_run(scope)
+            return self._collect_run(scope, scheduled=scheduled)
         except Exception as exc:  # never leave the last collector job reading "started"
             LOGGER.exception("Collection failed")
             self.store.job("collector", "failed", "Unexpected %s; last-good retained" % type(exc).__name__)
             return False
 
-    def _collect_run(self, scope):
+    def _collect_run(self, scope, *, scheduled=False):
         conf = self.store.config()
         if not conf["setup_complete"]:
             self.store.job("collector", "skipped", "Setup not completed")
@@ -123,21 +151,25 @@ class Engine:
         # Each sports provider is its own lane; EPG guides share one sequential
         # lane so several large XMLTV parses never run at once on the mini PC.
         successes = 0
+        deferrals = 0
         with ThreadPoolExecutor(max_workers=max(1, min(6, len(sports) + 1)), thread_name_prefix="sli-lane") as pool:
             futures = [pool.submit(self._collect_sport, name, conf) for name in sports]
             if guides:
-                futures.append(pool.submit(lambda: [self._collect_epg(name) for name in guides]))
+                collect_epg = partial(self._collect_epg, scheduled=True) if scheduled else self._collect_epg
+                futures.append(pool.submit(lambda: [collect_epg(name) for name in guides]))
             for future in futures:
                 try:
                     result = future.result()
-                    if isinstance(result, list):
-                        successes += sum(bool(item) for item in result)
-                    else:
-                        successes += bool(result)
+                    results = result if isinstance(result, list) else [result]
+                    successes += sum(bool(item) for item in results)
+                    deferrals += sum(item is None for item in results)
                 except Exception as exc:  # A crashed lane must not mask missing data.
                     LOGGER.error("Collector lane failed (%s)", type(exc).__name__)
                     self.store.job("collector", "lane_error", type(exc).__name__)
         attempted = len(sports) + len(guides)
+        if attempted and deferrals == attempted:
+            self.store.job("collector", "deferred", f"{label}: all {attempted} sources deferred; last-good retained")
+            return False
         if not successes:
             state = "failed" if attempted else "no_sources"
             self.store.job("collector", state, "%s: %d of %d enabled sources refreshed; last-good retained" %
@@ -184,10 +216,10 @@ class Engine:
         options = conf.get("options", {})
         plan = []
         if name == "jolpica":
-            plan.append(dict(url=base, scope="season:current", decode=providers.f1_events, max_bytes=3_000_000))
+            plan.append(dict(url=base, scope=f"season:{today.year}", decode=providers.f1_events, max_bytes=3_000_000))
             if today.month >= 10:
                 root = base.rsplit("/", 1)[0]
-                plan.append(dict(url="%s/%d.json" % (root, today.year + 1), scope="season:next",
+                plan.append(dict(url="%s/%d.json" % (root, today.year + 1), scope=f"season:{today.year + 1}",
                                  decode=providers.f1_events, max_bytes=3_000_000))
         elif name == "openf1":
             plan.append(dict(url=base + "?" + urllib.parse.urlencode({"year": today.year}), scope="year:%d" % today.year,
@@ -221,6 +253,18 @@ class Engine:
                     query = urllib.parse.urlencode({"d": day.isoformat(), "s": sport})
                     plan.append(dict(url=base + "?" + query, scope="%s|%s" % (day.isoformat(), sport),
                                      decode=providers.thesportsdb_events, max_bytes=3_000_000))
+        elif name == "bha_racing":
+            for year in sorted({today.year, (today + timedelta(days=7)).year}):
+                plan.append(dict(url=f"{base}?year={year}", scope=f"season:{year}",
+                                 decode=partial(providers.bha_racing_events, year=year), max_bytes=500_000))
+        elif name == "openboxing":
+            plan.append(dict(url=base, scope="scheduled_bouts", decode=providers.openboxing_events,
+                             max_bytes=1_000_000))
+        elif name == "pandascore":
+            query = urllib.parse.urlencode({"per_page": 100, "sort": "begin_at"})
+            plan.append(dict(url=base + "?" + query, scope="upcoming",
+                             headers={"Authorization": "Bearer " + key},
+                             decode=providers.pandascore_events, max_bytes=3_000_000))
         elif name == "tennis_api":
             headers = {"X-RapidAPI-Key": key, "X-RapidAPI-Host": providers.TENNIS_API_HOST}
             for scope in ("upcoming/atp", "upcoming/wta", "live"):
@@ -249,17 +293,21 @@ class Engine:
             time.sleep(slot - now)
 
     def _request(self, name, item, limit):
+        self._check_sport_backoff(name)
         try:
             self.store.increment(name, limit)
         except RuntimeError as exc:
             raise QuotaExhausted(str(exc)) from None
         self._pace(name)
-        raw = providers.fetch(item["url"], item["headers"], max_bytes=item["max_bytes"])
+        raw = self._fetch_sport(name, item, item["url"])
         # API-Sports responses can advertise multiple pages. Collect them
         # completely (within quota), or reject the scope and retain last-good;
         # never pass an incomplete free-plan page off as a full schedule.
         if name.startswith("api_sports"):
             payload = json.loads(raw)
+            error = providers.api_sports_error(payload)
+            if error:
+                raise providers.ProviderRejected(error)
             paging = payload.get("paging", {}) if isinstance(payload, dict) else {}
             if isinstance(paging, dict):
                 current, total = int(paging.get("current") or 1), int(paging.get("total") or 1)
@@ -271,6 +319,7 @@ class Engine:
                         raise ValueError("Incomplete provider response")
                     records = list(records)
                     for page in range(2, total + 1):
+                        self._check_sport_backoff(name)
                         try:
                             self.store.increment(name, limit)
                         except RuntimeError as exc:
@@ -278,9 +327,11 @@ class Engine:
                         self._pace(name)
                         separator = "&" if "?" in item["url"] else "?"
                         page_url = item["url"] + separator + urllib.parse.urlencode({"page": page})
-                        more = json.loads(providers.fetch(page_url, item["headers"],
-                                                           max_bytes=item["max_bytes"]))
-                        if (not isinstance(more, dict) or more.get("errors")
+                        more = json.loads(self._fetch_sport(name, item, page_url))
+                        error = providers.api_sports_error(more)
+                        if error:
+                            raise providers.ProviderRejected(error)
+                        if (not isinstance(more, dict)
                                 or not isinstance(more.get("response"), list)
                                 or int((more.get("paging") or {}).get("current") or 0) != page
                                 or int((more.get("paging") or {}).get("total") or 0) != total):
@@ -291,14 +342,23 @@ class Engine:
                     raw = json.dumps(payload).encode()
         return item["decode"](raw)
 
-    @staticmethod
-    def _legacy_scope(name, event):
-        if name.startswith("api_sports"):
-            try:
-                return datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date().isoformat()
-            except (KeyError, ValueError, TypeError):
-                return None
-        return "*"
+    def _check_sport_backoff(self, name):
+        retry = self.store._get("sports_backoff:" + name) or ""
+        if retry > datetime.now(timezone.utc).isoformat():
+            raise QuotaExhausted(f"Provider quota or throttling; retry after {retry}")
+
+    def _defer_sport(self, name, exc):
+        retry = _retry_time(exc, datetime.now(timezone.utc))
+        self.store._put("sports_backoff:" + name, retry.isoformat())
+
+    def _fetch_sport(self, name, item, url):
+        if not name.startswith("api_sports"):
+            return providers.fetch(url, item["headers"], max_bytes=item["max_bytes"])
+        headers = {}
+        raw = providers.fetch(url, item["headers"], max_bytes=item["max_bytes"], response_headers=headers)
+        if headers.get("x-ratelimit-requests-remaining") == "0":
+            self._defer_sport(name, providers.UpstreamHTTPError(429, headers.get("Retry-After")))
+        return raw
 
     def _collect_sport(self, name, conf):
         _, _, key_name, daily_limit = providers.SPORTS[name]
@@ -308,28 +368,68 @@ class Engine:
         today = datetime.now(LONDON).date()
         previous = self.store.snapshot("sports:" + name)
         plan = self._plan(name, conf, today, previous)
-        scopes, failed, errors = {}, set(), []
+        now = datetime.now(timezone.utc)
+        previous_data = (previous or {}).get("data", {})
+        last_ok = previous_data.get("scope_success_at", {})
+        provider_key = "sports_backoff:" + name
+        backoff = self.store._get(provider_key) or ""
+        if backoff > now.isoformat():
+            self.store.job(name, "deferred", f"Provider quota or throttling; retry after {backoff}")
+            return None
+
+        planned = {item["scope"] for item in plan}
+        cached = set()
+        for scope in planned:
+            stamp = last_ok.get(scope, "")
+            if name in ("openboxing", "bha_racing"):
+                interval = timedelta(hours=12)
+            elif name == "jolpica":
+                interval = timedelta(days=3) if scope == f"season:{today.year + 1}" else timedelta(hours=12)
+            elif name.startswith(("api_sports", "thesportsdb")) and scope.split("|")[0] > today.isoformat():
+                interval = timedelta(hours=20)
+            else:
+                continue
+            if stamp >= (now - interval).isoformat():
+                cached.add(scope)
+        scopes, failed, errors = {}, set(), {}
+        deferred = False
         for item in plan:
             scope = item["scope"]
-            if scope in failed:
+            if scope in failed or scope in cached:
                 continue
             try:
                 rows = self._request(name, item, daily_limit)
                 scopes.setdefault(scope, []).extend(dict(r, fetch_scope=scope) for r in rows)
-            except QuotaExhausted:
-                errors.append("quota")
-                failed.update(i["scope"] for i in plan if i["scope"] not in scopes)
+            except QuotaExhausted as exc:
+                errors[scope] = (str(exc) if str(exc).startswith("Provider quota")
+                                 else "Local daily request budget exhausted")
+                scopes.pop(scope, None)
+                deferred = True
                 break
             except SAFE_ERRORS as exc:
-                # Safe errors: do not log request URLs or authentication-bearing payloads.
-                errors.append(type(exc).__name__)
+                errors[scope] = _sports_failure(exc)
                 failed.add(scope)
                 scopes.pop(scope, None)
-        succeeded = {s for s in scopes if s not in failed}
+                if (getattr(exc, "status", None) == 429 or errors[scope] == "Provider quota or rate limit"):
+                    self._defer_sport(name, exc)
+                    deferred = True
+                    break
+                if getattr(exc, "status", None) == 401 or errors[scope] == "Provider rejected the API key":
+                    break
+        succeeded = set(scopes)
+        missing = planned - succeeded - cached
+        for scope in missing:
+            errors.setdefault(scope, "Deferred by request budget" if deferred else "Skipped after provider rejection")
+        detail = "; ".join(f"{scope}: {errors[scope]}" for scope in sorted(errors)[:3])
+        if len(errors) > 3:
+            detail += f"; +{len(errors) - 3} more"
         if not succeeded:
-            self.store.job(name, "failed", "%s: source unavailable, invalid or over budget" % (errors[0] if errors else "NoRequest"))
-            LOGGER.warning("Sports source %s failed (%s)", name, errors[0] if errors else "no request")
-            return False
+            if not missing and cached:
+                self.store.job(name, "unchanged", "Using recently collected schedule")
+                return True
+            state = "deferred" if deferred and not failed else "failed"
+            self.store.job(name, state, detail or "No request scopes configured")
+            return None if state == "deferred" else False
         cutoff = datetime.now(timezone.utc) - timedelta(days=2)
         # A 200 OK with a partial free-plan response does NOT prove all other
         # fixtures in that competition/day have disappeared. Keep unexpired
@@ -337,6 +437,8 @@ class Engine:
         # This avoids deleting events when a source omits a competition/page.
         by_id = {}
         for event in (previous["data"]["events"] if previous else []):
+            if name == "bha_racing" and event.get("fetch_scope") in succeeded:
+                continue
             try:
                 if datetime.fromisoformat(event["start_utc"]) < cutoff:
                     continue
@@ -356,24 +458,77 @@ class Engine:
                 by_id[event["id"]] = event
         events = list(by_id.values())
         full_horizon = len({i["scope"].split("|")[0] for i in plan}) > 1 or not name.startswith(("api_sports", "thesportsdb"))
-        previous_full = (previous or {}).get("data", {}).get("full_discovery_at")
-        # A successful zero-result response might be valid offseason or the
-        # limits of free coverage. Never declare zero sport everywhere.
+        previous_full = previous_data.get("full_discovery_at")
+        stamp = now.isoformat()
+        scope_success = {scope: last_ok[scope] for scope in planned if scope in last_ok}
+        scope_success.update({scope: stamp for scope in succeeded})
+        result_cap = {"thesportsdb": 3, "pandascore": 100}.get(name)
+        possible_truncation = result_cap and any(len(rows) >= result_cap for rows in scopes.values())
         self.store.save_snapshot("sports:" + name, {"events": events, "source_id": name, "complete": "unknown",
                                                     "observed_at": utcnow(), "scopes_ok": sorted(succeeded),
-                                                    "scopes_failed": sorted(failed),
-                                                    "full_discovery_at": utcnow() if full_horizon and not failed else previous_full})
-        state = "partial" if failed else ("ok" if events else "no_events_reported")
-        self.store.job(name, state, "%d event records; %d/%d request scopes refreshed (provider coverage not guaranteed)" % (
-            len(events), len(succeeded), len(succeeded) + len(failed)))
+                                                    "scopes_failed": sorted(missing), "scope_errors": errors,
+                                                    "scope_success_at": scope_success,
+                                                    "full_discovery_at": utcnow() if full_horizon and not missing else previous_full})
+        state = "partial" if missing or possible_truncation else ("ok" if events else "no_events_reported")
+        summary = f"{len(events)} event records; {len(succeeded)}/{len(planned)} request scopes refreshed"
+        if cached:
+            summary += f"; {len(cached)} reused"
+        if possible_truncation:
+            summary += f"; results reached the {result_cap}-row limit and may be incomplete"
+        if detail:
+            summary += "; " + detail
+        self.store.job(name, state, summary)
         return True
 
-    def _collect_epg(self, name):
+    def _reserve_epg(self, name, *, scheduled=False):
+        now = datetime.now(timezone.utc)
+        midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        daily_limit = providers.EPG_DAILY_REQUEST_LIMIT
+        limit = daily_limit
+        if not scheduled:
+            slots = set(self.store.config()["schedule"])
+            local_day = now.astimezone(LONDON).date()
+            for day in (local_day, local_day + timedelta(days=1)):
+                for slot in slots:
+                    instant = datetime.combine(day, datetime.strptime(slot, "%H:%M").time(), LONDON)
+                    if now.replace(second=0, microsecond=0) <= instant < midnight:
+                        limit -= 1
+        provider = "epg:" + name
+        if limit > 0:
+            try:
+                self.store.increment(provider, limit)
+                return
+            except RuntimeError as exc:
+                if str(exc) != "Configured daily call budget exhausted":
+                    raise
+        if limit < daily_limit and self.store.usage().get(provider, 0) < daily_limit:
+            raise QuotaExhausted("Remaining guide requests reserved for scheduled refreshes")
+        raise QuotaExhausted("Local daily guide request budget exhausted; resets at 00:00 UTC")
+
+    def _collect_epg(self, name, *, scheduled=False):
         _, url = providers.EPG[name]
         max_bytes, max_programmes = providers.EPG_LIMITS.get(name, providers.DEFAULT_EPG_LIMIT)
         try:
-            self.store.increment("epg:" + name, providers.EPG_DAILY_REQUEST_LIMIT)
-            raw = providers.fetch(url, max_bytes=max_bytes)
+            self._reserve_epg(name, scheduled=scheduled)
+            cached = self.store.read_snapshots(products=("epg-quality:" + name,),
+                                               timestamps_only=("epg:" + name,))
+            guide_snapshot = cached.get("epg:" + name)
+            quality_snapshot = cached.get("epg-quality:" + name)
+            quality_data = quality_snapshot["data"] if quality_snapshot else {}
+            validators = quality_data.get("http_validators", {})
+            # Revalidate only when the saved guide still covers upcoming programmes.
+            headers = {}
+            if guide_snapshot and quality_snapshot and guide_snapshot["updated_at"] == quality_snapshot["updated_at"]:
+                fresh_until = quality_data.get("http_revalidate_until", "")
+                if fresh_until > utcnow() and validators.get("url") == url:
+                    headers = {key: validators[field] for key, field in
+                               (("If-None-Match", "ETag"), ("If-Modified-Since", "Last-Modified"))
+                               if validators.get(field)}
+            response_headers = {}
+            raw = providers.fetch(url, headers, max_bytes=max_bytes, response_headers=response_headers)
+            if raw is None:
+                self.store.job(name, "unchanged", "Guide unchanged upstream; retained the saved programmes")
+                return True
             parsed = providers.decode_xmltv(raw, name, max_programmes=max_programmes)
             if not parsed["programmes"]:
                 self.store.job(name, "empty", "Guide contains no valid programme rows; retaining old data")
@@ -381,11 +536,12 @@ class Engine:
             # Enrichment/coverage report is local only and non-destructive;
             # no guessed EPG ID is ever exposed as an IPTV playable stream.
             now = datetime.now(timezone.utc)
-            has_future = any(
-                datetime.fromisoformat(p["end_utc"]) > now and datetime.fromisoformat(p["start_utc"]) < now + timedelta(days=1)
-                for p in parsed["programmes"])
+            next_day = now + timedelta(days=1)
+            upcoming_until = max(
+                (datetime.fromisoformat(p["end_utc"]) for p in parsed["programmes"]
+                 if datetime.fromisoformat(p["start_utc"]) < next_day), default=now)
             # A guide with no programme in the next 24h is not a successful forward update.
-            if not has_future:
+            if upcoming_until <= now:
                 self.store.job(name, "stale", "No guide programmes cover the next 24h; retaining last-good")
                 return False
             # HTTP 200 does not imply a complete guide. Protect against a
@@ -412,16 +568,43 @@ class Engine:
                                    "New guide lost over 75% of forward programme records; keeping last-good")
                     return False
             quality = analyze_guide(parsed, now)
+            if response_headers:
+                quality["http_validators"] = {"url": url, **response_headers}
+                # Force a complete validation after 24 hours even if a publisher keeps stale validators.
+                quality["http_revalidate_until"] = min(next_day, upcoming_until).isoformat(timespec="seconds")
             self.store.save_snapshots({"epg:" + name: parsed, "epg-quality:" + name: quality})
             self.store.job(name, "ok", "%d channels; %d programmes; %d invalid; %d with 24h guide; %d recognised services" % (
                 len(parsed["channels"]), len(parsed["programmes"]), parsed["invalid_programmes"],
                 quality["full_coverage_channels"]["24h"], len(quality["matched_canonical_channels"])))
             return True
+        except QuotaExhausted as exc:
+            self.store.job(name, "deferred", str(exc))
+            return None
         except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, json.JSONDecodeError, ET.ParseError, zlib.error) as exc:
             reason = _guide_failure(exc)
             self.store.job(name, "failed", reason)
             LOGGER.warning("EPG source %s failed: %s", name, reason)
             return False
+
+    @staticmethod
+    def _measure_source_contribution(events, sports, guides):
+        sports_by_id = {row["id"]: row for row in sports}
+        guides_by_id = {row["id"]: row for row in guides}
+        for row in sports:
+            row.update(window_fixtures=0, exclusive_fixtures=0)
+        for row in guides:
+            row.update(window_matches=0, exclusive_matches=0)
+        for event in events:
+            contributors = event["sources"]
+            for name in contributors:
+                if name in sports_by_id:
+                    sports_by_id[name]["window_fixtures"] += 1
+                    sports_by_id[name]["exclusive_fixtures"] += int(len(contributors) == 1)
+            for candidate in event["broadcast_candidates"]:
+                guide_ids = candidate["epg_sources"]
+                for name in guide_ids:
+                    guides_by_id[name]["window_matches"] += 1
+                    guides_by_id[name]["exclusive_matches"] += int(len(guide_ids) == 1)
 
     # ---- materialisation --------------------------------------------------
     def _materialize(self, now=None):
@@ -448,19 +631,21 @@ class Engine:
                 continue
         guides = []
         match_guides = any(event.get("start_precision") not in linking.UNCONFIRMED_START_PRECISIONS
-                           and datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date() == london_today
-                           for event in eligible)
+                           and event.get("status_normalized") not in ("postponed", "cancelled") for event in eligible)
         guide_sources = self._guide_sources(conf, guides, match_guides)
         if not match_guides:
             for _ in guide_sources:
                 pass
-        today = linking.build_today(eligible, now, guide_sources)
-        links = {e["id"]: e for group in today["sports"] for c in group["categories"] for e in c["events"]}
+        gaps = {}
+        links = linking.broadcast_candidates(eligible, guide_sources, now, gaps=gaps)
         for event in eligible:
-            linked = links.get(event["id"])
-            if linked:
-                event["broadcast_status"] = linked["broadcast_status"]
-                event["broadcast_candidates"] = linked["broadcast_candidates"]
+            status, candidates = links.get(event["id"], ("none", []))
+            event["broadcast_status"] = status
+            event["broadcast_candidates"] = candidates
+            if event["id"] in gaps:
+                event["broadcast_gap"] = gaps[event["id"]]
+        self._measure_source_contribution(eligible, sources, guides)
+        today = linking.build_today(eligible, now, use_saved_candidates=True)
         generated_at = now.isoformat(timespec="seconds")
         self.store.save_snapshots({
             "sports": {"schema_version": "0.3", "events": eligible, "sources": sources,
@@ -493,6 +678,7 @@ class Engine:
             summaries.append({"id": name, "channels": channels, "programmes": programmes,
                 "last_success": entry["updated_at"], "country": summary.get("country", "unknown"),
                 "covered_24h": summary.get("full_coverage_channels", {}).get("24h", 0),
+                "horizon_hours": summary.get("horizon_hours"),
                 "unmatched": summary.get("unmatched_canonical_channels", 0),
                 "recognised_services": len(summary.get("matched_canonical_channels", [])),
                 "public_redistribution": False})
@@ -500,7 +686,7 @@ class Engine:
                 yield name, payload if payload is not None else self.store.snapshot("epg:" + name)["data"]
 
     def test_source(self, kind, name):
-        """Probe exactly one provider request; reserve one unit in its quota ledger.
+        """Probe the configured connection and reserve quota for each request.
 
         Never accept a user-supplied URL or echo credential-bearing errors.
         Test results do not replace last-good data or enable publication.
@@ -513,20 +699,41 @@ class Engine:
             plan = self._plan(name, conf, datetime.now(LONDON).date())
             if not plan:
                 raise ValueError("Select at least one provider option before testing")
-            item = plan[-1] if name == "tennis_api" else plan[0]
-            self.store.increment(name, limit)
-            try:
-                rows = item["decode"](providers.fetch(item["url"], headers=item["headers"], max_bytes=item["max_bytes"]))
-                self.store.job(name, "test_ok", "Connection valid; %d event records (coverage not guaranteed)" % len(rows))
+            items = plan if name == "tennis_api" else plan[:1]
+            outcomes = []
+            successes = 0
+            for item in items:
+                try:
+                    self._check_sport_backoff(name)
+                    self.store.increment(name, limit)
+                    self._pace(name)
+                    raw = self._fetch_sport(name, item, item["url"])
+                    if name.startswith("api_sports"):
+                        error = providers.api_sports_error(json.loads(raw))
+                        if error:
+                            raise providers.ProviderRejected(error)
+                    rows = item["decode"](raw)
+                    successes += 1
+                    result = f"successful ({len(rows)} events)"
+                except QuotaExhausted as exc:
+                    result = str(exc)
+                except SAFE_ERRORS as exc:
+                    result = ("local request budget exhausted" if str(exc) == "Configured daily call budget exhausted"
+                              else _sports_failure(exc))
+                    if getattr(exc, "status", None) == 429 or result == "Provider quota or rate limit":
+                        self._defer_sport(name, exc)
+                outcomes.append(f'{item["scope"]}: {result}')
+            status = "test_ok" if successes == len(items) else "test_partial" if successes else "test_failed"
+            detail = "; ".join(outcomes)
+            self.store.job(name, status, detail)
+            if len(items) == 1 and successes:
                 return "%s connection successful (%d events returned; coverage not guaranteed)" % (name, len(rows))
-            except SAFE_ERRORS as exc:
-                self.store.job(name, "test_failed", type(exc).__name__ + ": source unavailable or invalid")
-                return "%s test unsuccessful; see Diagnostics" % name
+            return f"{name} connection test: {detail}"
         if kind == "epg" and name in providers.EPG:
             _, url = providers.EPG[name]
             max_bytes, max_programmes = providers.EPG_LIMITS.get(name, providers.DEFAULT_EPG_LIMIT)
             try:
-                self.store.increment("epg:" + name, providers.EPG_DAILY_REQUEST_LIMIT)
+                self._reserve_epg(name)
                 guide = providers.decode_xmltv(providers.fetch(url, max_bytes=max_bytes), name, max_programmes=max_programmes)
                 if not guide["programmes"]:
                     raise ValueError("Empty EPG programme list")
@@ -538,12 +745,15 @@ class Engine:
                     return "%s EPG test unsuccessful; no programmes in the next 24 hours" % name
                 self.store.job(name, "test_ok", "EPG parsed, %d programme records (no stored changes)" % len(guide["programmes"]))
                 return "%s EPG connection successful (%d programmes)" % (name, len(guide["programmes"]))
+            except QuotaExhausted as exc:
+                self.store.job(name, "test_deferred", str(exc))
+                return f"{name} EPG test deferred: {exc}"
             except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, ET.ParseError, zlib.error) as exc:
                 self.store.job(name, "test_failed", _guide_failure(exc))
                 return "%s EPG test unsuccessful; see Diagnostics" % name
         raise ValueError("Unknown provider")
 
-    def start_collection(self, scope="both"):
+    def start_collection(self, scope="both", *, scheduled=False):
         if scope not in COLLECTION_SCOPES:
             raise ValueError("Unknown refresh scope")
         # Reserve the job slot before threading: multiple UI presses must not
@@ -552,7 +762,7 @@ class Engine:
             return False
         def worker():
             try:
-                self._collect_locked(scope)
+                self._collect_locked(scope, scheduled=scheduled)
             finally:
                 self._busy.release()
         thread = threading.Thread(target=worker, name="sportsliveinfo-collect", daemon=True)
@@ -588,7 +798,7 @@ class Engine:
         key = local.strftime("%Y-%m-%d %H:%M")
         if local.strftime("%H:%M") in conf.get("schedule", []):
             if self.store.claim_scheduler_slot(key):
-                if not self.start_collection():
+                if not self.start_collection(scheduled=True):
                     # Worker already running: allow a retry within this minute.
                     self.store.release_scheduler_slot(key)
 

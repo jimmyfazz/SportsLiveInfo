@@ -336,7 +336,7 @@ class EngineExpansionTests(unittest.TestCase):
             db.execute("UPDATE snapshots SET updated_at='2000-01-01T00:00:00+00:00'")
         calls = []
 
-        def fake_fetch(url, headers=None, max_bytes=0):
+        def fake_fetch(url, headers=None, max_bytes=0, *, response_headers=None):
             day = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)["date"][0]
             calls.append(day)
             if day == old_day:
@@ -436,6 +436,39 @@ class EngineExpansionTests(unittest.TestCase):
         sports = self.store.snapshot("sports")["data"]["events"]
         self.assertEqual(len(sports), 2)
 
+    def test_materialize_matches_upcoming_guides_and_explains_gaps(self):
+        self.store.configure({"sports": {"api_sports": True}, "epg": {"farleyflex": True}})
+        start = NOW + timedelta(days=3)
+        self.store.save_snapshot("sports:api_sports", {"events": [
+            ev(id="tomorrow", title="Arsenal v Manchester City", participants=["Arsenal", "Manchester City"],
+               start_utc=start.isoformat()),
+            ev(id="no-title-match", title="Leeds v Hull", participants=["Leeds", "Hull"], start_utc=start.isoformat()),
+            ev(id="date-only", participants=["Milan", "Roma"], start_utc=start.isoformat(), start_precision="date_only"),
+            ev(id="no-slot", start_utc=(start + timedelta(days=3)).isoformat()),
+        ]})
+        self.store.save_snapshot("epg:farleyflex", _guide("farleyflex", "tntsports1.uk", "TNT Sports 1", [{
+            "start_utc": (start - timedelta(minutes=15)).isoformat(),
+            "end_utc": (start + timedelta(hours=2)).isoformat(),
+            "title": "Arsenal v Manchester City",
+        }]))
+        Engine(self.store)._materialize(now=NOW)
+        rows = {row["id"]: row for row in self.store.snapshot("sports")["data"]["events"]}
+        self.assertEqual(rows["tomorrow"]["broadcast_candidates"][0]["canonical_channel_id"], "gb.tnt.sports.1")
+        self.assertFalse(rows["tomorrow"]["broadcast_verified"])
+        self.assertEqual(rows["no-title-match"]["broadcast_gap"], "fixture_title_unmatched")
+        self.assertEqual(rows["date-only"]["broadcast_gap"], "time_unconfirmed")
+        self.assertEqual(rows["no-slot"]["broadcast_gap"], "outside_guide_dates")
+        self.assertEqual(self.store.snapshot("today")["data"]["count"], 0)
+        client = IngressTestClient(self.store, "csrf-test", memory=True)
+        with client.open(client.base + "?page=events&guide=1") as response:
+            page = response.read().decode()
+        self.assertIn("Fixture contribution by source", page)
+        self.assertIn("Guide start", page)
+        with client.open(client.base + "?page=guide") as response:
+            self.assertIn("Exclusive matches", response.read().decode())
+        self.assertIn("TNT Sports 1", page)
+        self.assertNotIn("Leeds", page)
+
     def test_publish_strips_private_epg_derived_fields(self):
         self.store.configure({"setup_complete": True, "publication_approvals": ["openligadb"],
                               "github": {"enabled": True, "owner": "o", "repository": "feed", "branch": "main", "token": "t"}})
@@ -482,6 +515,23 @@ class IngressExpansionTests(unittest.TestCase):
         body = urllib.parse.urlencode(dict(fields, csrf="csrf-test"), doseq=True).encode()
         with self.client.open(urllib.request.Request(self.base, body, method="POST"), timeout=3) as response:
             return response.read().decode()
+
+    def test_channel_details_show_shared_guide_family_and_retry_time(self):
+        now = datetime.now(timezone.utc)
+        self.store.configure({"epg": {"epgshare_uk": True}, "sports": {"api_sports": True}})
+        self.store._put("sports_backoff:api_sports", (now + timedelta(hours=2)).isoformat())
+        for _ in range(providers.EPG_DAILY_REQUEST_LIMIT):
+            self.store.increment("epg:epgshare_uk", providers.EPG_DAILY_REQUEST_LIMIT)
+        self.store.save_snapshot("sports", {"events": [taxonomy.classify(ev(
+            title="Guide match", broadcast_candidates=[{
+                "canonical_channel_id": "gb.sky.sports.main_event", "channel_name": "Sky Sports Main Event",
+                "programme_start_utc": NOW.isoformat(), "epg_sources": ["epgshare_uk", "epgshare_ie"],
+            }]
+        ))]})
+        self.assertIn("2 guides share 1 upstream source", self.get("?page=events"))
+        health = self.get("?page=health")
+        self.assertIn("Retry after", health)
+        self.assertIn(f"{providers.EPG_DAILY_REQUEST_LIMIT} / {providers.EPG_DAILY_REQUEST_LIMIT}", health)
 
     def test_shared_api_sports_key_and_source_options(self):
         self.post({"action": "sports", "provider": "api_sports_rugby", "enabled": "on", "key": "shared-secret"})
@@ -557,6 +607,7 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertLess(page.index("Collection status"), page.index("Events today"))
 
     def test_epg_diagnostics_report_safe_failure_reasons(self):
+        self.store.configure({"schedule": []})
         engine = Engine(self.store)
         with patch.object(providers, "fetch", side_effect=RuntimeError("HTTP 404 from upstream")):
             self.assertFalse(engine._collect_epg("farleyflex"))
@@ -566,8 +617,8 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertNotIn("private-url-with-token", self.get("?page=health"))
         for _ in range(2):
             self.store.increment("epg:farleyflex", 4)
-        self.assertIn("unsuccessful", engine.test_source("epg", "farleyflex"))
-        self.assertEqual(self.store.recent_jobs(1)[0]["details"], "Local daily request budget exhausted")
+        self.assertIn("deferred", engine.test_source("epg", "farleyflex"))
+        self.assertIn("00:00 UTC", self.store.recent_jobs(1)[0]["details"])
 
     def test_today_prioritises_live_and_filters_sport(self):
         events = [taxonomy.classify(ev(id=name, title=name, sport=sport, status_normalized=state,

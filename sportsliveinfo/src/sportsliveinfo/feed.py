@@ -115,6 +115,9 @@ def channels_document():
             row["names"].append(name)
     crosswalk = []
     for source_id, ids in SOURCE_ID_CROSSWALK.items():
+        for channel_id, service_id in ids.items():
+            services.setdefault(service_id, {"id": service_id, "market": COUNTRY_BY_SOURCE[source_id],
+                                             "names": [channel_id]})
         crosswalk.append({"source_id": source_id, "source_url": providers.EPG[source_id][1], "ids": ids})
     guides = []
     for gid, (label, url) in providers.EPG.items():
@@ -293,7 +296,8 @@ def health_document(store, conf, snapshots):
     jobs = store.recent_jobs(300)
     latest = {}
     for job in jobs:
-        latest.setdefault(job["provider"], job)
+        if not job["state"].startswith("test_"):
+            latest.setdefault(job["provider"], job)
     rows = []
     for kind, registry, enabled in (("sports", providers.SPORTS, conf["sports"]), ("epg", providers.EPG, conf["epg"])):
         for name in registry:

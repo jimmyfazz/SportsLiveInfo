@@ -135,7 +135,7 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertIn("football.conference_league", comp)
         self.assertTrue(any(n["id"] == "football.intl.england" and "england" in n["nations"] for n in taxonomy["national_categories"]))
         channels = self.asset("channels")
-        crosswalk = channels["source_crosswalk"][0]
+        crosswalk = next(row for row in channels["source_crosswalk"] if row["source_id"] == "farleyflex")
         self.assertEqual(crosswalk["ids"]["skysportspremiereleague.uk"], "gb.sky.sports.premier_league")
         self.assertTrue(any(s["id"] == "ge.setanta.sports.1" for s in channels["services"]))
         self.assertTrue(any(f["id"] == "now_sports_hk" for f in channels["families"]))

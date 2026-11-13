@@ -42,6 +42,10 @@ SERVICES = {
         "sky sports action": "gb.sky.sports.action",
         "sky sports news": "gb.sky.sports.news",
         "sky sports box office": "gb.sky.sports.box_office",
+        "sky sports +": "gb.sky.sports.plus",
+        "tnt sports box office": "gb.tnt.sports.box_office",
+        "tnt sports box office 2": "gb.tnt.sports.box_office.2",
+        "premier sports rugby": "gb.premier.sports.rugby",
         "tnt sports 1": "gb.tnt.sports.1", "tnt sports 2": "gb.tnt.sports.2",
         "tnt sports 3": "gb.tnt.sports.3", "tnt sports 4": "gb.tnt.sports.4",
         "tnt sports ultimate": "gb.tnt.sports.ultimate",
@@ -66,6 +70,13 @@ SERVICES = {
     "US": {
         "espn": "us.espn", "espn2": "us.espn2", "fs1": "us.fox.fs1", "nfl network": "us.nfl.network",
         "nba tv": "us.nba.tv", "golf channel": "us.golf.channel",
+        "fs2": "us.fox.fs2", "tennis channel": "us.tennis.channel",
+        "espnu": "us.espnu", "espnews": "us.espnews", "espn deportes": "us.espn.deportes",
+    },
+    "CA": {
+        **{f"tsn {number}": f"ca.tsn.{number}" for number in range(1, 6)},
+        **{f"sportsnet {region.lower()}": f"ca.sportsnet.{region.lower()}"
+           for region in ("East", "Ontario", "West", "One", "360", "World", "Pacific")},
     },
     "AU": {"fox footy": "au.fox.footy", "fox cricket": "au.fox.cricket", "fox league": "au.fox.league"},
     "HK": {
@@ -88,6 +99,29 @@ KNOWN_SERVICES = {name: cid for table in SERVICES.values() for name, cid in tabl
 # B1G apps already remap to (BroadcasterEpgAliases.kt / sports-epg-aliases.ts),
 # including the source's own "premiereleague" spelling.
 SOURCE_ID_CROSSWALK = {
+    "iptv_epg_gb": {
+        "SkySportsPlus.uk": "gb.sky.sports.plus",
+        "PremierSportsRugby.uk": "gb.premier.sports.rugby",
+        "TNTSportsBoxOffice.uk": "gb.tnt.sports.box_office",
+        "TNTSportsBoxOffice2.uk": "gb.tnt.sports.box_office.2",
+        **{f"TNTSports{number}.uk": f"gb.tnt.sports.{number}" for number in range(5, 11)},
+    },
+    "epgshare_us": {
+        "FS1.Fox.Sports.1.HD.us2": "us.fox.fs1",
+        "FS2.Fox.Sports.2.HD.us2": "us.fox.fs2",
+        "FS2.HD.us2": "us.fox.fs2",
+        "Tennis.Channel.HD.us2": "us.tennis.channel",
+        "ESPNU.HD.us2": "us.espnu",
+        "ESPNEWS.HD.us2": "us.espnews",
+        "ESPN.Deportes.HD.us2": "us.espn.deportes",
+    },
+    "epgshare_ca": {
+        **{f"TSN.{number}{quality}.ca2": f"ca.tsn.{number}"
+           for number in range(1, 6) for quality in ("", ".HD")},
+        **{f"Sportsnet.{region}.HD.ca2": f"ca.sportsnet.{region.lower()}"
+           for region in ("East", "Ontario", "West", "One", "360", "World")},
+        "Sportsnet.(Pacific).HD.ca2": "ca.sportsnet.pacific",
+    },
     "farleyflex": {
         "skysportsmainevent.uk": "gb.sky.sports.main_event",
         "skysportspremiereleague.uk": "gb.sky.sports.premier_league",

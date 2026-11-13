@@ -7,6 +7,42 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 13 November 2026 — 0.3.5 source connections and coverage
+
+Baseline: main at `7253381` (App 0.3.4). Local EPG refreshes reserve space for the remaining scheduled slots before midnight UTC. An exhausted local budget is a deferral. Guide revalidation uses HTTP validators while saved programmes still cover upcoming airings. Sports collection reuses recent future-date results, retries failed dates and backs off after upstream throttling. The tennis connection test checks upcoming ATP, upcoming WTA and the live board. PandaScore is an optional, disabled-by-default private esports fixture source. [PandaScore upcoming matches reference](https://developers.pandascore.co/reference/get_matches_upcoming).
+
+An offline replay of sampled XMLTV files produced these counts. Each count is the number of distinct canonical services recognised in that feed.
+
+| Guide sample | Programmes parsed | 0.3.4 | 0.3.5 |
+| --- | ---: | ---: | ---: |
+| IPTV-EPG.org GB | 123,236 | 32 | 42 |
+| EPG Share US2 | 82,110 | 6 | 11 |
+| EPG Share CA2 | 67,277 | 0 | 12 |
+| IPTV-EPG.org CA | 122,781 | 0 | 11 |
+| EPG Share US SPORTS1 | 102,292 | 0 | 0 |
+
+Python 3.12 compiled the package and passed 154 tests. The mappings match exact channel IDs within each source. The US SPORTS1 sample provided no verified canonical service IDs. Programme and fixture coverage, provider reachability from HAOS and the authenticated PandaScore response still need verification. Dedicated calendars for the remaining sports and event-specific boxing PPV broadcast confirmation remain open. Publication permissions are unchanged. The App uses the existing slug and database with no migration. Roll back through the previous App build or the App backup.
+
+### Upcoming broadcasts and boxing follow-up
+
+The local Sports Events view matches listings across today and the following seven UK dates, where saved guide slots overlap fixture times. It shows the channel, market, guide start and source, and distinguishes unconfirmed times, missing usable guide slots and unmatched programme titles. The windowed matcher reads one saved guide at a time and bounds each lookup by the accepted maximum programme duration. Guide matches remain unverified.
+
+Open Boxing is disabled by default. A live probe of the documented endpoint decoded 14 scheduled world-title bouts, all date-only. Card times, ring walks, non-title bout coverage and event-specific UK broadcaster or PPV evidence remain open. [Open Boxing API](https://www.openboxing.org/api/). The app slug and database schema are unchanged. Home Assistant runtime verification remains pending.
+
+### Source contribution and British racing follow-up
+
+Sports Events counts deduplicated fixtures per source, including how many that source alone supplied. EPG Coverage counts fixture/channel pairs and exclusive matches per guide. Diagnostics shows known quota or throttle retry times in UK time.
+
+The optional British Horseracing Authority adapter uses the calendar download offered by the [official fixture list](https://www.britishhorseracing.com/racing/fixtures/full-year/). The live files produced 1,451 meetings in 2026 and 1,443 in 2027 across 59 venues in each year. Meetings carry dates and session labels. Individual race times and broadcast evidence require separate sources. A successful annual refresh replaces that season only after the calendar passes the structural and date-coverage checks. The source is disabled by default and redistribution still requires review under the existing publication gate. [BHA website terms](https://www.britishhorseracing.com/terms-conditions/).
+
+### Named tournament and session matching
+
+The local guide matcher accepts explicitly live listings for selected named tournaments in golf, snooker, cycling, darts, athletics and horse racing. It requires matching round, stage, day and session details where present, distinguishes women's and other variants, and rejects repeats and highlights. A date-only fixture cannot create a time-based candidate. Match details show the evidence type. Coverage against a live Home Assistant snapshot remains to be measured.
+
+### Guide gap diagnostics
+
+Sports Events and Live Today distinguish no saved programme data, dates outside the saved guide ranges, no usable recognised channel slot, no fixture title match and an exact listing on an unmapped channel. Unmapped listings remain local diagnostics. Matching details show when multiple guides share an upstream family. Diagnostics now renders the quota-reset time for an exhausted local budget.
+
 ## 13 November 2026 — 0.3.4 audit integration
 
 The integration combines mobile/coverage head `17786a8` and audit head `95f79d5`, with selected operator-dashboard behaviour and the older indexing branch’s differential tests. It keeps fixture retention for sources of unknown completeness and the source-specific XMLTV declaration allowlist. Removed the unused launcher, superseded architecture and data-contract proposals, and obsolete golden-feed assets. Earlier revisions remain in Git history.

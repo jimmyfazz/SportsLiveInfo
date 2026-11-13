@@ -210,7 +210,7 @@ class EngineTests(StoreCase):
         good = ('<tv><channel id="a"><display-name>BBC One</display-name></channel><programme channel="a" start="%s" stop="%s"><title>X</title></programme></tv>'
                 % ((now - timedelta(hours=1)).strftime("%Y%m%d%H%M%S +0000"), (now + timedelta(hours=30)).strftime("%Y%m%d%H%M%S +0000"))).encode()
 
-        def fetch(url, headers=None, max_bytes=0):
+        def fetch(url, headers=None, max_bytes=0, *, response_headers=None):
             return b"\x1f\x8b" + b"corrupt-gzip" if "farleyflex" in url else good
         with patch("sportsliveinfo.providers.fetch", side_effect=fetch):
             Engine(self.store).collect()
@@ -222,6 +222,7 @@ class EngineTests(StoreCase):
         guide = (b'<tv><channel id="a"><display-name>A</display-name></channel>'
                  b'<programme channel="a" start="20000101120000 +0000" stop="20000101130000 +0000">'
                  b'<title>Expired</title></programme></tv>')
+        self.store.configure({"schedule": []})
         with patch.object(providers, "fetch", return_value=guide):
             self.assertIn("no programmes in the next 24 hours", Engine(self.store).test_source("epg", "farleyflex"))
         self.assertEqual(self.store.snapshot("epg:farleyflex")["data"]["programmes"][0]["title"], "Last good")

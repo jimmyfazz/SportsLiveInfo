@@ -1,5 +1,6 @@
 """Small audited provider adapters. No arbitrary-user URL fetch or credential logging."""
 import gzip
+import hashlib
 import io
 import json
 import re
@@ -100,6 +101,9 @@ _XMLTV_DTD_PROLOGUE = re.compile(
 # name -> (label, base URL, shared key name or None, conservative daily call budget)
 TENNIS_API_HOST = "tennis-api-atp-wta-itf.p.rapidapi.com"
 SPORTS = {
+    "bha_racing": ("Horse racing · British Horseracing Authority", "https://crate.horseracing.software/ics/fixtures", None, 4),
+    "openboxing": ("Boxing · Open Boxing world title bouts", "https://openboxing.org/api/bouts/scheduled/index.json", None, 4),
+    "pandascore": ("Esports · PandaScore", "https://api.pandascore.co/matches/upcoming", "pandascore", 24),
     "tennis_api": ("Tennis · Tennis API (RapidAPI)", f"https://{TENNIS_API_HOST}/tennis/v2/extend/api/events", "tennis_api", 40),
     "jolpica": ("Formula 1 · Jolpica (Ergast)", "https://api.jolpi.ca/ergast/f1/current.json", None, 6),
     "openf1": ("Formula 1 sessions · OpenF1", "https://api.openf1.org/v1/sessions", None, 6),
@@ -126,13 +130,16 @@ API_SPORTS_SPORT = {
     "api_sports_afl": "aussie_rules",
 }
 SOURCE_NOTES = {
-    "tennis_api": "Optional RapidAPI key. Live singles and the first 50 upcoming matches per tour, when supplied. Free plan: 50 requests/day. Private collection.",
+    "bha_racing": "Official British meeting dates and session labels. First-race times and TV availability require separate evidence. Private collection.",
+    "openboxing": "Scheduled world title bouts with dates. Card times, ring walks and UK broadcaster or PPV access need a separate source.",
+    "pandascore": "Optional PandaScore token. Upcoming fixtures only. The first 100 matches are collected; coverage may be partial. Private collection.",
+    "tennis_api": "Optional RapidAPI key. Live singles and the first 50 upcoming matches per tour, when supplied. Check the RapidAPI plan for endpoint access and quota. Private collection.",
     "jolpica": "Ergast-compatible F1 calendar incl. practice/qualifying/sprint. CC BY-NC-SA attribution.",
-    "openf1": "Independent F1 session times with end times (2023+). Free, no key.",
+    "openf1": "Historical F1 sessions with end times (2023+). Free historical access; live telemetry requires provider access.",
     "openligadb": "Community fixtures for selected German and European competitions. ODbL attribution/share-alike.",
     "football_data": "Free plan: 12 competitions incl. Premier League, Champions League, Championship, World Cup, Euros. 10 calls/min; delayed scores.",
-    "api_sports": "Free plan 100 calls/day per sport API; one key works for every API-Sports sport below.",
-    "thesportsdb": "Free public key 123: soccer, rugby, cricket, motorsport, fighting, golf, darts, snooker and more. Free-tier coverage is partial.",
+    "api_sports": "One key works across these products. Provider quotas and season access depend on the product and plan.",
+    "thesportsdb": "Free public key 123: soccer, rugby, cricket, motorsport, fighting, golf, darts, snooker and more. Free day results may be capped. Select sports with coverage gaps.",
     "cricketdata": "Free lifetime plan 100 hits/day. Key travels in the query string (provider requirement); never logged.",
 }
 THESPORTSDB_DEFAULT_SPORTS = ["Soccer", "Rugby", "Cricket", "Motorsport", "Fighting", "Golf", "Darts", "Snooker",
@@ -170,7 +177,32 @@ def verify_url(url):
         raise ValueError("Source URL is not on the approved HTTPS provider list")
 
 
-def fetch(url, headers=None, max_bytes=14_000_000):
+class UpstreamHTTPError(RuntimeError):
+    def __init__(self, status, retry_after=None):
+        super().__init__(f"HTTP {status} from upstream")
+        self.status = status
+        self.retry_after = retry_after
+
+
+class ProviderRejected(ValueError):
+    """Safe classification of a provider error envelope."""
+
+
+def api_sports_error(payload):
+    errors = payload.get("errors") if isinstance(payload, dict) else None
+    if not errors:
+        return None
+    keys = {str(key).casefold() for key in errors} if isinstance(errors, dict) else set()
+    if keys & {"requests", "quota", "ratelimit", "rate_limit"}:
+        return "Provider quota or rate limit"
+    if keys & {"token", "key", "auth", "authentication"}:
+        return "Provider rejected the API key"
+    if keys & {"plan", "subscription", "season"}:
+        return "Provider plan or season restriction"
+    return "Provider rejected the requested scope"
+
+
+def fetch(url, headers=None, max_bytes=14_000_000, *, response_headers=None):
     verify_url(url)
     request = urllib.request.Request(url, headers={"User-Agent": "SportsLiveInfo/0.3 (self-hosted EPG and sports collector)", **(headers or {})})
     opener = urllib.request.build_opener(RedirectGuard())
@@ -180,9 +212,18 @@ def fetch(url, headers=None, max_bytes=14_000_000):
             data = response.read(max_bytes + 1)
             if len(data) > max_bytes:
                 raise ValueError("Provider response exceeded configured size limit")
+            if response_headers is not None:
+                for field in ("ETag", "Last-Modified", "Retry-After", "x-ratelimit-requests-remaining"):
+                    value = response.headers.get(field)
+                    if value and len(value) <= 256 and "\r" not in value and "\n" not in value:
+                        response_headers[field] = value
             return data
     except urllib.error.HTTPError as exc:
-        raise RuntimeError("HTTP %d from upstream" % exc.code) from None
+        retry_after = exc.headers.get("Retry-After") if exc.headers else None
+        exc.close()
+        if exc.code == 304 and headers and ("If-None-Match" in headers or "If-Modified-Since" in headers):
+            return None
+        raise UpstreamHTTPError(exc.code, retry_after) from None
     except urllib.error.URLError:
         raise RuntimeError("Upstream network request failed") from None
 
@@ -552,6 +593,115 @@ def api_sports_mma_events(data, source_id="api_sports_mma"):
                            "start_precision": "estimated", "status": short, "status_normalized": status_of(short),
                            "source_id": source_id, "broadcasts": [], "broadcast_verified": False})
         except (ValueError, KeyError, TypeError, OverflowError):
+            continue
+    return events
+
+
+def bha_racing_events(data, *, year):
+    """Decode the BHA year download, which lists one all-day entry per date."""
+    text = data.decode("utf-8-sig").replace("\r\n", "\n")
+    text = re.sub(r"\n[ \t]", "", text)
+    lines = text.strip().splitlines()
+    if (not lines or lines[0] != "BEGIN:VCALENDAR" or lines[-1] != "END:VCALENDAR"
+            or f"X-WR-CALNAME:British Horseracing Authority Fixture List {year}" not in lines):
+        raise ValueError("Unexpected BHA calendar or season")
+    events = {}
+    for entry in re.findall(r"(?m)^BEGIN:VEVENT$\n(.*?)^END:VEVENT$", text, re.DOTALL):
+        if re.search(r"(?m)^STATUS:CANCELLED$", entry):
+            continue
+        start = re.search(r"(?m)^DTSTART;VALUE=DATE:(\d{8})$", entry)
+        title = re.search(r"(?m)^SUMMARY:(.+)$", entry)
+        if not start or not title:
+            continue
+        try:
+            day = date.fromisoformat(start[1])
+        except ValueError:
+            continue
+        if day.year != year:
+            continue
+        for meeting in title[1].split(" / "):
+            course, separator, session = meeting.strip().rpartition(" (")
+            if not separator or not session.endswith(")"):
+                continue
+            course = re.sub(r"\\([,;\\])", r"\1", course).strip()
+            session = session[:-1].strip()
+            if not course or not session:
+                continue
+            identity = hashlib.sha256(f"{course.casefold()}|{session.casefold()}".encode()).hexdigest()[:16]
+            event_id = f"bha:{day.isoformat()}:{identity}"
+            events[event_id] = {
+                "id": event_id, "source_id": "bha_racing", "sport": "horse_racing", "event_type": "meeting",
+                "competition": "British horse racing", "title": f"{course} ({session})", "session": session,
+                "venue": course, "country": "United Kingdom", "start_utc": f"{day.isoformat()}T12:00:00+00:00",
+                "start_precision": "date_only", "status_normalized": "scheduled",
+                "broadcasts": [], "broadcast_verified": False,
+            }
+    # A full-year download must resemble a full-year calendar before its
+    # successful scope can replace the previous season.
+    if len({event["start_utc"] for event in events.values()}) < 300:
+        raise ValueError("BHA calendar has incomplete annual coverage")
+    return list(events.values())
+
+
+def openboxing_events(data):
+    rows = json.loads(data)
+    if not isinstance(rows, list):
+        raise ValueError("Open Boxing bouts payload missing or invalid")
+    events = []
+    for row in rows:
+        try:
+            if row["status"] != "SCHEDULED" or type(row["boutId"]) is not int:
+                continue
+            day = date.fromisoformat(row["date"])
+            participants = []
+            for side in ("boxerA", "boxerB"):
+                name = row["boxers"][side]["name"]
+                if isinstance(name, dict):
+                    name = " ".join(part for part in (name.get("first"), name.get("last")) if part)
+                if not isinstance(name, str) or not name.strip():
+                    raise ValueError("Boxer name missing")
+                participants.append(name.strip())
+            weight = (row.get("weight") or {}).get("class") or ""
+            location = row.get("location") or {}
+            events.append({
+                "id": f'openboxing:{row["boutId"]}', "source_id": "openboxing", "sport": "boxing",
+                "event_type": "bout", "competition": "World title boxing", "weight_class": weight,
+                "title": " v ".join(participants), "participants": participants,
+                "start_utc": f"{day.isoformat()}T12:00:00+00:00", "start_precision": "date_only",
+                "status_normalized": "scheduled", "country": location.get("country") or "",
+                "venue": location.get("venue") or "", "broadcasts": [], "broadcast_verified": False,
+            })
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    if rows and not events:
+        raise ValueError("Open Boxing response contained no valid scheduled bouts")
+    return events
+
+
+def pandascore_events(data):
+    rows = json.loads(data)
+    if not isinstance(rows, list):
+        raise ValueError("PandaScore fixtures payload missing or invalid")
+    events = []
+    for row in rows:
+        try:
+            if not row.get("id") or not row.get("name") or not row.get("begin_at"):
+                continue
+            start = _utc(row["begin_at"])
+            league = (row.get("league") or {}).get("name") or ""
+            series = (row.get("serie") or {}).get("full_name") or ""
+            game = (row.get("videogame") or {}).get("name") or ""
+            participants = [item["opponent"]["name"] for item in row.get("opponents", [])
+                            if isinstance(item.get("opponent"), dict) and item["opponent"].get("name")]
+            events.append({
+                "id": f'pandascore:{row["id"]}', "sport": "esports",
+                "competition": league or series or game, "event_type": "match",
+                "title": str(row["name"]), "participants": participants,
+                "start_utc": start, "start_precision": "scheduled",
+                "status_normalized": "cancelled" if row.get("status") == "canceled" else "scheduled",
+                "source_id": "pandascore", "broadcasts": [], "broadcast_verified": False,
+            })
+        except (AttributeError, TypeError, ValueError, KeyError):
             continue
     return events
 
