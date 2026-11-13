@@ -77,7 +77,8 @@ class GoldenFixtureContractTests(unittest.TestCase):
         # Identity-bearing qualifiers resolve to their own service, never the parent or a sibling.
         self.assertEqual(cases[("farleyflex", "Sky Sports+")], "gb.sky.sports.plus")
         self.assertEqual(cases[("farleyflex", "BBC One Scotland")], "gb.bbc.one.scotland")
-        for negative in [("mjh_sky_uk", "TNT Sports 8"),
+        self.assertEqual(cases[("mjh_sky_uk", "TNT Sports 8")], "gb.tnt.sports.8")   # UK name in a UK guide
+        for negative in [("epgshare_us", "TNT Sports 8"),
                          ("epgshare_uk", "Setanta Sports 1"), ("epgtalk_sports", "Sky Sports Main Event"), ("fr_xmltv", "beIN Sports 4")]:
             self.assertIsNone(cases[negative], negative)
 

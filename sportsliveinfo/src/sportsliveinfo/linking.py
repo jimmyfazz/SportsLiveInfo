@@ -6,6 +6,7 @@ recognised channel whose guide shows a programme covering kick-off whose
 title/sub-title identifies the fixture or a named tournament session. They never set broadcast_verified,
 because guide upstream lineage is not yet proven independent.
 """
+import hashlib
 import re
 from bisect import bisect_left, bisect_right
 from collections import defaultdict
@@ -28,7 +29,7 @@ _STOP = {"fc", "afc", "cf", "sc", "ac", "club", "the", "de", "cd", "ud", "sv", "
          "v", "vs", "calcio", "1", "football", "rfc", "rlfc", "cc", "ccc"}
 _ABBR = {"man": "manchester", "utd": "united", "spurs": "tottenham", "wolves": "wolverhampton",
          "nottm": "nottingham", "munchen": "munich", "w": "women", "womens": "women", "ladies": "women", "st": "saint",
-         "cymru": "wales", "lloegr": "england"}
+         "cymru": "wales", "lloegr": "england", "rep": "republic", "ny": "new york"}
 # Alias expansion is deliberately exact and small. Feed-provided short names are
 # also considered below; arbitrary fuzzy/substring team matching is not safe.
 _TEAM_ALIASES = {
@@ -429,7 +430,8 @@ def _programme_index(epg_guides, window_start, window_end, *, include_non_matche
             parts = [] if excluded else _listing_parts(programme)
             channel_name = channels.get(channel_id, channel_id)
             rows.append((start, end, [p for p in parts if p], text, bool(programme.get("is_live")), canonical,
-                         channel_name, source_id, mapping_method, mapping_confidence, dictionary_categories))
+                         channel_name, source_id, mapping_method, mapping_confidence, dictionary_categories,
+                         (str(programme.get("title") or ""), str(programme.get("subtitle") or ""))))
     return rows
 
 
@@ -702,8 +704,14 @@ def _allocate_regions(found, matched, observed):
         entry.setdefault("coverage", "network")
 
 
-def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_document=None, identity_document=None):
-    """Return {event_id: (status, [candidate...])} for the given events."""
+def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_document=None, identity_document=None,
+                         guide_events=None, guide_days=8):
+    """Return {event_id: (status, [candidate...])} for the given events.
+
+    When ``guide_events`` is a list, live sport listed on recognised channels that
+    no event matched is appended to it as private guide-listed events
+    (see ``_guide_live_events``); they are never published.
+    """
     timed = []
     for event in events:
         if event.get("start_precision") in UNCONFIRMED_START_PRECISIONS:
@@ -718,19 +726,24 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
             timed.append((event, _dt(event["start_utc"])))
         except (KeyError, TypeError, ValueError):
             continue
-    if not timed:
+    if not timed and guide_events is None:
         return {}
     starts = [start for _, start in timed]
+    window_start = min(starts) if starts else now
+    window_end = max(starts) + timedelta(minutes=21) if starts else now
+    if guide_events is not None:
+        window_start, window_end = min(window_start, now), max(window_end, now + timedelta(days=guide_days))
     # Bound each lookup by the longest accepted programme and the kickoff tolerance.
     coverage = {} if gaps is not None else None
     channel_identities, guides = _channel_identity_index(epg_guides or {}, dictionary_document, identity_document)
-    rows = _programme_index(guides, min(starts), max(starts) + timedelta(minutes=21),
+    rows = _programme_index(guides, window_start, window_end,
                             include_non_matches=gaps is not None, coverage=coverage,
                             channel_identities=channel_identities)
     guide_periods = [(first, last) for first, last in (coverage or {}).values() if first is not None]
     by_start = sorted(enumerate(rows), key=lambda item: item[1][0])
     programme_starts = [row[0] for _, row in by_start]
     result = {}
+    matched_rows = set()
     for event, start in timed:
         found = {}
         matched, observed = defaultdict(list), defaultdict(list)
@@ -748,7 +761,7 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
             basis = "epg_title_teams"
         # Keep source order when choosing the representative channel name
         # and programme times for a service reported by multiple guides.
-        for _, row in sorted(overlapping):
+        for row_index, row in sorted(overlapping):
             if row[5] and _regional_family(row[5]):
                 observed[row[5]].append((row[0], row[3], row[6]))
             if not _channel_sport_eligible(event.get("sport", ""), row[6], row[10]):
@@ -770,6 +783,7 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
             if row[7] not in entry["epg_sources"]:
                 entry["epg_sources"].append(row[7])
             matched[canonical].append((row[0], row[3], row[6]))
+            matched_rows.add(row_index)
         _allocate_regions(found, matched, observed)
         candidates = sorted(found.values(), key=lambda c: c["canonical_channel_id"])
         if not candidates:
@@ -788,7 +802,225 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
             continue
         multi = any(len({EPG_FAMILY.get(s, s) for s in c["epg_sources"]}) > 1 for c in candidates)
         result[event["id"]] = ("multi_guide_match" if multi else "single_guide_match", candidates)
+    if guide_events is not None:
+        for event in _guide_live_events(by_start, programme_starts, matched_rows, now, timed):
+            target = event.pop("_feed_event_id", None)
+            if target and target not in result:
+                # The guide confirms a feed fixture the strict title match missed (e.g. "NY Rangers at Vancouver").
+                result[target] = ("guide_listing_match", event["broadcast_candidates"])
+                if gaps is not None:
+                    gaps.pop(target, None)
+            elif not target:
+                guide_events.append(event)
     return result
+
+
+# ---- guide-listed live sport ------------------------------------------------
+# Free sports APIs cover a day or two ahead; the guides list a week of live sport
+# with the channel. Live listings on recognised channels that no event matched
+# become private events, so live action is allocated to a channel even when no
+# event source has the fixture. Never published: programme text is not cleared.
+_LIVE_TEXT = re.compile(r"^(?:live|en direct|direct|en vivo|in diretta|live ?:)\b")
+_SPORT_WORDS = [
+    ("other", r"\b(skiing|alpine|biathlon|ski jumping|snowboard|powerlifting|weightlifting|triathlon|gaa|hurling|"
+              r"camogie|gaelic|badminton|swimming|diving|gymnastics|bowls|equestrian|sailing|rowing)\b"),
+    ("darts", r"\bdarts\b"), ("snooker", r"\bsnooker\b"), ("golf", r"\b(golf|pga|lpga|dp world tour|wtgl)\b"),
+    ("tennis", r"\b(tennis|atp|wta|davis cup|billie jean king)\b"),
+    ("cricket", r"\b(cricket|big bash|wbbl|odi|t20|t10|test match)\b"),
+    ("rugby_league", r"\brugby league\b|\bsuper league\b"),
+    ("rugby_union", r"\b(rugby|nations championship|six nations|prem rugby|urc|champions cup|top 14)\b"),
+    ("american_football", r"\b(nfl|redzone|college football|ncaa football|american football)\b"),
+    ("basketball", r"\b(nba|basketball|euroleague|eurobasket)\b"), ("ice_hockey", r"\b(nhl|ice hockey)\b"),
+    ("baseball", r"\b(mlb|baseball)\b"), ("motorsport", r"\b(f1|formula 1|formula one|motogp|indycar|nascar|wec)\b"),
+    ("boxing", r"\bboxing\b"), ("mma", r"\b(ufc|mma|pfl)\b"),
+    ("horse_racing", r"\b(racing|raceday|race day|horse)\b"), ("cycling", r"\b(cycling|cyclocross|tour de)\b"),
+    ("athletics", r"\b(athletics|marathon|diamond league)\b"), ("aussie_rules", r"\b(afl|aflw|aussie rules)\b"),
+    ("netball", r"\bnetball\b"), ("handball", r"\bhandball\b"), ("volleyball", r"\bvolleyball\b"),
+    ("football", r"\b(football|soccer|wsl|swpl|nwsl|mls|premier league|nations league|fa cup|efl|league one|"
+                 r"league two|championship|a league|laliga|la liga|serie a|bundesliga|ligue 1|eredivisie|spfl|"
+                 r"champions league|europa league|conference league|world cup|euro 20\d\d|copa)\b"),
+]
+_SPORT_WORDS = [(sport, re.compile(pattern)) for sport, pattern in _SPORT_WORDS]
+_CHANNEL_SPORT = [("golf", "golf"), ("cricket", "cricket"), ("tennis", "tennis"), ("motorsport", "f1"),
+                  ("horse_racing", "racing"), ("darts", "darts"), ("football", "football")]
+_GENERIC_CORE = {"live", "new", "sport", "sports", "football", "tennis", "golf", "cricket", "rugby", "racing", "darts",
+                 "snooker", "boxing", "basketball", "baseball", "nfl", "nba", "nhl", "ufc", "the", "and", "of", "on",
+                 "day", "session", "game", "match", "coverage", "beo"}
+_FIXTURE_SPLIT = re.compile(r"\s+(?:v|vs|versus)\.?\s+|\s+@\s+", re.I)
+# North American listings write "Away at Home"; only trusted for those sports.
+_US_SPLIT = re.compile(r"\s+(?:v|vs|versus)\.?\s+|\s+@\s+|\s+at\s+", re.I)
+_US_SPORTS = {"american_football", "ice_hockey", "basketball", "baseball"}
+_DATE_ONLY = re.compile(r"^\s*\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\s*$")
+_LEADING_TAG = re.compile(r"^\s*\[[^\]]{1,20}\]\s*")
+
+
+def _guide_sport(text, channel_name):
+    for sport, pattern in _SPORT_WORDS:
+        if pattern.search(text):
+            return sport
+    name = taxonomy.norm(channel_name)
+    for sport, word in _CHANNEL_SPORT:
+        if _has_phrase(name, word):
+            return sport
+    return None
+
+
+def _strip_live(value):
+    value = _clean_listing(value)
+    value = re.sub(r"^\s*\[?\s*(?:live|en direct|direct)\s*\]?\s*:?\s*", "", value, flags=re.I).strip(" :|-")
+    value = _LEADING_TAG.sub("", value)
+    value = re.sub(r"\s+", " ", value).strip(" :|-")
+    return "" if _DATE_ONLY.match(value) else value
+
+
+def _guide_listing(raw_title, raw_subtitle, sport=None):
+    """(title, competition, participants) for display, from a live listing."""
+    title, subtitle = _strip_live(raw_title), _strip_live(raw_subtitle)
+    if title and subtitle and taxonomy.norm(subtitle).startswith(taxonomy.norm(title)):
+        title, subtitle = subtitle, ""               # "Darts" + "Darts D1 S1" -> one title
+    splitter = _US_SPLIT if sport in _US_SPORTS else _FIXTURE_SPLIT
+    for field, other in ((subtitle, title), (title, subtitle)):
+        pieces = [piece.strip() for piece in field.split(":")]
+        for index, piece in enumerate(pieces):
+            sides = splitter.split(piece)
+            if len(sides) == 2 and all(side.strip() for side in sides):
+                prefix = ": ".join(pieces[:index]).strip(" ,")
+                parts = [x for x in (other if field is subtitle else "", prefix) if x]
+                competition = ", ".join(dict.fromkeys(parts))
+                home, away = (side.strip(" -,") for side in sides)
+                away = re.split(r"\s+-\s*|-(?=\d)", away)[0].strip()      # "England-2nd ODI"
+                return "%s v %s" % (home, away), competition[:120], [home[:80], away[:80]]
+    core = set(taxonomy.norm(title).split()) - _GENERIC_CORE
+    if subtitle and not core:                         # "Live Tennis" + "ATP Finals Day 1"
+        return subtitle[:120], title[:120], []
+    return (title + (": " + subtitle if subtitle else ""))[:120], title[:120], []
+
+
+def _listing_key(sport, participants, title, variants=frozenset()):
+    """Sport (plus women's/age-group variant) and the fixture sides or title words."""
+    sport_key = sport + ("|" + "|".join(sorted(variants)) if variants else "")
+    if participants:
+        return (sport_key, frozenset(frozenset(team_key(name) - _VARIANT) for name in participants))
+    return (sport_key, frozenset(set(taxonomy.norm(title).split()) - _GENERIC_CORE))
+
+
+def _is_fixture_key(key):
+    return isinstance(next(iter(key[1]), None), frozenset)
+
+
+def _token_in(token, tokens_):
+    # A guide may truncate the last word ("London City Lionesse").
+    return token in tokens_ or (len(token) >= 5 and any(len(t) >= 5 and (t.startswith(token) or token.startswith(t))
+                                                         for t in tokens_))
+
+
+def _same_side(a, b):
+    a, b = a - _GENERIC, b - _GENERIC
+    return bool(a) and bool(b) and (all(_token_in(t, b) for t in a) or all(_token_in(t, a) for t in b))
+
+
+def _feed_event_for(cluster_key, start, timed):
+    """The one feed event with the same sport and fixture (names contained) within 3 hours, if any."""
+    if not _is_fixture_key(cluster_key):
+        return None
+    sides = (tuple(cluster_key[1]) * 2)[:2]
+    found = []
+    for event, event_start in timed:
+        if (abs(event_start - start) > timedelta(hours=3)
+                or _sport_family(event.get("sport")) != _sport_family(cluster_key[0].split("|")[0])
+                or set(_event_identity_variants(event)) != set(cluster_key[0].split("|")[1:])):
+            continue
+        teams = [frozenset(team_key(name) - _VARIANT) for name in (event.get("participants") or [])[:2]]
+        if len(teams) == 2 and ((_same_side(sides[0], teams[0]) and _same_side(sides[1], teams[1]))
+                                or (_same_side(sides[0], teams[1]) and _same_side(sides[1], teams[0]))):
+            found.append(event)
+    return found[0] if len(found) == 1 else None
+
+
+def _same_listing(a, b):
+    """Same sport and the same fixture (sides equal or one name contained in the other) or similar title."""
+    if a[0] != b[0]:
+        return False
+    if _is_fixture_key(a) and _is_fixture_key(b):
+        (a1, a2), (b1, b2) = (tuple(a[1]) * 2)[:2], (tuple(b[1]) * 2)[:2]
+        return (_same_side(a1, b1) and _same_side(a2, b2)) or (_same_side(a1, b2) and _same_side(a2, b1))
+    if _is_fixture_key(a) or _is_fixture_key(b):
+        return False
+    union = a[1] | b[1]
+    return bool(union) and len(a[1] & b[1]) / len(union) >= 0.5
+
+
+def _guide_live_events(by_start, programme_starts, matched_rows, now, timed=()):
+    clusters = []        # [key, start, [(row_index, row, title, competition, participants)]]
+    for row_index, row in by_start:
+        canonical, text = row[5], row[3]
+        if not canonical or row[1] <= now or not (row[4] or _LIVE_TEXT.match(text)):
+            continue
+        raw_title, raw_subtitle = row[11]
+        sport = _guide_sport(text, row[6])
+        if not sport or not _channel_sport_eligible(sport, row[6], row[10]):
+            continue
+        title, competition, participants = _guide_listing(raw_title, raw_subtitle, sport)
+        if not title.strip():
+            continue
+        key = _listing_key(sport, participants, title, frozenset(_programme_identity_variants(text)))
+        member = (row_index, row, title, competition, participants)
+        home = None
+        horizon = timedelta(hours=6) if participants else timedelta(minutes=45)
+        for cluster in reversed(clusters):
+            if row[0] - cluster[1] > timedelta(hours=6):
+                break
+            same_slot = any(other[1][5] == row[5] and abs(other[1][0] - row[0]) <= timedelta(minutes=20)
+                            for other in cluster[2])
+            if (cluster[0][0] == key[0] and same_slot) or (
+                    row[0] - cluster[1] <= horizon and _same_listing(cluster[0], key)):
+                home = cluster
+                break
+        if home:
+            home[2].append(member)
+        else:
+            clusters.append([key, row[0], [member]])
+    events = []
+    for key, start, members in clusters:
+        if any(index in matched_rows for index, *_ in members):
+            continue                      # the same broadcast already belongs to a fixture
+        found, matched, observed = {}, defaultdict(list), defaultdict(list)
+        for _, row, *_ in members:
+            entry = found.setdefault(row[5], {"canonical_channel_id": row[5], "channel_name": row[6][:120],
+                                              "programme_start_utc": row[0].isoformat(timespec="seconds"),
+                                              "programme_end_utc": row[1].isoformat(timespec="seconds"),
+                                              "epg_live_flag": False, "epg_sources": [], "match_basis": "epg_live_listing",
+                                              "channel_identity_method": row[8], "channel_identity_confidence": row[9],
+                                              "match_confidence": "guide_listed"})
+            entry["epg_live_flag"] = entry["epg_live_flag"] or row[4]
+            if row[7] not in entry["epg_sources"]:
+                entry["epg_sources"].append(row[7])
+            matched[row[5]].append((row[0], row[3], row[6]))
+        first = bisect_left(programme_starts, start + timedelta(minutes=30) - _MAX_PROGRAMME)
+        last = bisect_right(programme_starts, start + timedelta(minutes=20))
+        for _, row in by_start[first:last]:
+            if row[1] >= start + timedelta(minutes=30) and row[5] and _regional_family(row[5]):
+                observed[row[5]].append((row[0], row[3], row[6]))
+        _allocate_regions(found, matched, observed)
+        candidates = sorted(found.values(), key=lambda c: c["canonical_channel_id"])
+        # Fixtures: the fullest team names; sessions: the plainest title.
+        pick = max if key and _is_fixture_key(key) else min
+        _, row, title, competition, participants = pick(members, key=lambda m: (len(m[2]), -m[1][0].timestamp()))
+        end = max(member[1][1] for member in members)
+        digest = hashlib.sha1(("%s|%s|%s" % (key[0], taxonomy.norm(title), start.isoformat())).encode()).hexdigest()[:16]
+        guides = sorted({source for c in candidates for source in c["epg_sources"]})
+        feed_event = _feed_event_for(key, start, timed)
+        events.append({
+            "_feed_event_id": feed_event["id"] if feed_event else None,
+            "id": "guide:" + digest, "title": title, "sport": key[0].split("|")[0], "competition": competition or title,
+            "participants": participants, "start_utc": start.isoformat(timespec="seconds"),
+            "end_utc": end.isoformat(timespec="seconds"), "start_precision": "scheduled",
+            "start_basis": "broadcast_start", "event_type": "match" if participants else "session",
+            "origin": "guide_listing", "source_id": "guide_listing", "sources": ["guide_listing"],
+            "epg_sources": guides, "fixture_confidence": "guide_listed", "corroboration": len(guides),
+            "broadcast_verified": False, "broadcast_status": "guide_listed", "broadcast_candidates": candidates,
+        })
+    return events
 
 
 def build_today(events, now, epg_guides=None, *, use_saved_candidates=False):

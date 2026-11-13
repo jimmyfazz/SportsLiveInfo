@@ -320,6 +320,14 @@ An allocation audit on the same three public UK guides found that event-to-chann
 
 The two 17 November fixtures are not yet in the feed's event data (an event-coverage gap), so they were checked with constructed events against the real guides. Synthetic regression tests cover each allocation path and fail on 0.3.10.
 
+### Live-action allocation from the guides — 13 November 2026 (0.3.12)
+
+The owner reported very few live events allocated to channels. A funnel over every live sports listing on UK channels in the three public UK guides for 14–20 November (251 listings) found only 25 allocated. The losses: no feed event for 200 (65 fixtures, 135 sessions such as tennis, golf, darts, snooker, NFL and racing), a feed event the strict matcher missed for 12, an unrecognised channel for 14. The published health asset shows why events were missing: every API-Sports product and TheSportsDB were "partial", and the feed held API-Sports events only for 13–14 November, consistent with the free plan's yesterday/today/tomorrow date window. Missing included Spain v England (ITV1), Switzerland v Scotland (BBC Two/BBC Scotland), Sunday's WSL matches and the cricket.
+
+0.3.12 turns unmatched live listings on recognised channels into private guide-listed events (merged across guides and simulcast channels, regional allocation applied, attached to a feed event when the names differ only in form). Result on the same inputs: 234 of 244 live broadcasts allocated (96 %). The rest: three listings on channels without registry ids and four session slots the funnel counts separately from the event they belong to. Guide-listed events are never published (excluded in the feed and not approvable).
+
+Not measured: the owner's 32 Home Assistant guides (only GitHub-hosted guides are reachable from the cloud session).
+
 **Pending owner decision D8:** whether the public feed may carry these guide-listed but unverified event→channel links as canonical ids plus confidence (never programme text), or whether they must remain private on Home Assistant. No links have been published. HA backup and deployment have not been performed.
 
 ## Mobile Overview

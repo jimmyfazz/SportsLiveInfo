@@ -701,26 +701,32 @@ class Engine:
             except (ValueError, KeyError, TypeError):
                 continue
         guides = []
-        match_guides = any(event.get("start_precision") not in linking.UNCONFIRMED_START_PRECISIONS
-                           and event.get("status_normalized") not in ("postponed", "cancelled") for event in eligible)
-        guide_sources = self._guide_sources(conf, guides, match_guides)
-        if not match_guides:
-            for _ in guide_sources:
-                pass
+        # Guides are always read: besides matching events, live sport they list is kept (see below).
+        guide_sources = self._guide_sources(conf, guides, True)
         gaps = {}
         dictionary_snapshot = self.store.snapshot("channel-dictionary") or {}
         identity_snapshot = self.store.snapshot("channel-identity") or {}
         dictionary_document = (dictionary_snapshot.get("data") or {}).get("document")
         identity_document = (identity_snapshot.get("data") or {}).get("document")
+        guide_listed = []
         links = linking.broadcast_candidates(eligible, guide_sources, now, gaps=gaps,
                                              dictionary_document=dictionary_document,
-                                             identity_document=identity_document)
+                                             identity_document=identity_document,
+                                             guide_events=guide_listed)
         for event in eligible:
             status, candidates = links.get(event["id"], ("none", []))
             event["broadcast_status"] = status
             event["broadcast_candidates"] = candidates
             if event["id"] in gaps:
                 event["broadcast_gap"] = gaps[event["id"]]
+        # Live sport listed in the guides that no event source has: private, never published.
+        for event in guide_listed:
+            try:
+                local_day = datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date()
+            except (ValueError, KeyError, TypeError):
+                continue
+            if london_today <= local_day <= london_today + timedelta(days=7):
+                eligible.append(taxonomy.classify(event))
         self._measure_source_contribution(eligible, sources, guides)
         today = linking.build_today(eligible, now, use_saved_candidates=True)
         generated_at = now.isoformat(timespec="seconds")

@@ -2,6 +2,15 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.12 — Allocate live action from the TV guides
+
+- **Guide-listed live sport.** Free event sources only cover a day or two ahead (API-Sports' free plan serves yesterday, today and tomorrow), so most of the week's live sport on UK channels had no event to attach a channel to. Live listings on recognised channels that no event matched now become private events with their channels: fixtures ("Spain v England", ITV1), sessions ("Grand Slam of Darts: Day 2", Sky Sports Main Event and Sky Sports+), with the same regional allocation as fixtures. They are shown in Live today and Sports events as "Listed live in TV guide".
+  - The same broadcast in several guides or on several channels is one event; names written differently ("NY Rangers at Vancouver" / "Vancouver Canucks v New York Rangers", a truncated "Lionesse") are merged; women's and men's fixtures between the same teams stay separate.
+  - When a feed event exists but its title differs from the listing, the listing's channels are attached to the feed event instead.
+  - Never published: they come from guide programme text, so the feed excludes them, and "guide_listing" cannot be approved for publication.
+- Registry: TNT Sports 5–10 by name in UK guides, Sky Mix (the free channel that simulcasts some WSL), Channel 4's regional names. "Rep. of Ireland" matches "Republic of Ireland"; "NY" matches "New York".
+- Measured on three public UK guides for 14–20 November: live UK sports broadcasts allocated to a channel rose from 25 of 251 (10 %) to 234 of 244 (96 %; the total fell as duplicate guide slots merged). The labelled benchmark is unchanged (14 of 14 fixtures matched, no radio, shopping or +1 candidates).
+
 ## 0.3.11 — Correct regional channel allocation
 
 - UK regional channels are modelled properly. BBC One/Two Scotland, Wales and Northern Ireland, ITV1 Wales, ITV Border Scotland, STV and UTV are separate services with a parent network; English regions carry network sport and resolve to the network id. A provider channel is never merged with another region.

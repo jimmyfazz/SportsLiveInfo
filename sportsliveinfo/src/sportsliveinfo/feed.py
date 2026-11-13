@@ -240,6 +240,8 @@ def build_feed(store, now=None, previous_revision=None):
     # source supplied a participant/time/status. Until field-level lineage is
     # implemented, fail closed unless *every* contributor is approved.
     def licensed(event):
+        if event.get("origin") == "guide_listing":
+            return False                  # derived from guide programme text: never published
         origin = event.get("source_id")
         contributors = event.get("sources") or [origin]
         return (isinstance(origin, str) and origin in approved
@@ -247,7 +249,7 @@ def build_feed(store, now=None, previous_revision=None):
                 and all(isinstance(src, str) and src in approved for src in contributors))
     # Legacy/unclassified snapshot rows still need category fields the schema requires.
     events = [_event_public(e if "category_id" in e else taxonomy.classify(e)) for e in all_events if licensed(e)]
-    omitted = sorted({src for e in all_events if not licensed(e)
+    omitted = sorted({src for e in all_events if not licensed(e) and e.get("origin") != "guide_listing"
                       for src in (e.get("sources") or [e.get("source_id")])
                       if isinstance(src, str) and src not in approved})
     by_day = {}

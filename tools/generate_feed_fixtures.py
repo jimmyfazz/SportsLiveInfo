@@ -156,7 +156,7 @@ MATCH_CASES = [
     ("farleyflex", "skysportsmainevent.uk", "Sky Sports Main Event"), ("farleyflex", "", "UK | SKY SPORTS MAIN EVENT FHD"),
     ("farleyflex", "", "Sky Sports Premier League UHD +1"), ("farleyflex", "", "Sky Sports+"), ("farleyflex", "", "Sky News"),
     ("farleyflex", "", "BBC 1"), ("farleyflex", "", "BBC One Scotland"), ("farleyflex", "", "BBC One +1"),
-    ("mjh_sky_uk", "", "ITV1 HD"), ("mjh_sky_uk", "", "TNT Sports 2"), ("mjh_sky_uk", "", "TNT Sports 8"),
+    ("mjh_sky_uk", "", "ITV1 HD"), ("mjh_sky_uk", "", "TNT Sports 2"), ("mjh_sky_uk", "", "TNT Sports 8"), ("epgshare_us", "", "TNT Sports 8"),
     ("epgshare_uk", "", "Premier Sports 1"), ("epgshare_uk", "", "Setanta Sports 1"), ("epgshare_uk", "", "Sky Sports Box Office"),
     ("fr_programmetv", "", "FR: Canal+ Sport HD"), ("fr_programmetv", "", "Canal+ Sport 360 +1"), ("fr_xmltv", "", "beIN Sports 4"),
     ("fr_xmltv", "", "L'Équipe"), ("epgshare_ie", "", "RTE2"), ("epgshare_us", "", "ESPN2"), ("iptvorg_foxtel_au", "", "Fox Footy"),
