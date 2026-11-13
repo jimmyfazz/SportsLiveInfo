@@ -21,7 +21,8 @@ from zoneinfo import ZoneInfo
 from . import __version__, providers, taxonomy
 from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, REGIONAL_PARENTS, REGIONAL_RULES, SERVICES, SOURCE_ID_CROSSWALK
 
-FORMAT_MAJOR, FORMAT_MINOR = 1, 2  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset
+FORMAT_MAJOR, FORMAT_MINOR = 1, 3  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset;
+# 1.3: optional event `broadcast_links` (owner decision D8)
 ROOT = "v1"
 LONDON = ZoneInfo("Europe/London")
 
@@ -218,8 +219,35 @@ def _event_public(event):
     if row["broadcast_verified"]:
         row["broadcasts"] = [{k: b[k] for k in ("canonical_channel_id", "name", "coverage_start_utc", "transmission") if k in b}
                              for b in event.get("broadcasts", []) if isinstance(b, dict)]
+    links = _broadcast_links(event)
+    if links:
+        row["broadcast_links"] = links
     row["b1g_priority_group"] = _priority_group(event.get("sport"), event.get("competition_id"))
     return row
+
+
+def _broadcast_links(event):
+    """Owner decision D8: publish guide-listed event->channel links as canonical ids and confidence only.
+
+    No guide channel names, programme titles or programme times are published,
+    and a link never makes an event "verified": the guide shows a channel
+    listing the event, not that a provider stream carries it.
+    """
+    links = []
+    for candidate in event.get("broadcast_candidates") or []:
+        if not isinstance(candidate, dict) or not candidate.get("canonical_channel_id"):
+            continue
+        link = {"canonical_channel_id": str(candidate["canonical_channel_id"]),
+                "status": "guide_listed_unverified",
+                "coverage": candidate.get("coverage") or "network",
+                "confidence": "high" if candidate.get("match_confidence") == "high" else "medium",
+                "guides": len(candidate.get("epg_sources") or [])}
+        if candidate.get("parent_channel_id"):
+            link["parent_channel_id"] = str(candidate["parent_channel_id"])
+        if candidate.get("not_on"):
+            link["not_on"] = [str(x) for x in candidate["not_on"]]
+        links.append(link)
+    return sorted(links, key=lambda link: link["canonical_channel_id"])
 
 
 def build_feed(store, now=None, previous_revision=None):
@@ -326,7 +354,8 @@ def build_feed(store, now=None, previous_revision=None):
                          "today", "source_health", "fixture_corroboration"]
                         + (["channel_identity"] if identity_doc else [])
                         + (["channel_dictionary"] if dictionary_doc else [])
-                        + (["verified_broadcasts"] if any(e["broadcast_verified"] for e in events) else []),
+                        + (["verified_broadcasts"] if any(e["broadcast_verified"] for e in events) else [])
+                        + (["broadcast_links"] if any(e.get("broadcast_links") for e in events) else []),
         "assets": assets,
         "coverage": {"events": len(events), "today": len(todays), "by_sport": dict(sorted(by_sport.items())),
                      "corroborated": sum(e.get("fixture_confidence") == "corroborated" for e in events),
@@ -335,7 +364,8 @@ def build_feed(store, now=None, previous_revision=None):
                      "services_known": len({cid for t in SERVICES.values() for cid in t.values()}),
                      "families_known": len(CHANNEL_FAMILIES)},
         "rights": {"events": {"approved_sources": sorted(approved), "omitted_unapproved_sources": omitted},
-                   "epg_programmes": "not_published", "broadcast_candidates": "not_published",
+                   "epg_programmes": "not_published",
+                   "broadcast_candidates": "channel_links_published_unverified",
                    "attribution": [{"source": s, "text": ATTRIBUTION[s][0], "licence": ATTRIBUTION[s][1]}
                                    for s in sorted({providers.SPORT_FAMILY.get(a, a) for a in approved}) if s in ATTRIBUTION]
                                   + ([{"source": "iptv_org_database", "text": "Channel dictionary from the iptv-org database",
