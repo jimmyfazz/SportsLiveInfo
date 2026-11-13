@@ -32,7 +32,7 @@ This follows Home Assistant's [local App tutorial](https://contributors.home-ass
 | Diagnostics | Last-good snapshots, source errors, daily UTC request counts and bounded recent job history |
 | Publishing | Local preview, masked fine-grained token setup, separate GET-only connection check and optional atomic static-feed publication |
 
-There are 16 sports adapter entries and 27 EPG candidates across 15 markets. The 24-sport/127-competition taxonomy is classification data, not a promise of actual source coverage. Ten API-Sports adapters share one saved key setting. OpenLigaDB's configured budget is 12/day; all configured budgets are local limits, not verified supplier allowances. Jolpica is initially selected; collection waits for setup completion. New adapters and all EPG candidates are opt-in.
+There are 16 sports adapter entries and 30 EPG candidates across 15 markets. The 24-sport/127-competition taxonomy is classification data, not a promise of actual source coverage. Ten API-Sports adapters share one saved key setting. OpenLigaDB's configured budget is 12/day; all configured budgets are local limits, not verified supplier allowances. Jolpica is initially selected; collection waits for setup completion. New adapters and all EPG candidates are opt-in.
 
 Sports source tests make one quota-accounted request. EPG tests download and parse a bounded guide. Tests may update diagnostics/quota usage but do not replace source snapshots or authorize publishing. A successful test is not a completeness or rights check.
 
