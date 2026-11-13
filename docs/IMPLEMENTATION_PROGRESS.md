@@ -152,3 +152,22 @@ Implemented in the integration repair branch: atomic multi-connection API quota 
 **TEST STATUS:** Claude recorded 55 passing offline tests on its original branch. New integrated hardening tests and the combined branch have **not** been executed in a complete local checkout here. Existing GitHub Actions returned failures without readable logs. Do not mark this branch green, deployable or HAOS-accepted until the full source test suite and actual App installation pass.
 
 See [forensic integration and corrections](FORENSIC_INTEGRATION_AND_CORRECTIONS_2026-11-12.md) for per-module findings, code fixes and blocking tasks. B1G provider EPG remains primary; the new programme overlay is an opt-in verified *suggestion*, never an unconditional replacement.
+
+
+## EPG coverage repairs — 13 November 2026
+
+The Home Assistant 0.3.1 baseline (4045f46) imported 9 of 19 enabled guides. The EPG Share index and downloaded XMLTV samples confirmed US2 and CA2 as replacements for the endpoints returning 404. The Sky UK and Foxtel iptv-org URLs, the two French iptv-org URLs and the Matt Huisman Sky UK redirect destination also returned 404.
+
+| Feed | Channel entries | Full 24h | Full 168h |
+| --- | ---: | ---: | ---: |
+| EPG Share CA2 | 696 | 695 | 0 |
+| EPG Share US2 | 792 | 771 | 0 |
+| EPG Share US SPORTS1 | 299 | 299 | 245 |
+| IPTV-EPG.org GB | 932 | 899 | 426 |
+| IPTV-EPG.org AU | 490 | 483 | 210 |
+| XML TV Fr | 401 | 352 | 206 |
+| EPGTalk UK | 560 | 560 | 0 |
+
+The UK IPTV-EPG.org sample included 18 Sky Sports, 13 TNT Sports and five Premier Sports entries with full 24-hour schedules. EPGTalk Sports parsed but its long programme blocks need quality review. Source counts include variants. They do not establish unique services, stream matches or redistribution rights.
+
+Only the fixed external XMLTV marker is removed from the known prologues. Other DTDs and entity declarations are rejected. New sources default to disabled. This preserves the existing App slug, SQLite volume and saved provider settings. Retain a scoped backup for rollback. Home Assistant deployment and post-update verification are pending.

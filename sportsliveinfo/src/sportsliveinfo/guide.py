@@ -10,10 +10,10 @@ import unicodedata
 
 COUNTRY_BY_SOURCE = {
     "farleyflex": "GB", "uk_freeview": "GB", "epgshare_uk": "GB", "mjh_sky_uk": "GB",
-    "iptvorg_sky_uk": "GB", "epgtalk_uk": "GB",
+    "iptvorg_sky_uk": "GB", "epgtalk_uk": "GB", "iptv_epg_gb": "GB",
     "epgshare_ie": "IE",
     "fr_programmetv": "FR", "fr_telerama": "FR", "fr_xmltv": "FR", "epgshare_fr": "FR", "iptv_epg_fr": "FR",
-    "epgshare_us": "US", "iptvorg_foxtel_au": "AU",
+    "epgshare_us": "US", "epgshare_us_sports": "US", "iptvorg_foxtel_au": "AU", "iptv_epg_au": "AU",
     "epgshare_hk": "HK", "iptv_epg_hk": "HK", "iptv_epg_ge": "GE", "epgshare_my": "MY",
     "epgshare_ca": "CA", "epgshare_au": "AU", "epgshare_nz": "NZ", "epgshare_pt": "PT",
     "epgshare_pl": "PL", "epgshare_gr": "GR", "epgshare_sg": "SG", "epgshare_in": "IN",

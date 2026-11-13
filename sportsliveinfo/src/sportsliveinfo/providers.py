@@ -2,6 +2,7 @@
 import gzip
 import io
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -26,7 +27,10 @@ EPG = {
     "epgtalk_uk": ("UK national · EPGTalk (B1G suggested feed)", "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/UK_guide.xml.gz"),
     "epgtalk_sports": ("Sports · EPGTalk (B1G suggested feed)", "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz"),
     "iptv_epg_fr": ("France · IPTV-EPG.org (B1G; terms not explicit)", "https://iptv-epg.org/files/epg-fr.xml.gz"),
-    "epgshare_us": ("United States · EPG Share US1 (B1G backup feed)", "https://epgshare01.online/epgshare01/epg_ripper_US1.xml.gz"),
+    "epgshare_us": ("United States · EPG Share US2", "https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz"),
+    "epgshare_us_sports": ("United States sports · EPG Share US SPORTS1", "https://epgshare01.online/epgshare01/epg_ripper_US_SPORTS1.xml.gz"),
+    "iptv_epg_gb": ("UK broad · IPTV-EPG.org", "https://iptv-epg.org/files/epg-gb.xml.gz"),
+    "iptv_epg_au": ("Australia · IPTV-EPG.org", "https://iptv-epg.org/files/epg-au.xml.gz"),
     "iptvorg_foxtel_au": ("Australia · iptv-org Foxtel (B1G backup feed; verify)", "https://iptv-org.github.io/epg/guides/au/foxtel.com.au.epg.xml.gz"),
     # International sports lineups named in the B1G 10 Nov sports-coverage register entry.
     "epgshare_hk": ("Hong Kong · EPG Share HK1 — Now Sports/beIN (verify)", "https://epgshare01.online/epgshare01/epg_ripper_HK1.xml.gz"),
@@ -35,23 +39,24 @@ EPG = {
     "epgshare_my": ("Malaysia · EPG Share MY1 — Astro (verify)", "https://epgshare01.online/epgshare01/epg_ripper_MY1.xml.gz"),
 }
 # Further markets present in the owner's provider categories (CA, AU, NZ, PT,
-# PL, GR, SG, IN). File names follow the confirmed epg_ripper_<CC>1 pattern
-# (UK1, US1, FR1, HK1); each must pass "Test EPG" before use.
+# PL, GR, SG, IN). Canada uses the publisher's CA2 feed.
 EPGSHARE_MARKETS = {
     "CA": "Canada (TSN/Sportsnet)", "AU": "Australia (Fox/Kayo)", "NZ": "New Zealand (Sky Sport NZ)",
     "PT": "Portugal (Sport TV)", "PL": "Poland (Polsat/Canal+ Sport)", "GR": "Greece (Nova/Cosmote)",
     "SG": "Singapore (Hub Sports)", "IN": "India (Star/Sony Sports)",
 }
 for _cc, _label in EPGSHARE_MARKETS.items():
-    EPG["epgshare_" + _cc.lower()] = ("%s · EPG Share %s1 (verify)" % (_label, _cc),
-                                      "https://epgshare01.online/epgshare01/epg_ripper_%s1.xml.gz" % _cc)
+    _tag = "CA2" if _cc == "CA" else _cc + "1"
+    EPG["epgshare_" + _cc.lower()] = ("%s · EPG Share %s (verify)" % (_label, _tag),
+                                      "https://epgshare01.online/epgshare01/epg_ripper_%s.xml.gz" % _tag)
 # Upstream families: two guides from one family are not independent evidence.
 EPG_FAMILY = {
     "farleyflex": "farleyflex", "uk_freeview": "freeview_epg",
     "epgshare_uk": "epgshare", "epgshare_ie": "epgshare", "epgshare_fr": "epgshare",
-    "epgshare_us": "epgshare", "epgshare_hk": "epgshare", "epgshare_my": "epgshare",
+    "epgshare_us": "epgshare", "epgshare_us_sports": "epgshare", "epgshare_hk": "epgshare", "epgshare_my": "epgshare",
     "fr_programmetv": "iptv_org", "fr_telerama": "iptv_org", "iptvorg_sky_uk": "iptv_org", "iptvorg_foxtel_au": "iptv_org",
     "fr_xmltv": "xmltvfr", "mjh_sky_uk": "mjh", "epgtalk_uk": "epgtalk", "epgtalk_sports": "epgtalk",
+    "iptv_epg_gb": "iptv_epg_org", "iptv_epg_au": "iptv_epg_org",
     "iptv_epg_fr": "iptv_epg_org", "iptv_epg_hk": "iptv_epg_org", "iptv_epg_ge": "iptv_epg_org",
 }
 EPG_FAMILY.update({"epgshare_" + cc.lower(): "epgshare" for cc in EPGSHARE_MARKETS})
@@ -59,6 +64,8 @@ EPG_FAMILY.update({"epgshare_" + cc.lower(): "epgshare" for cc in EPGSHARE_MARKE
 EPG_LIMITS = {
     # The publisher serves an uncompressed file of about 21 MB.
     "uk_freeview": (30_000_000, 100_000),
+    "iptv_epg_gb": (30_000_000, 180_000), "iptv_epg_au": (14_000_000, 100_000),
+    "epgshare_us_sports": (5_000_000, 150_000),
     "epgshare_uk": (60_000_000, 300_000), "epgshare_fr": (40_000_000, 250_000),
     "epgshare_ie": (30_000_000, 200_000), "epgshare_us": (60_000_000, 300_000),
     "epgshare_hk": (30_000_000, 200_000), "epgshare_my": (30_000_000, 200_000),
@@ -70,7 +77,16 @@ EPG_LIMITS.update({"epgshare_" + cc.lower(): (40_000_000, 250_000) for cc in EPG
 EPG_DAILY_REQUEST_LIMIT = 4
 DEFAULT_EPG_LIMIT = (14_000_000, 100_000)
 # XML TV Fr lists an expanded France-only file of about 70 MiB.
-EPG_EXPANDED_LIMITS = {"fr_xmltv": 85_000_000}
+EPG_EXPANDED_LIMITS = {
+    "fr_xmltv": 85_000_000, "epgshare_ca": 85_000_000, "epgshare_us": 95_000_000,
+    "iptv_epg_gb": 95_000_000, "epgtalk_uk": 115_000_000,
+}
+# Remove only the fixed external marker in these publishers' prologues.
+XMLTV_DTD_SOURCES = frozenset({"fr_xmltv", "epgtalk_uk", "epgtalk_sports"})
+_XMLTV_DTD_PROLOGUE = re.compile(
+    rb'\A((?:\xef\xbb\xbf)?(?:<\?xml [^<>]*\?>)?[ \t\r\n]*)'
+    rb'<!DOCTYPE tv SYSTEM "xmltv.dtd">'
+)
 
 # name -> (label, base URL, shared key name or None, conservative daily call budget)
 SPORTS = {
@@ -209,11 +225,12 @@ class _LimitedXmlInput:
     compressed HTTP response size.
     """
 
-    def __init__(self, stream, byte_limit):
+    def __init__(self, stream, byte_limit, strip_xmltv_dtd=False):
         self.stream = stream
         self.byte_limit = byte_limit
         self.total = 0
         self.tail = b""
+        self.strip_xmltv_dtd = strip_xmltv_dtd
 
     def read(self, size=-1):
         size = 65536 if size is None or size < 0 else min(size, 65536)
@@ -221,8 +238,13 @@ class _LimitedXmlInput:
         self.total += len(payload)
         if self.total > self.byte_limit:
             raise ValueError("XMLTV decompressed past safety limit")
+        if self.strip_xmltv_dtd:
+            # ElementTree's first read covers these prologues. A truncated
+            # or altered declaration still goes through the guard.
+            self.strip_xmltv_dtd = False
+            payload = _XMLTV_DTD_PROLOGUE.sub(rb"\1", payload, count=1)
         marker = (self.tail + payload).upper()
-        if b"<!DOCTYPE" in marker or b"<!ENTITY" in marker:
+        if b"<!DOCTYPE" in marker or b"<!ENTITY" in marker or b"\x00" in payload:
             raise ValueError("XMLTV declarations and entities are not allowed")
         self.tail = marker[-16:]
         return payload
@@ -245,7 +267,9 @@ def decode_xmltv(raw, source, max_expanded=None, max_programmes=100_000,
     channels, icons, programmes, bad = {}, {}, [], 0
     root = None
     with stream:
-        for event, node in ET.iterparse(_LimitedXmlInput(stream, max_expanded), events=("start", "end")):
+        for event, node in ET.iterparse(
+                _LimitedXmlInput(stream, max_expanded, source in XMLTV_DTD_SOURCES),
+                events=("start", "end")):
             if root is None:
                 root = node
                 if root.tag != "tv":
