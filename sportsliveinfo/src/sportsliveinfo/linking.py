@@ -7,7 +7,7 @@ title/sub-title contains both teams. They never set broadcast_verified,
 because guide upstream lineage is not yet proven independent.
 """
 import re
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -203,7 +203,7 @@ def live_state(event, now):
     return "upcoming"
 
 
-def _programme_index(epg_guides, window_start, window_end):
+def _programme_index(epg_guides, window_start, window_end, *, include_non_matches=False):
     """Recognised-channel programmes overlapping the window: (start, end, tokens, text, live, channel...)."""
     rows = []
     guides = epg_guides.items() if isinstance(epg_guides, dict) else epg_guides
@@ -211,22 +211,23 @@ def _programme_index(epg_guides, window_start, window_end):
         channels = guide.get("channels", {})
         identity = {}
         for programme in guide.get("programmes", []):
-            try:
-                start, end = _dt(programme["start_utc"]), _dt(programme["end_utc"])
-            except (KeyError, ValueError, TypeError):
-                continue
-            if end <= window_start or start >= window_end or programme.get("is_repeat") or end - start > _MAX_PROGRAMME:
-                continue
             channel_id = programme.get("channel_id", "")
             if channel_id not in identity:
                 identity[channel_id] = canonical_channel(source_id, channel_id, channels.get(channel_id, channel_id))
             canonical = identity[channel_id]
             if not canonical or ".news" in canonical:
                 continue
-            text = taxonomy.norm("%s %s" % (programme.get("title", ""), programme.get("subtitle", "")))
-            if _NEGATIVE.search(text):
+            try:
+                start, end = _dt(programme["start_utc"]), _dt(programme["end_utc"])
+            except (KeyError, ValueError, TypeError):
                 continue
-            parts = [taxonomy.norm(programme.get("title", "")), taxonomy.norm(programme.get("subtitle", ""))]
+            if end <= window_start or start >= window_end or programme.get("is_repeat") or end - start > _MAX_PROGRAMME:
+                continue
+            text = taxonomy.norm("%s %s" % (programme.get("title", ""), programme.get("subtitle", "")))
+            excluded = bool(_NEGATIVE.search(text))
+            if excluded and not include_non_matches:
+                continue
+            parts = [] if excluded else [taxonomy.norm(programme.get(field, "")) for field in ("title", "subtitle")]
             rows.append((start, end, [p for p in parts if p], text, bool(programme.get("is_live")), canonical,
                          channels.get(channel_id, channel_id), source_id))
     return rows
@@ -249,10 +250,17 @@ def _fixture_in(text, home, away, allowed):
 
 def _matches(event, row):
     parts, text = row[2], row[3]
+    if not parts:
+        return False
     if event.get("sport") == "motorsport":
-        if not re.search(r"\b(f1|formula 1|formula one|grand prix)\b", text):
+        if taxonomy.norm(event.get("competition", "")) not in {"f1", "formula 1", "formula one"}:
+            return False
+        if not re.search(r"\b(f1|formula 1|formula one)\b", text) and row[5] != "gb.sky.sports.f1":
             return False
         session = event.get("session")
+        if session in ("practice1", "practice2", "practice3"):
+            number = session[-1]
+            return bool(re.search(rf"\b(?:practice {number}|fp\s*{number})\b", text))
         if any(w in text for other, words in _SESSION_WORDS.items() if other != session and other[:8] != (session or "")[:8]
                for w in words if w not in _SESSION_WORDS.get(session, ())):
             return False
@@ -264,11 +272,17 @@ def _matches(event, row):
     return any(_fixture_in(part, teams[0], teams[1], allowed) for part in parts)
 
 
-def broadcast_candidates(events, epg_guides, now):
+def broadcast_candidates(events, epg_guides, now, *, gaps=None):
     """Return {event_id: (status, [candidate...])} for the given events."""
     timed = []
     for event in events:
         if event.get("start_precision") in UNCONFIRMED_START_PRECISIONS:
+            if gaps is not None:
+                gaps[event["id"]] = "time_unconfirmed"
+            continue
+        if event.get("status_normalized") in ("postponed", "cancelled"):
+            if gaps is not None:
+                gaps[event["id"]] = "fixture_inactive"
             continue
         try:
             timed.append((event, _dt(event["start_utc"])))
@@ -277,39 +291,43 @@ def broadcast_candidates(events, epg_guides, now):
     if not timed or not epg_guides:
         return {}
     starts = [start for _, start in timed]
-    # A programme starting earlier can still cover kickoff. Index by its end
-    # so long programmes remain eligible without rescanning expired rows.
-    rows = _programme_index(epg_guides, min(starts), max(starts) + timedelta(minutes=21))
-    by_end = sorted(enumerate(rows), key=lambda item: item[1][1])
-    ends = [row[1] for _, row in by_end]
+    # Bound each lookup by the longest accepted programme and the kickoff tolerance.
+    rows = _programme_index(epg_guides, min(starts), max(starts) + timedelta(minutes=21),
+                            include_non_matches=gaps is not None)
+    by_start = sorted(enumerate(rows), key=lambda item: item[1][0])
+    programme_starts = [row[0] for _, row in by_start]
     result = {}
     for event, start in timed:
         found = {}
         earliest_end = start + timedelta(minutes=30)
         latest_start = start + timedelta(minutes=20)
-        first = bisect_left(ends, earliest_end)
+        first = bisect_left(programme_starts, earliest_end - _MAX_PROGRAMME)
+        last = bisect_right(programme_starts, latest_start)
+        overlapping = [item for item in by_start[first:last] if item[1][1] >= earliest_end]
         # Keep source order when choosing the representative channel name
         # and programme times for a service reported by multiple guides.
-        for _, row in sorted(item for item in by_end[first:] if item[1][0] <= latest_start):
+        for _, row in sorted(overlapping):
             if not _matches(event, row):
                 continue
             canonical = row[5]
             entry = found.setdefault(canonical, {"canonical_channel_id": canonical, "channel_name": row[6][:120],
                                                  "programme_start_utc": row[0].isoformat(timespec="seconds"),
                                                  "programme_end_utc": row[1].isoformat(timespec="seconds"),
-                                                 "epg_live_flag": False, "epg_sources": [], "match_basis": "epg_title_teams"})
+                                                 "epg_live_flag": False, "epg_sources": [], "match_basis": "epg_f1_session" if event.get("sport") == "motorsport" else "epg_title_teams"})
             entry["epg_live_flag"] = entry["epg_live_flag"] or row[4]
             if row[7] not in entry["epg_sources"]:
                 entry["epg_sources"].append(row[7])
         candidates = sorted(found.values(), key=lambda c: c["canonical_channel_id"])
         if not candidates:
+            if gaps is not None:
+                gaps[event["id"]] = "fixture_title_unmatched" if overlapping else "no_recognised_guide_slot"
             continue
         multi = any(len({EPG_FAMILY.get(s, s) for s in c["epg_sources"]}) > 1 for c in candidates)
         result[event["id"]] = ("multi_guide_match" if multi else "single_guide_match", candidates)
     return result
 
 
-def build_today(events, now, epg_guides=None):
+def build_today(events, now, epg_guides=None, *, use_saved_candidates=False):
     today = now.astimezone(LONDON).date()
     todays = []
     for event in events:
@@ -318,11 +336,12 @@ def build_today(events, now, epg_guides=None):
                 todays.append(dict(event, live_state=live_state(event, now)))
         except (KeyError, ValueError, TypeError):
             continue
-    links = broadcast_candidates(todays, epg_guides or {}, now)
-    for event in todays:
-        status, candidates = links.get(event["id"], ("none", []))
-        event["broadcast_status"] = status
-        event["broadcast_candidates"] = candidates
+    if not use_saved_candidates:
+        links = broadcast_candidates(todays, epg_guides or {}, now)
+        for event in todays:
+            status, candidates = links.get(event["id"], ("none", []))
+            event["broadcast_status"] = status
+            event["broadcast_candidates"] = candidates
     sports = defaultdict(lambda: defaultdict(list))
     labels = {}
     for event in todays:

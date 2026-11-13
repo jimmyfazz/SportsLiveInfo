@@ -594,19 +594,31 @@ class UI(BaseHTTPRequestHandler):
         except (ValueError, KeyError, TypeError):
             return "Unconfirmed"
 
-    @staticmethod
-    def _channel_text(event):
+    def _channel_cell(self, event):
         if event.get("broadcast_verified"):
-            return ", ".join(str(c.get("name", "")) for c in event.get("broadcasts", []) if isinstance(c, dict)) or "Verified"
+            names = ", ".join(str(c.get("name", "")) for c in event.get("broadcasts", []) if isinstance(c, dict))
+            return e(names or "Verified")
         candidates = event.get("broadcast_candidates") or []
-        if candidates:
-            names = []
-            for candidate in candidates[:3]:
-                name = candidate.get("channel_name", "")
-                market = candidate.get("canonical_channel_id", "").partition(".")[0].upper()
-                names.append(f"{name} ({market})" if market and market != "GB" else name)
-            return "EPG match (unverified): " + ", ".join(names)
-        return "Not verified"
+        if not candidates:
+            return e({
+                "time_unconfirmed": "Fixture time TBC",
+                "fixture_inactive": "Fixture postponed or cancelled",
+                "fixture_title_unmatched": "No fixture match in available guides",
+                "no_recognised_guide_slot": "No usable guide slot on recognised channels",
+            }.get(event.get("broadcast_gap"), "Not verified"))
+        items = []
+        for candidate in candidates:
+            name = candidate.get("channel_name", "")
+            market = candidate.get("canonical_channel_id", "").partition(".")[0].upper()
+            coverage = self._uk_time({"start_utc": candidate.get("programme_start_utc")})
+            sources = ", ".join(providers.EPG.get(source, (source,))[0] for source in candidate.get("epg_sources", []))
+            items.append("<li>%s · %s<br><small>Guide start %s · %s</small></li>" %
+                         (e(name), e(market), e(coverage), e(sources)))
+        first = candidates[0]
+        first_market = first.get("canonical_channel_id", "").partition(".")[0].upper()
+        return '<details><summary>EPG match (unverified) · %s (%s)%s</summary><ul>%s</ul></details>' % (
+            e(first.get("channel_name", "")), e(first_market),
+            " +%d" % (len(candidates) - 1) if len(candidates) > 1 else "", "".join(items))
 
     def _event_row(self, event, fmt="%d %b %H:%M %Z", show_sport=False):
         sources = event.get("sources") or [event.get("source_id", "")]
@@ -625,7 +637,7 @@ class UI(BaseHTTPRequestHandler):
         sub = "" if not competition or competition == event.get("category_label") else competition
         return '<tr><td>%s%s</td><td>%s<br><small>%s</small></td><td>%s%s</td><td>%s</td></tr>' % (
             e(self._uk_time(event, fmt)), pill, e(event.get("title", "")), e(confidence),
-            e(category), ('<br><small>%s</small>' % e(sub)) if sub else "", e(self._channel_text(event)))
+            e(category), ('<br><small>%s</small>' % e(sub)) if sub else "", self._channel_cell(event))
 
     def today(self, query=None):
         snapshot = self.store.snapshot("today")
@@ -702,6 +714,7 @@ class UI(BaseHTTPRequestHandler):
         data = snapshot["data"] if snapshot else {}
         events = data.get("events", [])
         sport, category, text = query.get("sport", ""), query.get("category", ""), query.get("q", "").casefold()
+        with_guide = query.get("guide") == "1"
         uk_date = query.get("date", "")
         try:
             uk_date = date.fromisoformat(uk_date).isoformat()
@@ -715,12 +728,13 @@ class UI(BaseHTTPRequestHandler):
         shown = [ev for ev in events if (not sport or ev.get("sport") == sport)
                  and (not category or ev.get("category_id") == category)
                  and (not uk_date or self._event_day(ev) == uk_date)
+                 and (not with_guide or ev.get("broadcast_candidates") or ev.get("broadcast_verified"))
                  and (not text or text in ("%s %s %s" % (ev.get("title", ""), ev.get("competition", ""), " ".join(ev.get("participants") or []))).casefold())]
-        body = '<h2>Sporting events</h2><p>Independent sports fixtures, races and sessions for the next eight UK days, de-duplicated across sources. This view does not claim a broadcaster unless a separately verified source has supplied one.</p>'
-        filters = '<form method="get"><input type="hidden" name="page" value="events"><div class="formrow"><div><label for="f-sport">Sport</label><select id="f-sport" name="sport"><option value="">All sports</option>%s</select></div><div><label for="f-cat">Competition</label><select id="f-cat" name="category"><option value="">All competitions</option>%s</select></div><div><label for="f-q">Team or competition</label><input id="f-q" type="text" name="q" value="%s" placeholder="e.g. England, Arsenal, Six Nations"></div><div><label for="f-date">UK date</label><input id="f-date" name="date" type="date" value="%s"></div><button type="submit">Filter</button></div></form>' % (
+        body = '<h2>Sporting events</h2><p>Independent sports fixtures, races and sessions for the next eight UK days, de-duplicated across sources. Open an EPG match to see the service, region, guide start time and source.</p>'
+        filters = '<form method="get"><input type="hidden" name="page" value="events"><div class="formrow"><div><label for="f-sport">Sport</label><select id="f-sport" name="sport"><option value="">All sports</option>%s</select></div><div><label for="f-cat">Competition</label><select id="f-cat" name="category"><option value="">All competitions</option>%s</select></div><div><label for="f-q">Team or competition</label><input id="f-q" type="text" name="q" value="%s" placeholder="e.g. England, Arsenal, Six Nations"></div><div><label for="f-date">UK date</label><input id="f-date" name="date" type="date" value="%s"></div><label><input type="checkbox" name="guide" value="1"%s> With channel information</label><button type="submit">Filter</button></div></form>' % (
             "".join('<option value="%s" %s>%s</option>' % (e(s), "selected" if s == sport else "", e(taxonomy.SPORTS.get(s, ("Other",))[0])) for s in sports_present),
             "".join('<option value="%s" %s>%s</option>' % (e(c), "selected" if c == category else "", e(label)) for c, label in categories_present),
-            e(query.get("q", "")), e(uk_date))
+            e(query.get("q", "")), e(uk_date), " checked" if with_guide else "")
         body += '<section class="card">%s<h3>%s of %s events</h3><p class="help">%s · Data is private on this Home Assistant instance.</p>' % (
             filters, e(len(shown)), e(len(events)), e(snapshot["updated_at"] if snapshot else "No sporting snapshot yet"))
         body += '<table><tr><th>UK start time</th><th>Category and competition</th><th>Event and sources</th><th>Channel</th></tr>'
@@ -738,6 +752,8 @@ class UI(BaseHTTPRequestHandler):
                 if 1 <= target <= page_count:
                     params = urllib.parse.urlencode({"page": "events", "sport": sport, "category": category,
                                                      "q": query.get("q", ""), "date": uk_date, "p": target})
+                    if with_guide:
+                        params += "&guide=1"
                     links.append('<a href="?%s">%s</a>' % (e(params), label))
             body += '<p class="help">Page %d of %d · %s</p>' % (page, page_count, " · ".join(links))
         if not events:

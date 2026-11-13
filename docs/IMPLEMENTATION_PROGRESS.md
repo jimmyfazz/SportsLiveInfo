@@ -23,6 +23,12 @@ An offline replay of sampled XMLTV files produced these counts. Each count is th
 
 Python 3.12 compiled the package and passed 154 tests. The mappings match exact channel IDs within each source. The US SPORTS1 sample provided no verified canonical service IDs. Programme and fixture coverage, provider reachability from HAOS and the authenticated PandaScore response still need verification. Dedicated calendars for the remaining sports and event-specific boxing PPV broadcast confirmation remain open. Publication permissions are unchanged. The App uses the existing slug and database with no migration. Roll back through the previous App build or the App backup.
 
+### Upcoming broadcasts and boxing follow-up
+
+The local Sports Events view matches listings across today and the following seven UK dates, where saved guide slots overlap fixture times. It shows the channel, market, guide start and source, and distinguishes unconfirmed times, missing usable guide slots and unmatched programme titles. The windowed matcher reads one saved guide at a time and bounds each lookup by the accepted maximum programme duration. Guide matches remain unverified.
+
+Open Boxing is disabled by default. A live probe of the documented endpoint decoded 14 scheduled world-title bouts, all date-only. Card times, ring walks, non-title bout coverage and event-specific UK broadcaster or PPV evidence remain open. [Open Boxing API](https://www.openboxing.org/api/). The app slug and database schema are unchanged. Home Assistant runtime verification remains pending.
+
 ## 13 November 2026 — 0.3.4 audit integration
 
 The integration combines mobile/coverage head `17786a8` and audit head `95f79d5`, with selected operator-dashboard behaviour and the older indexing branch’s differential tests. It keeps fixture retention for sources of unknown completeness and the source-specific XMLTV declaration allowlist. Removed the unused launcher, superseded architecture and data-contract proposals, and obsolete golden-feed assets. Earlier revisions remain in Git history.

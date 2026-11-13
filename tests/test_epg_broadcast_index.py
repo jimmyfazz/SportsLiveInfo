@@ -53,6 +53,15 @@ class CandidateIndexTests(unittest.TestCase):
                                              {"farleyflex": guide(rows)}, BASE)
         self.assertEqual(actual, {})
 
+    def test_formula_one_matches_only_the_numbered_practice_session(self):
+        evs = [dict(event("fp1"), sport="motorsport", competition="Formula 1", session="practice1"),
+               dict(event("fp2"), sport="motorsport", competition="Formula 1", session="practice2"),
+               dict(event("moto"), sport="motorsport", competition="MotoGP", session="practice2")]
+        rows = [programme(BASE - timedelta(minutes=10), BASE + timedelta(hours=2), "Live F1 Practice 2")]
+        result = linking.broadcast_candidates(evs, {"farleyflex": guide(rows)}, BASE)
+        self.assertEqual(set(result), {"fp2"})
+        self.assertEqual(result["fp2"][1][0]["match_basis"], "epg_f1_session")
+
     def test_large_guide_avoids_full_cross_product(self):
         # 480 slots over 120 hours, 30 events (old code did ~14,400
         # _matches calls). Every event is given a matching EPG row.

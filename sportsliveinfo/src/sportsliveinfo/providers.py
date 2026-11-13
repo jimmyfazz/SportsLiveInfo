@@ -100,6 +100,7 @@ _XMLTV_DTD_PROLOGUE = re.compile(
 # name -> (label, base URL, shared key name or None, conservative daily call budget)
 TENNIS_API_HOST = "tennis-api-atp-wta-itf.p.rapidapi.com"
 SPORTS = {
+    "openboxing": ("Boxing · Open Boxing world title bouts", "https://openboxing.org/api/bouts/scheduled/index.json", None, 4),
     "pandascore": ("Esports · PandaScore", "https://api.pandascore.co/matches/upcoming", "pandascore", 24),
     "tennis_api": ("Tennis · Tennis API (RapidAPI)", f"https://{TENNIS_API_HOST}/tennis/v2/extend/api/events", "tennis_api", 40),
     "jolpica": ("Formula 1 · Jolpica (Ergast)", "https://api.jolpi.ca/ergast/f1/current.json", None, 6),
@@ -127,6 +128,7 @@ API_SPORTS_SPORT = {
     "api_sports_afl": "aussie_rules",
 }
 SOURCE_NOTES = {
+    "openboxing": "Scheduled world title bouts with dates. Card times, ring walks and UK broadcaster or PPV access need a separate source.",
     "pandascore": "Optional PandaScore token. Upcoming fixtures only. The first 100 matches are collected; coverage may be partial. Private collection.",
     "tennis_api": "Optional RapidAPI key. Live singles and the first 50 upcoming matches per tour, when supplied. Check the RapidAPI plan for endpoint access and quota. Private collection.",
     "jolpica": "Ergast-compatible F1 calendar incl. practice/qualifying/sprint. CC BY-NC-SA attribution.",
@@ -589,6 +591,41 @@ def api_sports_mma_events(data, source_id="api_sports_mma"):
                            "source_id": source_id, "broadcasts": [], "broadcast_verified": False})
         except (ValueError, KeyError, TypeError, OverflowError):
             continue
+    return events
+
+
+def openboxing_events(data):
+    rows = json.loads(data)
+    if not isinstance(rows, list):
+        raise ValueError("Open Boxing bouts payload missing or invalid")
+    events = []
+    for row in rows:
+        try:
+            if row["status"] != "SCHEDULED" or type(row["boutId"]) is not int:
+                continue
+            day = date.fromisoformat(row["date"])
+            participants = []
+            for side in ("boxerA", "boxerB"):
+                name = row["boxers"][side]["name"]
+                if isinstance(name, dict):
+                    name = " ".join(part for part in (name.get("first"), name.get("last")) if part)
+                if not isinstance(name, str) or not name.strip():
+                    raise ValueError("Boxer name missing")
+                participants.append(name.strip())
+            weight = (row.get("weight") or {}).get("class") or ""
+            location = row.get("location") or {}
+            events.append({
+                "id": f'openboxing:{row["boutId"]}', "source_id": "openboxing", "sport": "boxing",
+                "event_type": "bout", "competition": "World title boxing", "weight_class": weight,
+                "title": " v ".join(participants), "participants": participants,
+                "start_utc": f"{day.isoformat()}T12:00:00+00:00", "start_precision": "date_only",
+                "status_normalized": "scheduled", "country": location.get("country") or "",
+                "venue": location.get("venue") or "", "broadcasts": [], "broadcast_verified": False,
+            })
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    if rows and not events:
+        raise ValueError("Open Boxing response contained no valid scheduled bouts")
     return events
 
 

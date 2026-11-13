@@ -436,6 +436,36 @@ class EngineExpansionTests(unittest.TestCase):
         sports = self.store.snapshot("sports")["data"]["events"]
         self.assertEqual(len(sports), 2)
 
+    def test_materialize_matches_upcoming_guides_and_explains_gaps(self):
+        self.store.configure({"sports": {"api_sports": True}, "epg": {"farleyflex": True}})
+        start = NOW + timedelta(days=3)
+        self.store.save_snapshot("sports:api_sports", {"events": [
+            ev(id="tomorrow", title="Arsenal v Manchester City", participants=["Arsenal", "Manchester City"],
+               start_utc=start.isoformat()),
+            ev(id="no-title-match", title="Leeds v Hull", participants=["Leeds", "Hull"], start_utc=start.isoformat()),
+            ev(id="date-only", participants=["Milan", "Roma"], start_utc=start.isoformat(), start_precision="date_only"),
+            ev(id="no-slot", start_utc=(start + timedelta(days=3)).isoformat()),
+        ]})
+        self.store.save_snapshot("epg:farleyflex", _guide("farleyflex", "tntsports1.uk", "TNT Sports 1", [{
+            "start_utc": (start - timedelta(minutes=15)).isoformat(),
+            "end_utc": (start + timedelta(hours=2)).isoformat(),
+            "title": "Arsenal v Manchester City",
+        }]))
+        Engine(self.store)._materialize(now=NOW)
+        rows = {row["id"]: row for row in self.store.snapshot("sports")["data"]["events"]}
+        self.assertEqual(rows["tomorrow"]["broadcast_candidates"][0]["canonical_channel_id"], "gb.tnt.sports.1")
+        self.assertFalse(rows["tomorrow"]["broadcast_verified"])
+        self.assertEqual(rows["no-title-match"]["broadcast_gap"], "fixture_title_unmatched")
+        self.assertEqual(rows["date-only"]["broadcast_gap"], "time_unconfirmed")
+        self.assertEqual(rows["no-slot"]["broadcast_gap"], "no_recognised_guide_slot")
+        self.assertEqual(self.store.snapshot("today")["data"]["count"], 0)
+        client = IngressTestClient(self.store, "csrf-test", memory=True)
+        with client.open(client.base + "?page=events&guide=1") as response:
+            page = response.read().decode()
+        self.assertIn("Guide start", page)
+        self.assertIn("TNT Sports 1", page)
+        self.assertNotIn("Leeds", page)
+
     def test_publish_strips_private_epg_derived_fields(self):
         self.store.configure({"setup_complete": True, "publication_approvals": ["openligadb"],
                               "github": {"enabled": True, "owner": "o", "repository": "feed", "branch": "main", "token": "t"}})

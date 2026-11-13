@@ -100,6 +100,19 @@ class SourceRefreshTests(unittest.TestCase):
         self.assertEqual(self.store.recent_jobs(1)[0]["state"], "test_partial")
         self.assertIsNone(self.store.snapshot("sports:tennis_api"))
 
+    def test_openboxing_keeps_the_bout_date_without_inventing_time_or_ppv(self):
+        rows = [{"boutId": 27, "date": "2026-11-14", "status": "SCHEDULED",
+                 "boxers": {"boxerA": {"name": {"first": "A", "last": "B"}}, "boxerB": {"name": "C D"}},
+                 "weight": {"class": "Flyweight"}}]
+        plan = self.engine._plan("openboxing", self.store.config(), datetime.now(LONDON).date())
+        [event] = plan[0]["decode"](json.dumps(rows).encode())
+        self.assertEqual(event["id"], "openboxing:27")
+        self.assertEqual(event["participants"], ["A B", "C D"])
+        self.assertEqual(event["start_precision"], "date_only")
+        self.assertEqual(event["weight_class"], "Flyweight")
+        self.assertFalse(event["broadcast_verified"])
+        self.assertFalse(self.store.config()["sports"]["openboxing"])
+
     def test_pandascore_preserves_fixture_identity_and_does_not_infer_broadcast(self):
         rows = [{"id": 27, "name": "A vs B", "begin_at": "2026-11-14T19:30:00+01:00",
                  "league": {"name": "BLAST Premier"},

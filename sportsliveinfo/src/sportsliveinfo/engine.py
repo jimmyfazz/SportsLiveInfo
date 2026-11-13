@@ -253,6 +253,9 @@ class Engine:
                     query = urllib.parse.urlencode({"d": day.isoformat(), "s": sport})
                     plan.append(dict(url=base + "?" + query, scope="%s|%s" % (day.isoformat(), sport),
                                      decode=providers.thesportsdb_events, max_bytes=3_000_000))
+        elif name == "openboxing":
+            plan.append(dict(url=base, scope="scheduled_bouts", decode=providers.openboxing_events,
+                             max_bytes=1_000_000))
         elif name == "pandascore":
             query = urllib.parse.urlencode({"per_page": 100, "sort": "begin_at"})
             plan.append(dict(url=base + "?" + query, scope="upcoming",
@@ -374,7 +377,9 @@ class Engine:
         cached = set()
         for scope in planned:
             stamp = last_ok.get(scope, "")
-            if name == "jolpica":
+            if name == "openboxing":
+                interval = timedelta(hours=12)
+            elif name == "jolpica":
                 interval = timedelta(days=3) if scope == f"season:{today.year + 1}" else timedelta(hours=12)
             elif name.startswith(("api_sports", "thesportsdb")) and scope.split("|")[0] > today.isoformat():
                 interval = timedelta(hours=20)
@@ -600,19 +605,20 @@ class Engine:
                 continue
         guides = []
         match_guides = any(event.get("start_precision") not in linking.UNCONFIRMED_START_PRECISIONS
-                           and datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date() == london_today
-                           for event in eligible)
+                           and event.get("status_normalized") not in ("postponed", "cancelled") for event in eligible)
         guide_sources = self._guide_sources(conf, guides, match_guides)
         if not match_guides:
             for _ in guide_sources:
                 pass
-        today = linking.build_today(eligible, now, guide_sources)
-        links = {e["id"]: e for group in today["sports"] for c in group["categories"] for e in c["events"]}
+        gaps = {}
+        links = linking.broadcast_candidates(eligible, guide_sources, now, gaps=gaps)
         for event in eligible:
-            linked = links.get(event["id"])
-            if linked:
-                event["broadcast_status"] = linked["broadcast_status"]
-                event["broadcast_candidates"] = linked["broadcast_candidates"]
+            status, candidates = links.get(event["id"], ("none", []))
+            event["broadcast_status"] = status
+            event["broadcast_candidates"] = candidates
+            if event["id"] in gaps:
+                event["broadcast_gap"] = gaps[event["id"]]
+        today = linking.build_today(eligible, now, use_saved_candidates=True)
         generated_at = now.isoformat(timespec="seconds")
         self.store.save_snapshots({
             "sports": {"schema_version": "0.3", "events": eligible, "sources": sources,
