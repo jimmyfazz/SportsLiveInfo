@@ -2,6 +2,12 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.5 — Source connections and refresh budgets
+
+- Reserve EPG requests for scheduled refreshes and distinguish deferred work from provider failures. Reuse unchanged guide downloads when validators are available.
+- Report partial sports scopes, reuse recently fetched future dates and honour provider throttling. Cache Jolpica season calendars between collections.
+- Test ATP, WTA and live tennis separately. Add optional PandaScore esports fixtures and source-scoped UK, US and Canada guide mappings.
+
 ## 0.3.4 — Collector and dashboard audit integration
 
 - Keep group source saves and independent refresh actions. Add collapsible source settings, UK-date event filtering and pagination.

@@ -100,6 +100,7 @@ _XMLTV_DTD_PROLOGUE = re.compile(
 # name -> (label, base URL, shared key name or None, conservative daily call budget)
 TENNIS_API_HOST = "tennis-api-atp-wta-itf.p.rapidapi.com"
 SPORTS = {
+    "pandascore": ("Esports · PandaScore", "https://api.pandascore.co/matches/upcoming", "pandascore", 24),
     "tennis_api": ("Tennis · Tennis API (RapidAPI)", f"https://{TENNIS_API_HOST}/tennis/v2/extend/api/events", "tennis_api", 40),
     "jolpica": ("Formula 1 · Jolpica (Ergast)", "https://api.jolpi.ca/ergast/f1/current.json", None, 6),
     "openf1": ("Formula 1 sessions · OpenF1", "https://api.openf1.org/v1/sessions", None, 6),
@@ -126,13 +127,14 @@ API_SPORTS_SPORT = {
     "api_sports_afl": "aussie_rules",
 }
 SOURCE_NOTES = {
-    "tennis_api": "Optional RapidAPI key. Live singles and the first 50 upcoming matches per tour, when supplied. Free plan: 50 requests/day. Private collection.",
+    "pandascore": "Optional PandaScore token. Upcoming fixtures only. The first 100 matches are collected; coverage may be partial. Private collection.",
+    "tennis_api": "Optional RapidAPI key. Live singles and the first 50 upcoming matches per tour, when supplied. Check the RapidAPI plan for endpoint access and quota. Private collection.",
     "jolpica": "Ergast-compatible F1 calendar incl. practice/qualifying/sprint. CC BY-NC-SA attribution.",
-    "openf1": "Independent F1 session times with end times (2023+). Free, no key.",
+    "openf1": "Historical F1 sessions with end times (2023+). Free historical access; live telemetry requires provider access.",
     "openligadb": "Community fixtures for selected German and European competitions. ODbL attribution/share-alike.",
     "football_data": "Free plan: 12 competitions incl. Premier League, Champions League, Championship, World Cup, Euros. 10 calls/min; delayed scores.",
-    "api_sports": "Free plan 100 calls/day per sport API; one key works for every API-Sports sport below.",
-    "thesportsdb": "Free public key 123: soccer, rugby, cricket, motorsport, fighting, golf, darts, snooker and more. Free-tier coverage is partial.",
+    "api_sports": "One key works across these products. Provider quotas and season access depend on the product and plan.",
+    "thesportsdb": "Free public key 123: soccer, rugby, cricket, motorsport, fighting, golf, darts, snooker and more. Free day results may be capped. Select sports with coverage gaps.",
     "cricketdata": "Free lifetime plan 100 hits/day. Key travels in the query string (provider requirement); never logged.",
 }
 THESPORTSDB_DEFAULT_SPORTS = ["Soccer", "Rugby", "Cricket", "Motorsport", "Fighting", "Golf", "Darts", "Snooker",
@@ -170,7 +172,32 @@ def verify_url(url):
         raise ValueError("Source URL is not on the approved HTTPS provider list")
 
 
-def fetch(url, headers=None, max_bytes=14_000_000):
+class UpstreamHTTPError(RuntimeError):
+    def __init__(self, status, retry_after=None):
+        super().__init__(f"HTTP {status} from upstream")
+        self.status = status
+        self.retry_after = retry_after
+
+
+class ProviderRejected(ValueError):
+    """Safe classification of a provider error envelope."""
+
+
+def api_sports_error(payload):
+    errors = payload.get("errors") if isinstance(payload, dict) else None
+    if not errors:
+        return None
+    keys = {str(key).casefold() for key in errors} if isinstance(errors, dict) else set()
+    if keys & {"requests", "quota", "ratelimit", "rate_limit"}:
+        return "Provider quota or rate limit"
+    if keys & {"token", "key", "auth", "authentication"}:
+        return "Provider rejected the API key"
+    if keys & {"plan", "subscription", "season"}:
+        return "Provider plan or season restriction"
+    return "Provider rejected the requested scope"
+
+
+def fetch(url, headers=None, max_bytes=14_000_000, *, response_headers=None):
     verify_url(url)
     request = urllib.request.Request(url, headers={"User-Agent": "SportsLiveInfo/0.3 (self-hosted EPG and sports collector)", **(headers or {})})
     opener = urllib.request.build_opener(RedirectGuard())
@@ -180,9 +207,18 @@ def fetch(url, headers=None, max_bytes=14_000_000):
             data = response.read(max_bytes + 1)
             if len(data) > max_bytes:
                 raise ValueError("Provider response exceeded configured size limit")
+            if response_headers is not None:
+                for field in ("ETag", "Last-Modified", "Retry-After", "x-ratelimit-requests-remaining"):
+                    value = response.headers.get(field)
+                    if value and len(value) <= 256 and "\r" not in value and "\n" not in value:
+                        response_headers[field] = value
             return data
     except urllib.error.HTTPError as exc:
-        raise RuntimeError("HTTP %d from upstream" % exc.code) from None
+        retry_after = exc.headers.get("Retry-After") if exc.headers else None
+        exc.close()
+        if exc.code == 304 and headers and ("If-None-Match" in headers or "If-Modified-Since" in headers):
+            return None
+        raise UpstreamHTTPError(exc.code, retry_after) from None
     except urllib.error.URLError:
         raise RuntimeError("Upstream network request failed") from None
 
@@ -552,6 +588,34 @@ def api_sports_mma_events(data, source_id="api_sports_mma"):
                            "start_precision": "estimated", "status": short, "status_normalized": status_of(short),
                            "source_id": source_id, "broadcasts": [], "broadcast_verified": False})
         except (ValueError, KeyError, TypeError, OverflowError):
+            continue
+    return events
+
+
+def pandascore_events(data):
+    rows = json.loads(data)
+    if not isinstance(rows, list):
+        raise ValueError("PandaScore fixtures payload missing or invalid")
+    events = []
+    for row in rows:
+        try:
+            if not row.get("id") or not row.get("name") or not row.get("begin_at"):
+                continue
+            start = _utc(row["begin_at"])
+            league = (row.get("league") or {}).get("name") or ""
+            series = (row.get("serie") or {}).get("full_name") or ""
+            game = (row.get("videogame") or {}).get("name") or ""
+            participants = [item["opponent"]["name"] for item in row.get("opponents", [])
+                            if isinstance(item.get("opponent"), dict) and item["opponent"].get("name")]
+            events.append({
+                "id": f'pandascore:{row["id"]}', "sport": "esports",
+                "competition": league or series or game, "event_type": "match",
+                "title": str(row["name"]), "participants": participants,
+                "start_utc": start, "start_precision": "scheduled",
+                "status_normalized": "cancelled" if row.get("status") == "canceled" else "scheduled",
+                "source_id": "pandascore", "broadcasts": [], "broadcast_verified": False,
+            })
+        except (AttributeError, TypeError, ValueError, KeyError):
             continue
     return events
 

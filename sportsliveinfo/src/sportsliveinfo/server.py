@@ -24,7 +24,7 @@ LIVE_LABELS = {"live": "LIVE", "live_probable": "Probably live", "upcoming": "Up
                "probably_finished": "Probably finished", "postponed": "Postponed", "cancelled": "Cancelled",
                "time_tbc": "Time TBC", "unknown": "Unknown"}
 STATE_CLASS = {"ok": "ok", "finished": "ok", "test_ok": "ok", "submitted": "ok", "preview": "ok", "unchanged": "ok",
-               "partial": "warn", "degraded": "warn", "stale": "warn", "empty": "warn", "needs_key": "warn",
+               "partial": "warn", "deferred": "warn", "test_deferred": "warn", "test_partial": "warn", "degraded": "warn", "stale": "warn", "empty": "warn", "needs_key": "warn",
                "no_events_reported": "warn", "coverage_collapse": "warn", "failed": "critical", "test_failed": "critical",
                "lane_error": "critical", "error": "critical"}
 ICON_PATHS = (Path(__file__).parent / "icon.png", Path(__file__).resolve().parents[2] / "icon.png")
@@ -483,7 +483,8 @@ class UI(BaseHTTPRequestHandler):
                 status = {"ok": "Refreshed", "partial": "Partially refreshed",
                           "no_events_reported": "No events returned", "failed": "Refresh failed",
                           "stale": "Stale guide", "empty": "Empty guide",
-                          "coverage_collapse": "Coverage dropped", "needs_key": "Key required"}.get(
+                          "coverage_collapse": "Coverage dropped", "needs_key": "Key required",
+                          "deferred": "Refresh deferred", "unchanged": "Using saved data"}.get(
                               state, state.replace("_", " ").capitalize() if state else "Awaiting refresh")
                 result += '<details><summary>%s <span class="pill">%s</span></summary>' % (e(label), e(status))
                 result += '<p class="sub">Last successful import · %s</p>' % e(self._uk_timestamp(entry.get("last_success")))
@@ -538,7 +539,7 @@ class UI(BaseHTTPRequestHandler):
         latest = {}
         for job in self.store.recent_jobs(300):
             latest.setdefault(job["provider"], job)
-        body = '<h2>Sporting event APIs</h2><p>Keys are entered once on Home Assistant, never on the ten televisions. Each Save preserves keys for other providers; no-key services are clearly labelled. One API-Sports key serves every API-Sports sport (each sport has its own free daily allowance).</p><div class="grid">'
+        body = '<h2>Sporting event APIs</h2><p>Keys are entered once on Home Assistant, never on the ten televisions. Each Save preserves keys for other providers; no-key services are clearly labelled. One API-Sports key serves every API-Sports sport. Provider allowances depend on the sport and plan.</p><div class="grid">'
         body += self._bulk_sources(config, "keyless_sports", "Sports providers without API keys",
                                    "Choose sources individually or tick all, then save the group once.")
         body += '</div><details class="group"><summary>Sports provider settings and connection tests</summary><div class="grid">'
@@ -554,7 +555,9 @@ class UI(BaseHTTPRequestHandler):
                 content = self._form("sports", content)
             else:
                 content += '<p class="ok">No API key required · conservative daily budget: %d calls</p>' % limit
-            test_button = self._form("test_source", '<button class="secondary" type="submit">Test connection (uses 1 quota call)</button>',
+            test_label = ("Test ATP, WTA and live (up to 3 calls)" if name == "tennis_api"
+                          else "Test connection (uses 1 quota call)")
+            test_button = self._form("test_source", '<button class="secondary" type="submit">%s</button>' % e(test_label),
                 '<input type="hidden" name="kind" value="sports"><input type="hidden" name="provider" value="%s">' % e(name))
             body += '<section class="card"><h3>%s</h3><p class="help">Endpoint: %s</p>%s%s</section>' % (
                 e(label), e(urllib.parse.urlsplit(url).hostname), self._source_status(
@@ -919,19 +922,20 @@ class UI(BaseHTTPRequestHandler):
             by_source.setdefault(row["provider"], []).append(row)
         body += '<section class="card" style="margin-top:16px"><h3>Enabled sources</h3>'
         enabled = [(n, providers.SPORTS[n][0], providers.SPORTS[n][3], n) for n in providers.SPORTS if config["sports"].get(n)]
-        enabled += [(n, providers.EPG[n][0], 4, "epg:" + n) for n in providers.EPG if config["epg"].get(n)]
+        enabled += [(n, providers.EPG[n][0], providers.EPG_DAILY_REQUEST_LIMIT, "epg:" + n) for n in providers.EPG if config["epg"].get(n)]
         if enabled:
             body += '<table><tr><th>Source</th><th>Last result</th><th>Last success</th><th>Consecutive failures</th><th>Calls today</th></tr>'
             for name, label, limit, ledger in enabled:
-                history = by_source.get(name, [])
+                history = [row for row in by_source.get(name, []) if not row["state"].startswith("test_")]
                 last = history[0] if history else {}
                 fails = 0
                 for row in history:
                     if row["state"] in ("failed", "test_failed"):
                         fails += 1
-                    elif row["state"] not in ("test_ok",):
+                    elif row["state"] != "deferred":
                         break
-                snap = self.store.snapshot(("sports:" if name in providers.SPORTS else "epg:") + name)
+                product = ("sports:" if name in providers.SPORTS else "epg:") + name
+                snap = self.store.read_snapshots(timestamps_only=(product,)).get(product)
                 body += '<tr><td>%s</td><td class="%s">%s</td><td>%s</td><td class="%s">%d</td><td>%d / %d</td></tr>' % (
                     e(label), STATE_CLASS.get(last.get("state"), ""), e(last.get("state", "not run yet")),
                     e(when(snap["updated_at"], now)) if snap else "never", "critical" if fails >= 3 else "", fails,

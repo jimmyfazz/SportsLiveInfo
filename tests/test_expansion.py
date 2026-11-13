@@ -336,7 +336,7 @@ class EngineExpansionTests(unittest.TestCase):
             db.execute("UPDATE snapshots SET updated_at='2000-01-01T00:00:00+00:00'")
         calls = []
 
-        def fake_fetch(url, headers=None, max_bytes=0):
+        def fake_fetch(url, headers=None, max_bytes=0, *, response_headers=None):
             day = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)["date"][0]
             calls.append(day)
             if day == old_day:
@@ -557,6 +557,7 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertLess(page.index("Collection status"), page.index("Events today"))
 
     def test_epg_diagnostics_report_safe_failure_reasons(self):
+        self.store.configure({"schedule": []})
         engine = Engine(self.store)
         with patch.object(providers, "fetch", side_effect=RuntimeError("HTTP 404 from upstream")):
             self.assertFalse(engine._collect_epg("farleyflex"))
@@ -566,8 +567,8 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertNotIn("private-url-with-token", self.get("?page=health"))
         for _ in range(2):
             self.store.increment("epg:farleyflex", 4)
-        self.assertIn("unsuccessful", engine.test_source("epg", "farleyflex"))
-        self.assertEqual(self.store.recent_jobs(1)[0]["details"], "Local daily request budget exhausted")
+        self.assertIn("deferred", engine.test_source("epg", "farleyflex"))
+        self.assertIn("00:00 UTC", self.store.recent_jobs(1)[0]["details"])
 
     def test_today_prioritises_live_and_filters_sport(self):
         events = [taxonomy.classify(ev(id=name, title=name, sport=sport, status_normalized=state,

@@ -7,6 +7,22 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 13 November 2026 — 0.3.5 source connections and coverage
+
+Baseline: main at `7253381` (App 0.3.4). Local EPG refreshes reserve space for the remaining scheduled slots before midnight UTC. An exhausted local budget is a deferral. Guide revalidation uses HTTP validators while saved programmes still cover upcoming airings. Sports collection reuses recent future-date results, retries failed dates and backs off after upstream throttling. The tennis connection test checks upcoming ATP, upcoming WTA and the live board. PandaScore is an optional, disabled-by-default private esports fixture source. [PandaScore upcoming matches reference](https://developers.pandascore.co/reference/get_matches_upcoming).
+
+An offline replay of sampled XMLTV files produced these counts. Each count is the number of distinct canonical services recognised in that feed.
+
+| Guide sample | Programmes parsed | 0.3.4 | 0.3.5 |
+| --- | ---: | ---: | ---: |
+| IPTV-EPG.org GB | 123,236 | 32 | 42 |
+| EPG Share US2 | 82,110 | 6 | 11 |
+| EPG Share CA2 | 67,277 | 0 | 12 |
+| IPTV-EPG.org CA | 122,781 | 0 | 11 |
+| EPG Share US SPORTS1 | 102,292 | 0 | 0 |
+
+Python 3.12 compiled the package and passed 153 tests. The mappings match exact channel IDs within each source. The US SPORTS1 sample provided no verified canonical service IDs. Programme and fixture coverage, provider reachability from HAOS and the authenticated PandaScore response still need verification. Dedicated calendars for the remaining sports and event-specific boxing PPV broadcast confirmation remain open. Publication permissions are unchanged. The App uses the existing slug and database with no migration. Roll back through the previous App build or the App backup.
+
 ## 13 November 2026 — 0.3.4 audit integration
 
 The integration combines mobile/coverage head `17786a8` and audit head `95f79d5`, with selected operator-dashboard behaviour and the older indexing branch’s differential tests. It keeps fixture retention for sources of unknown completeness and the source-specific XMLTV declaration allowlist. Removed the unused launcher, superseded architecture and data-contract proposals, and obsolete golden-feed assets. Earlier revisions remain in Git history.
