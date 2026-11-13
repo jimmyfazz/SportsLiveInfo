@@ -9,12 +9,14 @@ import re
 import unicodedata
 
 COUNTRY_BY_SOURCE = {
+    **{f"iptv_epg_{market.lower()}": market for market in ("DE", "IT", "ES", "NL", "CA")},
     "farleyflex": "GB", "uk_freeview": "GB", "epgshare_uk": "GB", "mjh_sky_uk": "GB",
-    "iptvorg_sky_uk": "GB", "epgtalk_uk": "GB",
+    "iptvorg_sky_uk": "GB", "epgtalk_uk": "GB", "iptv_epg_gb": "GB",
     "epgshare_ie": "IE",
     "fr_programmetv": "FR", "fr_telerama": "FR", "fr_xmltv": "FR", "epgshare_fr": "FR", "iptv_epg_fr": "FR",
-    "epgshare_us": "US", "iptvorg_foxtel_au": "AU",
+    "epgshare_us": "US", "epgshare_us_sports": "US", "iptvorg_foxtel_au": "AU", "iptv_epg_au": "AU",
     "epgshare_hk": "HK", "iptv_epg_hk": "HK", "iptv_epg_ge": "GE", "epgshare_my": "MY",
+    "mjh_nz": "NZ", "mjh_au_sydney": "AU",
     "epgshare_ca": "CA", "epgshare_au": "AU", "epgshare_nz": "NZ", "epgshare_pt": "PT",
     "epgshare_pl": "PL", "epgshare_gr": "GR", "epgshare_sg": "SG", "epgshare_in": "IN",
 }
@@ -66,7 +68,17 @@ SERVICES = {
         "nba tv": "us.nba.tv", "golf channel": "us.golf.channel",
     },
     "AU": {"fox footy": "au.fox.footy", "fox cricket": "au.fox.cricket", "fox league": "au.fox.league"},
-    "HK": {"now sports premier league": "hk.now.sports.premier_league"},
+    "HK": {
+        # Hong Kong Communications Authority, Now TV lineup as of December 2025.
+        "now sports premier league": "hk.now.sports.premier_league",
+        "now sports premier league tv": "hk.now.sports.premier_league",
+        "now sports prime": "hk.now.sports.prime",
+        "now sports plus": "hk.now.sports.plus",
+        **{f"now sports {number}": f"hk.now.sports.{number}" for number in range(1, 8)},
+        **{f"now sports premier league {number}": f"hk.now.sports.premier_league.{number}" for number in range(1, 8)},
+        **{f"now sports 4k{number}": f"hk.now.sports.4k{number}" for number in range(1, 4)},
+        **{f"bein sports {number}": f"hk.bein.sports.{number}" for number in range(1, 7)},
+    },
     "MY": {"astro premier league": "my.astro.premier_league"},
     "GE": {"setanta sports 1": "ge.setanta.sports.1", "setanta sports 2": "ge.setanta.sports.2"},
 }
@@ -127,10 +139,10 @@ CHANNEL_FAMILIES = [
     ("peacock", "Peacock", r"^peacock\b"),
     ("paramount_plus", "Paramount+", r"^paramount ?\+"),
     ("fubo", "Fubo Sports", r"^fubo\b"),
-    ("us_networks", "US networks (ABC/CBS/NBC/Fox/USA)", r"^(?:abc|cbs|nbc|fox|usa network|tnt|tbs|nbcsn)\b(?! (?:sports? \d|footy|cricket|league))"),
+    ("us_networks", "US networks (ABC/CBS/NBC/Fox/USA)", r"^(?:abc|cbs|nbc|fox|usa network|tnt|tbs|nbcsn)\b(?! (?:sports?\b|footy|cricket|league))"),
     ("us_team_channels", "US league/team channels (MLB/NBA/WNBA/NFL/NHL)", r"^(?:mlb|nba|wnba|nfl|nhl)\b"),
     ("kayo_stan", "Kayo / Stan Sport (AU)", r"^(?:kayo|stan sports?)\b"),
-    ("sky_sport_nz", "Sky Sport (NZ)", r"^(?:nz:? )?sky sport (?:nz|[1-9]|now|select)\b"),
+    ("sky_sport_nz", "Sky Sport (NZ)", r"(?:^|\| )(?:nz\b.*\bsky sports?\b|sky sports? (?:\d+ )?nz\b|sky sport (?:now|select)\b)"),
     ("tennis_channel", "Tennis Channel", r"^tennis channel\b"),
     ("onefootball", "OneFootball", r"^onefootball\b"),
     ("coupang_play", "Coupang Play (KR)", r"^coupang\b"),
@@ -145,8 +157,14 @@ CHANNEL_FAMILIES = [
 ]
 _FAMILY_PATTERNS = [(fid, label, re.compile(pattern)) for fid, label, pattern in CHANNEL_FAMILIES]
 
+DECORATION = re.compile(r"\s*[\[(](?:vip|sd|hd|fhd|uhd|4k|hevc|backup|back up|alt|b|raw|multi|50 ?fps|60 ?fps|1080p|720p)[\])]\s*", re.I)
+TRAILING_JUNK = re.compile(r"\s+(?:vip|backup|50 ?fps|60 ?fps)$", re.I)
 QUALITY_SUFFIX = re.compile(r"\s+(?:hd|fhd|sd|uhd|4k|hevc|h265|h264|2160p|1080p|720p)$", re.I)
-COUNTRY_PREFIX = re.compile(r"^(?:uk|gb|fr|france|ie|irl|us|usa|ca|can|au|aus|nz|hk|hkg|my|mys|sg|ge|geo|pt|pl|gr|in|pk|ar|ara|arabic|mena|int|sports)\s*(?:[|:\-])\s*", re.I)
+COUNTRY_PREFIX = re.compile(r"^(uk|gb|fr|france|ie|irl|us|usa|ca|can|au|aus|nz|hk|hkg|my|mys|sg|ge|geo|pt|pl|gr|in|pk|ar|ara|arabic|mena|int|sports)\s*(?:[|:\-])\s*", re.I)
+COUNTRY_PREFIX_ALIASES = {
+    "uk": "gb", "france": "fr", "irl": "ie", "usa": "us", "can": "ca",
+    "aus": "au", "hkg": "hk", "mys": "my", "geo": "ge",
+}
 SPACES = re.compile(r"\s+")
 GENERIC_PROGRAMME = re.compile(r"^(?:live (?:football|sport|sports|rugby|cricket|tennis|boxing)|to be announced|tba|programme information|no information|sporting event|live event)$", re.I)
 
@@ -155,9 +173,11 @@ def normalized_name(name):
     """Remove safe decorations while retaining identity-bearing service variants."""
     value = unicodedata.normalize("NFKD", str(name))
     value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    value = DECORATION.sub(" ", value.replace("\u00ae", "").replace("\u2122", ""))
     value = value.casefold().replace("&", " and ").strip()
     value = COUNTRY_PREFIX.sub("", value)
     value = SPACES.sub(" ", value)
+    value = TRAILING_JUNK.sub("", value)
     while True:
         new = QUALITY_SUFFIX.sub("", value).strip()
         if new == value:
@@ -184,12 +204,23 @@ def canonical_channel(source_id, epg_id, display_name):
     market = COUNTRY_BY_SOURCE.get(source_id)
     if not market:
         return None
+    prefix = COUNTRY_PREFIX.match(str(display_name).strip())
+    if prefix:
+        region = prefix[1].casefold()
+        if region != "sports" and COUNTRY_PREFIX_ALIASES.get(region, region) != market.casefold():
+            return None
     return SERVICES.get(market, {}).get(normalized_name(display_name))
+
+
+_RAW_FAMILIES = {"sky_sport_nz"}  # need the market prefix that normalized_name() strips
 
 
 def channel_families(display_name):
     name = normalized_name(display_name)
-    return [fid for fid, _, pattern in _FAMILY_PATTERNS if pattern.search(name)]
+    raw = unicodedata.normalize("NFKD", str(display_name))
+    raw = SPACES.sub(" ", "".join(ch for ch in raw if not unicodedata.combining(ch)).casefold()).strip()
+    return [fid for fid, _, pattern in _FAMILY_PATTERNS
+            if pattern.search(name) or (fid in _RAW_FAMILIES and pattern.search(raw))]
 
 
 def _dt(value):
@@ -228,6 +259,7 @@ def analyze_guide(guide, now=None, detail_limit=30):
     channels = guide.get("channels", {})
     programmes = guide.get("programmes", [])
     grouped = defaultdict(list)
+    detailed = defaultdict(list)
     bad = 0
     generic = 0
     for row in programmes:
@@ -241,12 +273,16 @@ def analyze_guide(guide, now=None, detail_limit=30):
             if not title:
                 bad += 1
                 continue
-            generic += bool(GENERIC_PROGRAMME.fullmatch(title.strip()))
+            if GENERIC_PROGRAMME.fullmatch(title.strip()):
+                generic += 1
+            else:
+                detailed[channel_id].append((a, b))
             grouped[channel_id].append((a, b))
         except (KeyError, ValueError, TypeError, OverflowError):
             bad += 1
     breakdown = []
     counts = {"24h": 0, "72h": 0, "168h": 0}
+    full_detail = 0
     families = {fid: {"label": label, "channels": 0, "full_24h": 0} for fid, label, _ in CHANNEL_FAMILIES}
     for channel_id in sorted(set(channels) | set(grouped)):
         name = str(channels.get(channel_id) or channel_id)
@@ -258,6 +294,8 @@ def analyze_guide(guide, now=None, detail_limit=30):
             coverage[f"{hours}h"] = value
             if value >= hours - 0.1:
                 counts[f"{hours}h"] += 1
+        detail_hours = _union_hours(detailed.get(channel_id, ()), now, now + timedelta(hours=24))
+        full_detail += detail_hours >= 23.9
         found = channel_families(name)
         for fid in found:
             families[fid]["channels"] += 1
@@ -266,17 +304,25 @@ def analyze_guide(guide, now=None, detail_limit=30):
             "channel_id": channel_id[:180], "name": name[:180],
             "canonical_id": canonical_channel(source_id, channel_id, name),
             "families": found, "programmes": len(ranges), "coverage_hours": coverage,
+            "specific_title_hours_24h": detail_hours,
         })
     # Worst 24h gaps first, then stable name order; this is an actionable
     # diagnostic, not a blanket overwrite/guessed B1 stream identity.
     breakdown.sort(key=lambda row: (row["coverage_hours"]["24h"], row["name"].casefold()))
+    detail_gaps = sorted((row for row in breakdown if row["coverage_hours"]["24h"] >= 23.9
+                          and row["specific_title_hours_24h"] < 23.9),
+                         key=lambda row: (row["specific_title_hours_24h"], row["name"].casefold()))
     return {
         "source_id": source_id, "country": COUNTRY_BY_SOURCE.get(source_id, "unknown"),
         "channels": len(breakdown), "valid_programmes": sum(map(len, grouped.values())),
         "invalid_programmes": bad + int(guide.get("invalid_programmes", 0)),
         "generic_programmes": generic, "full_coverage_channels": counts,
+        "channels_with_full_specific_titles_24h": full_detail,
+        "generic_title_gaps": detail_gaps[:detail_limit],
         "channels_needing_attention": breakdown[:detail_limit],
         "unmatched_canonical_channels": sum(not x["canonical_id"] for x in breakdown),
+        # How far ahead the guide really reaches; thin files (e.g. ~3 days) show up here.
+        "horizon_hours": round(max(((b - now).total_seconds() / 3600 for spans in grouped.values() for _, b in spans), default=0), 1),
         "matched_canonical_channels": sorted({x["canonical_id"] for x in breakdown if x["canonical_id"]}),
         "families": {fid: row for fid, row in families.items() if row["channels"]},
         "analysed_at": now.isoformat(timespec="seconds"),

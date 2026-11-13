@@ -3,9 +3,11 @@ import base64
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
+import zlib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,6 +23,7 @@ from .storage import utcnow
 from .guide import analyze_guide
 
 LOGGER = logging.getLogger(__name__)
+COLLECTION_SCOPES = {"both": "Sports and EPG", "sports": "Sports", "epg": "EPG"}
 LONDON = ZoneInfo("Europe/London")
 # Minimum seconds between calls to one provider (published per-minute limits).
 PACING = {"thesportsdb": 2.1, "football_data": 6.5, **{n: 6.1 for n in providers.SPORTS if n.startswith("api_sports")}}
@@ -45,6 +48,40 @@ class QuotaExhausted(RuntimeError):
     pass
 
 
+def _guide_failure(exc):
+    """Translate known failures without storing raw exception text."""
+    detail = str(exc)
+    http = re.fullmatch(r"HTTP ([1-5][0-9]{2}) from upstream", detail)
+    if http:
+        return "Upstream returned HTTP " + http[1]
+    if detail == "Configured daily call budget exhausted":
+        return "Local daily request budget exhausted"
+    if detail == "Upstream network request failed" or isinstance(exc, TimeoutError):
+        return "Upstream connection failed or timed out"
+    if detail in ("Provider response exceeded configured size limit", "XMLTV decompressed past safety limit",
+                  "XMLTV channel count exceeded safety limit", "XMLTV programme count exceeded safety limit"):
+        return "Guide exceeded an import size or record limit"
+    if isinstance(exc, (ValueError, EOFError, ET.ParseError)):
+        return "Guide was empty, invalid or blocked by source safety checks"
+    return "Guide request or import failed"
+
+
+_GH_OWNER = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
+_GH_REPO = re.compile(r"[A-Za-z0-9._-]{1,100}")
+_GH_BRANCH = re.compile(r"[A-Za-z0-9._/-]{1,100}")
+
+
+def validate_github_target(owner, repository, branch):
+    """One validator for save, test and publish (GitHub owner/repo/ref naming rules)."""
+    ok = (isinstance(owner, str) and _GH_OWNER.fullmatch(owner) and not owner.endswith("-")
+          and isinstance(repository, str) and _GH_REPO.fullmatch(repository) and repository not in (".", "..")
+          and isinstance(branch, str) and _GH_BRANCH.fullmatch(branch) and ".." not in branch
+          and not branch.startswith(("-", "/", ".")) and not branch.endswith(("/", ".", ".lock")) and "//" not in branch)
+    if not ok:
+        raise ValueError("Invalid GitHub owner, repository or branch")
+    return owner, repository, branch
+
+
 class Engine:
     def __init__(self, store):
         self.store = store
@@ -52,6 +89,7 @@ class Engine:
         self._scheduler_stop = threading.Event()
         self._last_call = {}
         self._pace_lock = threading.Lock()
+        self._publish_lock = threading.Lock()
 
     def collect(self):
         if not self._busy.acquire(blocking=False):
@@ -61,14 +99,27 @@ class Engine:
         finally:
             self._busy.release()
 
-    def _collect_locked(self):
+    def _collect_locked(self, scope="both"):
+        try:
+            return self._collect_run(scope)
+        except Exception as exc:  # never leave the last collector job reading "started"
+            LOGGER.exception("Collection failed")
+            self.store.job("collector", "failed", "Unexpected %s; last-good retained" % type(exc).__name__)
+            return False
+
+    def _collect_run(self, scope):
         conf = self.store.config()
         if not conf["setup_complete"]:
             self.store.job("collector", "skipped", "Setup not completed")
             return False
-        self.store.job("collector", "started")
+        label = COLLECTION_SCOPES[scope]
+        self.store.job("collector", "started", label)
         sports = [n for n, on in conf["sports"].items() if on and n in providers.SPORTS]
         guides = [n for n, on in conf["epg"].items() if on and n in providers.EPG]
+        if scope == "sports":
+            guides = []
+        elif scope == "epg":
+            sports = []
         # Each sports provider is its own lane; EPG guides share one sequential
         # lane so several large XMLTV parses never run at once on the mini PC.
         successes = 0
@@ -89,28 +140,41 @@ class Engine:
         attempted = len(sports) + len(guides)
         if not successes:
             state = "failed" if attempted else "no_sources"
-            self.store.job("collector", state, "%d of %d enabled sources refreshed; last-good retained" %
-                           (successes, attempted))
+            self.store.job("collector", state, "%s: %d of %d enabled sources refreshed; last-good retained" %
+                           (label, successes, attempted))
             return False
-        self._materialize()
+        try:
+            self._materialize()
+        except Exception as exc:
+            LOGGER.error("Combined snapshot update failed (%s)", type(exc).__name__)
+            self.store.job("collector", "failed", "Combined snapshot update failed; previous dashboard retained")
+            return False
         state = "finished" if successes == attempted else "degraded"
-        self.store.job("collector", state, "%d of %d sources refreshed; older last-good retained as needed" %
-                       (successes, attempted))
+        self.store.job("collector", state, "%s: %d of %d sources refreshed; older last-good retained as needed" %
+                       (label, successes, attempted))
         github = conf["github"]
-        if github.get("enabled") and github.get("auto_publish") and conf.get("publication_approvals"):
+        if (scope == "both" and github.get("enabled") and github.get("auto_publish")
+                and conf.get("publication_approvals")):
             try:
                 self.publish()
             except (ValueError, RuntimeError, OSError) as exc:
                 self.store.job("publisher", "failed", str(exc)[:140])
+            except Exception as exc:
+                LOGGER.exception("Auto-publish failed")
+                self.store.job("publisher", "failed", "Unexpected %s during auto-publish" % type(exc).__name__)
         return bool(successes)
 
     # ---- request planning -------------------------------------------------
     def _days(self, name, previous, today):
+        # Full multi-day discovery once per London day (and at most every 20 h);
+        # other runs refresh today only. Timed from the last FULL discovery, not
+        # from the last snapshot write, which every today-only run also updates.
         try:
-            recent = previous is not None and datetime.now(timezone.utc) - datetime.fromisoformat(previous["updated_at"]) < timedelta(hours=12)
+            last = datetime.fromisoformat(previous["data"]["full_discovery_at"])
+            recent = (datetime.now(timezone.utc) - last < timedelta(hours=20)
+                      and last.astimezone(LONDON).date() == today)
         except (ValueError, TypeError, KeyError):
             recent = False
-        # Full multi-day discovery at most twice a day; otherwise today only.
         return [today] if recent else [today + timedelta(days=i) for i in range(DAY_HORIZON.get(name, 1))]
 
     def _plan(self, name, conf, today, previous=None):
@@ -130,7 +194,7 @@ class Engine:
                              decode=providers.openf1_events, max_bytes=3_000_000))
         elif name == "openligadb":
             season = today.year if today.month >= 7 else today.year - 1
-            leagues = [l for l in options.get("openligadb_leagues", providers.OPENLIGADB_LEAGUES) if l in providers.OPENLIGADB_LEAGUES]
+            leagues = [l for l in options.get("openligadb_leagues", providers.OPENLIGADB_DEFAULT_LEAGUES) if l in providers.OPENLIGADB_LEAGUES]
             for league in leagues:
                 plan.append(dict(url="%s/%s/%d" % (base, league, season), scope="league:" + league,
                                  decode=partial(providers.openligadb_events, league=league), max_bytes=7_000_000))
@@ -151,12 +215,18 @@ class Engine:
                 plan.append(dict(url=base + "?" + query, headers={"x-apisports-key": key}, scope=day.isoformat(),
                                  decode=decode, max_bytes=7_000_000))
         elif name == "thesportsdb":
-            chosen = [s for s in options.get("thesportsdb_sports", providers.THESPORTSDB_SPORTS) if s in providers.THESPORTSDB_SPORTS]
+            chosen = [s for s in options.get("thesportsdb_sports", providers.THESPORTSDB_DEFAULT_SPORTS) if s in providers.THESPORTSDB_SPORTS]
             for day in self._days(name, previous, today):
                 for sport in chosen:
                     query = urllib.parse.urlencode({"d": day.isoformat(), "s": sport})
                     plan.append(dict(url=base + "?" + query, scope="%s|%s" % (day.isoformat(), sport),
                                      decode=providers.thesportsdb_events, max_bytes=3_000_000))
+        elif name == "tennis_api":
+            headers = {"X-RapidAPI-Key": key, "X-RapidAPI-Host": providers.TENNIS_API_HOST}
+            for scope in ("upcoming/atp", "upcoming/wta", "live"):
+                plan.append(dict(url=f"{base}/{scope}", headers=headers, scope=scope,
+                                 decode=partial(providers.tennis_api_events, live=scope == "live"),
+                                 max_bytes=3_000_000))
         elif name == "cricketdata":
             for offset in (0, 25):
                 # Provider requires the key as a query parameter; URLs are never logged.
@@ -170,13 +240,13 @@ class Engine:
         # Protect rate pacing across parallel provider lanes, including those
         # using the same API-Sports key under different product endpoints.
         family = providers.SPORT_FAMILY.get(name, name)
-        gap = PACING.get(name)
-        with self._pace_lock:
-            if gap:
-                wait = self._last_call.get(family, 0) + gap - time.monotonic()
-                if wait > 0:
-                    time.sleep(wait)
-            self._last_call[family] = time.monotonic()
+        gap = PACING.get(name) or 0
+        with self._pace_lock:  # reserve a slot, then sleep without blocking other lanes
+            now = time.monotonic()
+            slot = max(now, self._last_call.get(family, 0) + gap)
+            self._last_call[family] = slot
+        if slot > now:
+            time.sleep(slot - now)
 
     def _request(self, name, item, limit):
         try:
@@ -273,15 +343,26 @@ class Engine:
                 by_id[event["id"]] = event
             except (KeyError, ValueError, TypeError):
                 continue
-        for scope in succeeded:
+        # Apply the live board after upcoming scopes so reported play wins.
+        if name == "tennis_api":
+            for event_id, event in list(by_id.items()):
+                if event.get("status_normalized") == "live" and "live" in succeeded:
+                    # A match leaving the board is no longer confirmed live.
+                    by_id[event_id] = dict(event, status_normalized="unknown", live_status_unconfirmed=True)
+        for scope in sorted(succeeded, key=lambda scope: scope == "live"):
             for event in scopes[scope]:
+                if name == "tennis_api" and event["status_normalized"] == "live":
+                    event["live_observed_at"] = utcnow()
                 by_id[event["id"]] = event
         events = list(by_id.values())
+        full_horizon = len({i["scope"].split("|")[0] for i in plan}) > 1 or not name.startswith(("api_sports", "thesportsdb"))
+        previous_full = (previous or {}).get("data", {}).get("full_discovery_at")
         # A successful zero-result response might be valid offseason or the
         # limits of free coverage. Never declare zero sport everywhere.
         self.store.save_snapshot("sports:" + name, {"events": events, "source_id": name, "complete": "unknown",
                                                     "observed_at": utcnow(), "scopes_ok": sorted(succeeded),
-                                                    "scopes_failed": sorted(failed)})
+                                                    "scopes_failed": sorted(failed),
+                                                    "full_discovery_at": utcnow() if full_horizon and not failed else previous_full})
         state = "partial" if failed else ("ok" if events else "no_events_reported")
         self.store.job(name, state, "%d event records; %d/%d request scopes refreshed (provider coverage not guaranteed)" % (
             len(events), len(succeeded), len(succeeded) + len(failed)))
@@ -291,7 +372,7 @@ class Engine:
         _, url = providers.EPG[name]
         max_bytes, max_programmes = providers.EPG_LIMITS.get(name, providers.DEFAULT_EPG_LIMIT)
         try:
-            self.store.increment("epg:" + name, 4)
+            self.store.increment("epg:" + name, providers.EPG_DAILY_REQUEST_LIMIT)
             raw = providers.fetch(url, max_bytes=max_bytes)
             parsed = providers.decode_xmltv(raw, name, max_programmes=max_programmes)
             if not parsed["programmes"]:
@@ -299,7 +380,6 @@ class Engine:
                 return False
             # Enrichment/coverage report is local only and non-destructive;
             # no guessed EPG ID is ever exposed as an IPTV playable stream.
-            quality = analyze_guide(parsed)
             now = datetime.now(timezone.utc)
             has_future = any(
                 datetime.fromisoformat(p["end_utc"]) > now and datetime.fromisoformat(p["start_utc"]) < now + timedelta(days=1)
@@ -331,15 +411,16 @@ class Engine:
                     self.store.job(name, "coverage_collapse",
                                    "New guide lost over 75% of forward programme records; keeping last-good")
                     return False
-            self.store.save_snapshot("epg:" + name, parsed)
-            self.store.save_snapshot("epg-quality:" + name, quality)
+            quality = analyze_guide(parsed, now)
+            self.store.save_snapshots({"epg:" + name: parsed, "epg-quality:" + name: quality})
             self.store.job(name, "ok", "%d channels; %d programmes; %d invalid; %d with 24h guide; %d recognised services" % (
                 len(parsed["channels"]), len(parsed["programmes"]), parsed["invalid_programmes"],
                 quality["full_coverage_channels"]["24h"], len(quality["matched_canonical_channels"])))
             return True
-        except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, json.JSONDecodeError, ET.ParseError) as exc:
-            self.store.job(name, "failed", type(exc).__name__ + ": source unavailable or invalid")
-            LOGGER.warning("EPG source %s failed (%s)", name, type(exc).__name__)
+        except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, json.JSONDecodeError, ET.ParseError, zlib.error) as exc:
+            reason = _guide_failure(exc)
+            self.store.job(name, "failed", reason)
+            LOGGER.warning("EPG source %s failed: %s", name, reason)
             return False
 
     # ---- materialisation --------------------------------------------------
@@ -365,33 +446,58 @@ class Engine:
                     eligible.append(event)
             except (ValueError, KeyError, TypeError):
                 continue
-        guides, epg_data = [], {}
-        for name, enabled in conf["epg"].items():
-            entry = self.store.snapshot("epg:" + name) if enabled else None
-            if entry:
-                payload = entry["data"]
-                epg_data[name] = payload
-                quality = self.store.snapshot("epg-quality:" + name)
-                summary = quality["data"] if quality else {}
-                guides.append({"id": name, "channels": len(payload["channels"]),
-                    "programmes": len(payload["programmes"]), "last_success": entry["updated_at"],
-                    "country": summary.get("country", "unknown"),
-                    "covered_24h": summary.get("full_coverage_channels", {}).get("24h", 0),
-                    "unmatched": summary.get("unmatched_canonical_channels", 0),
-                    "recognised_services": len(summary.get("matched_canonical_channels", [])),
-                    "public_redistribution": False})
-        today = linking.build_today(eligible, now, epg_data)
+        guides = []
+        match_guides = any(event.get("start_precision") not in linking.UNCONFIRMED_START_PRECISIONS
+                           and datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date() == london_today
+                           for event in eligible)
+        guide_sources = self._guide_sources(conf, guides, match_guides)
+        if not match_guides:
+            for _ in guide_sources:
+                pass
+        today = linking.build_today(eligible, now, guide_sources)
         links = {e["id"]: e for group in today["sports"] for c in group["categories"] for e in c["events"]}
         for event in eligible:
             linked = links.get(event["id"])
             if linked:
                 event["broadcast_status"] = linked["broadcast_status"]
                 event["broadcast_candidates"] = linked["broadcast_candidates"]
-        self.store.save_snapshot("sports", {"schema_version": "0.3", "events": eligible, "sources": sources,
-                                            "generated_at": utcnow(), "broadcast_status": "not_verified"})
-        self.store.save_snapshot("today", today)
-        self.store.save_snapshot("epg", {"schema_version": "0.3", "generated_at": utcnow(), "sources": guides,
-                                         "note": "Private source-specific schedules; publication rights not cleared"})
+        generated_at = now.isoformat(timespec="seconds")
+        self.store.save_snapshots({
+            "sports": {"schema_version": "0.3", "events": eligible, "sources": sources,
+                       "generated_at": generated_at, "broadcast_status": "not_verified"},
+            "today": today,
+            "epg": {"schema_version": "0.3", "generated_at": generated_at, "sources": guides,
+                    "note": "Private source-specific schedules; publication rights not cleared"},
+        })
+
+    def _guide_sources(self, conf, summaries, include_programmes):
+        """Load one saved guide at a time and retain only coverage summaries."""
+        for name, enabled in conf["epg"].items():
+            if not enabled:
+                continue
+            snapshots = self.store.read_snapshots(
+                products=("epg-quality:" + name,), timestamps_only=("epg:" + name,))
+            entry = snapshots.get("epg:" + name)
+            if not entry:
+                continue
+            quality = snapshots.get("epg-quality:" + name)
+            summary = quality["data"] if quality else {}
+            if (quality is None or quality["updated_at"] != entry["updated_at"]
+                    or "channels" not in summary or "valid_programmes" not in summary):
+                entry = self.store.snapshot("epg:" + name)
+                payload = entry["data"]
+                channels, programmes = len(payload["channels"]), len(payload["programmes"])
+            else:
+                payload = None
+                channels, programmes = summary["channels"], summary["valid_programmes"]
+            summaries.append({"id": name, "channels": channels, "programmes": programmes,
+                "last_success": entry["updated_at"], "country": summary.get("country", "unknown"),
+                "covered_24h": summary.get("full_coverage_channels", {}).get("24h", 0),
+                "unmatched": summary.get("unmatched_canonical_channels", 0),
+                "recognised_services": len(summary.get("matched_canonical_channels", [])),
+                "public_redistribution": False})
+            if include_programmes:
+                yield name, payload if payload is not None else self.store.snapshot("epg:" + name)["data"]
 
     def test_source(self, kind, name):
         """Probe exactly one provider request; reserve one unit in its quota ledger.
@@ -404,7 +510,10 @@ class Engine:
             _, _, key_name, limit = providers.SPORTS[name]
             if key_name and not conf["keys"].get(key_name):
                 raise ValueError("Save this provider API key before testing")
-            item = self._plan(name, conf, datetime.now(LONDON).date())[0]
+            plan = self._plan(name, conf, datetime.now(LONDON).date())
+            if not plan:
+                raise ValueError("Select at least one provider option before testing")
+            item = plan[-1] if name == "tennis_api" else plan[0]
             self.store.increment(name, limit)
             try:
                 rows = item["decode"](providers.fetch(item["url"], headers=item["headers"], max_bytes=item["max_bytes"]))
@@ -416,48 +525,85 @@ class Engine:
         if kind == "epg" and name in providers.EPG:
             _, url = providers.EPG[name]
             max_bytes, max_programmes = providers.EPG_LIMITS.get(name, providers.DEFAULT_EPG_LIMIT)
-            self.store.increment("epg:" + name, 4)
             try:
+                self.store.increment("epg:" + name, providers.EPG_DAILY_REQUEST_LIMIT)
                 guide = providers.decode_xmltv(providers.fetch(url, max_bytes=max_bytes), name, max_programmes=max_programmes)
                 if not guide["programmes"]:
                     raise ValueError("Empty EPG programme list")
+                now = datetime.now(timezone.utc)
+                until = now + timedelta(days=1)
+                if not any(datetime.fromisoformat(row["end_utc"]) > now
+                           and datetime.fromisoformat(row["start_utc"]) < until for row in guide["programmes"]):
+                    self.store.job(name, "test_failed", "No guide programmes cover the next 24 hours")
+                    return "%s EPG test unsuccessful; no programmes in the next 24 hours" % name
                 self.store.job(name, "test_ok", "EPG parsed, %d programme records (no stored changes)" % len(guide["programmes"]))
                 return "%s EPG connection successful (%d programmes)" % (name, len(guide["programmes"]))
-            except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, ET.ParseError) as exc:
-                self.store.job(name, "test_failed", type(exc).__name__ + ": guide unavailable or invalid")
+            except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, ET.ParseError, zlib.error) as exc:
+                self.store.job(name, "test_failed", _guide_failure(exc))
                 return "%s EPG test unsuccessful; see Diagnostics" % name
         raise ValueError("Unknown provider")
 
-    def start_collection(self):
+    def start_collection(self, scope="both"):
+        if scope not in COLLECTION_SCOPES:
+            raise ValueError("Unknown refresh scope")
         # Reserve the job slot before threading: multiple UI presses must not
         # incorrectly report that additional refreshes have been scheduled.
         if not self._busy.acquire(blocking=False):
             return False
         def worker():
             try:
-                self._collect_locked()
+                self._collect_locked(scope)
             finally:
                 self._busy.release()
         thread = threading.Thread(target=worker, name="sportsliveinfo-collect", daemon=True)
-        thread.start()
+        try:
+            thread.start()
+        except RuntimeError:
+            self._busy.release()
+            raise
         return True
 
     def run_scheduler(self):
         """Run from a daemon thread. DST-aware and no catch-up request storm."""
+        failures = 0
         while not self._scheduler_stop.wait(10):
-            conf = self.store.config()
-            if not conf["setup_complete"]:
-                continue
-            local = datetime.now(LONDON)
-            key = local.strftime("%Y-%m-%d %H:%M")
-            if local.strftime("%H:%M") in conf.get("schedule", []):
-                if self.store.claim_scheduler_slot(key):
-                    if not self.start_collection():
-                        # Worker already running: allow a retry within this minute.
-                        self.store.release_scheduler_slot(key)
+            try:
+                self._scheduler_tick()
+                failures = 0
+            except Exception as exc:  # a locked/full database must not kill scheduling for good
+                failures += 1
+                LOGGER.exception("Scheduler tick failed")
+                if failures in (1, 10, 100):
+                    try:
+                        self.store.job("scheduler", "error", "%s (repeat %d); scheduler still running" % (type(exc).__name__, failures))
+                    except Exception:
+                        pass
+
+    def _scheduler_tick(self):
+        self.store._put("scheduler_heartbeat", utcnow())
+        conf = self.store.config()
+        if not conf["setup_complete"]:
+            return
+        local = datetime.now(LONDON)
+        key = local.strftime("%Y-%m-%d %H:%M")
+        if local.strftime("%H:%M") in conf.get("schedule", []):
+            if self.store.claim_scheduler_slot(key):
+                if not self.start_collection():
+                    # Worker already running: allow a retry within this minute.
+                    self.store.release_scheduler_slot(key)
 
     def preview_feed(self, out_dir=None):
         """Build the full sli/1 feed locally (no upload) for inspection and B1G testing."""
+        if not self._publish_lock.acquire(timeout=60):
+            raise RuntimeError("A feed preview or publication is already running")
+        try:
+            return self._preview_feed(out_dir)
+        except OSError as exc:
+            raise RuntimeError("Could not write the feed preview (%s)" % type(exc).__name__) from None
+        finally:
+            self._publish_lock.release()
+
+    def _preview_feed(self, out_dir=None):
         state = self.store._get("feed_state") or {}
         manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"))
         out = Path(out_dir or os.environ.get("SLI_DATA_DIR", "/data")) / "feed-preview"
@@ -487,10 +633,10 @@ class Engine:
                                             ("owner", "repository", "branch", "token"))
         if not token:
             raise ValueError("Save your GitHub token first, then run Test Connection")
-        if not all(isinstance(s, str) and s and len(s) <= 80
-                   and all(ch.isalnum() or ch in "._-" for ch in s)
-                   for s in (owner, repository, branch)):
-            raise ValueError("Save a valid GitHub owner, repository and branch first")
+        try:
+            validate_github_target(owner, repository, branch)
+        except ValueError:
+            raise ValueError("Save a valid GitHub owner, repository and branch first") from None
         url = "https://api.github.com/repos/%s/%s" % (owner, repository)
         headers = {"Authorization": "Bearer " + token,
                    "Accept": "application/vnd.github+json",
@@ -534,6 +680,14 @@ class Engine:
         Disabled by default. Events appear only for sources whose public
         redistribution licence has been explicitly approved.
         """
+        if not self._publish_lock.acquire(timeout=120):
+            raise RuntimeError("Another feed publication is already running")
+        try:
+            return self._publish()
+        finally:
+            self._publish_lock.release()
+
+    def _publish(self):
         conf = self.store.config()
         target = conf["github"]
         if not conf["setup_complete"] or not target.get("enabled"):
@@ -546,14 +700,20 @@ class Engine:
         owner, repository, branch, token = (target.get(n, "") for n in ("owner", "repository", "branch", "token"))
         if not owner or not repository or not branch or not token:
             raise ValueError("GitHub destination/token incomplete")
-        if not all(v.replace("-", "").replace("_", "").replace(".", "").isalnum() for v in [owner, repository, branch]):
-            raise ValueError("Invalid GitHub repository address")
+        validate_github_target(owner, repository, branch)
         state = self.store._get("feed_state") or {"revisions": []}
         manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"))
         revision = manifest["revision"]
-        if revision == state.get("last_revision"):
+        try:
+            age = datetime.now(timezone.utc) - datetime.fromisoformat(state.get("published_at") or "")
+        except (TypeError, ValueError):
+            age = timedelta(days=999)
+        # Republish an unchanged revision only to renew the manifest's expiry
+        # (48 h) before TVs would wrongly treat a static-but-healthy feed as stale.
+        if revision == state.get("last_revision") and age < timedelta(hours=24):
             self.store.job("publisher", "unchanged", "Feed revision %s already published" % revision)
             return revision
+        state["revisions"] = [h for h in state["revisions"] if h["revision"] != revision]
         live_before = {p for h in state["revisions"] for p in h["assets"]}
         uploads = {p: d for p, d in files.items() if p not in live_before}
         manifest_bytes = feed._json(manifest)
@@ -563,17 +723,24 @@ class Engine:
         keep, drop = history[-FEED_RETAIN:], history[:-FEED_RETAIN]
         live_after = {p for h in keep for p in h["assets"]}
         deletions = sorted({p for h in drop for p in h["assets"]} - live_after)
-        deletions += ["%s/manifests/%s.json" % (feed.ROOT, h["revision"]) for h in drop]
+        kept_ids = {h["revision"] for h in keep}
+        deletions += ["%s/manifests/%s.json" % (feed.ROOT, h["revision"]) for h in drop if h["revision"] not in kept_ids]
         self._github_commit(owner, repository, branch, token, uploads, deletions,
-                            "SportsLiveInfo feed %s (%d events)" % (revision, manifest["coverage"]["events"]))
+                            "SportsLiveInfo feed %s (%d events)" % (revision, manifest["coverage"]["events"]),
+                            required=files)
         self.store._put("feed_state", {"last_revision": revision, "revisions": keep, "published_at": utcnow()})
         self.store.job("publisher", "submitted", "Feed %s committed atomically (%d new files, %d removed); verify the static endpoint" % (
             revision, len(uploads), len(deletions)))
         return revision
 
     @staticmethod
-    def _github_commit(owner, repository, branch, token, uploads, deletions, message):
-        """Single commit via the Git Data API: readers never see a manifest without its assets."""
+    def _github_commit(owner, repository, branch, token, uploads, deletions, message, required=None):
+        """Single commit via the Git Data API: readers never see a manifest without its assets.
+
+        The remote tree is the source of truth: any referenced asset missing
+        remotely (reset repo, restored HA backup) is uploaded, and only paths that
+        actually exist are deleted, so a stale local ledger cannot break publishing.
+        """
         base = "https://api.github.com/repos/%s/%s" % (owner, repository)
 
         def api(method, path, body=None):
@@ -582,18 +749,33 @@ class Engine:
                                                   "User-Agent": "SportsLiveInfo/0.3", "Content-Type": "application/json"})
             try:
                 with _github_open(req, timeout=30) as res:
-                    return json.loads(res.read(2_000_000))
+                    return json.loads(res.read(20_000_000))
             except urllib.error.HTTPError as exc:
+                if method == "PATCH" and exc.code in (409, 422):
+                    raise RuntimeError("Feed branch changed during publication; it will be retried next run") from None
                 raise RuntimeError("GitHub API rejected %s request (%d)" % (method, exc.code)) from None
+            except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                raise RuntimeError("Could not reach GitHub (%s); publication will be retried" % type(exc).__name__) from None
 
-        ref = "/git/refs/heads/" + urllib.parse.quote(branch)
-        head = api("GET", ref)["object"]["sha"]
-        base_tree = api("GET", "/git/commits/" + head)["tree"]["sha"]
+        quoted = urllib.parse.quote(branch, safe="")
+        try:
+            head = api("GET", "/git/ref/heads/" + quoted)["object"]["sha"]
+            base_tree = api("GET", "/git/commits/" + head)["tree"]["sha"]
+            remote = api("GET", "/git/trees/%s?recursive=1" % base_tree)
+            existing = None if remote.get("truncated") else {e["path"] for e in remote.get("tree", []) if e.get("type") == "blob"}
+        except (KeyError, TypeError) as exc:
+            raise RuntimeError("GitHub returned an unexpected repository response") from None
+        uploads = dict(uploads)
+        if existing is not None:
+            for path, data in (required or {}).items():
+                if path not in existing:
+                    uploads.setdefault(path, data)
+            deletions = [path for path in deletions if path in existing and path not in uploads]
         tree = [{"path": path, "mode": "100644", "type": "blob",
                  "sha": api("POST", "/git/blobs", {"content": base64.b64encode(data).decode(), "encoding": "base64"})["sha"]}
                 for path, data in sorted(uploads.items())]
         tree += [{"path": path, "mode": "100644", "type": "blob", "sha": None} for path in deletions]
         new_tree = api("POST", "/git/trees", {"base_tree": base_tree, "tree": tree})["sha"]
         commit = api("POST", "/git/commits", {"message": message, "tree": new_tree, "parents": [head]})["sha"]
-        api("PATCH", ref, {"sha": commit, "force": False})
+        api("PATCH", "/git/refs/heads/" + quoted, {"sha": commit, "force": False})
         return commit

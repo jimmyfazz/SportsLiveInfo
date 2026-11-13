@@ -1,7 +1,7 @@
 # Primary deployment: dedicated home mini PC running Home Assistant OS
 
 > **Current documentation context — reviewed 12 November 2026.** The App package exists; actual installation type/architecture, build, Ingress and restore remain unverified. Use the private local App delivery procedure; no source-repository visibility change is needed.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Decision recorded 12 November 2026.** The owner has an always-on **personal-home mini PC with Home Assistant installed directly on the hardware**, ample disk and RAM. **No Proxmox on this machine.** This is the **preferred SportsLiveInfo host**. Proxmox LXC/VM, Synology and the office PC are fallback platforms only.
 
@@ -52,7 +52,6 @@ Proposed tree:
     homeassistant/apps/sportsliveinfo/
       config.yaml
       Dockerfile
-      run.sh
       DOCS.md
       icon.png                   # only if authored/allowed
     src/sportsliveinfo/

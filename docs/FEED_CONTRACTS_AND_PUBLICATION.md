@@ -1,7 +1,7 @@
 # Versioned feed schemas, provenance, licence gates and crash-safe publishing
 
 > **Current documentation context — reviewed 12 November 2026.** Concrete paths and fields are implemented in FEED_CONTRACT_SLI_V1.md and schemas/. The broader per-field rights, EPG programme and public-deployment state machine below remains required design, not fully implemented behavior.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 > **Implemented contract:** the concrete, versioned feed is now [`FEED_CONTRACT_SLI_V1.md`](FEED_CONTRACT_SLI_V1.md) (`sli/1`, content-addressed `v1/` layout, atomic Git Data API publishing, schemas and golden fixtures). Where layout or versioning here differs, `sli/1` wins; rights and safety rules here still apply.
 

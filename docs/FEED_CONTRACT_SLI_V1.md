@@ -1,7 +1,7 @@
 # SportsLiveInfo public feed contract — format `sli/1`
 
 > **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Status:** v0.3.0 source implements `sli/1.0`, schemas, golden fixtures, preview and atomic writer. Current verification: [CURRENT_STATUS.md](CURRENT_STATUS.md), 88 tests passed on Python 3.12.15; HTTP handler tests use an in-memory transport because loopback bind is denied here. The public daily-feed repo `jimmyfazz/LiveSports-EPG` was README-only when checked. The source/installation repo `jimmyfazz/SportsLiveInfo` stays private. B1G reader/device acceptance remains unverified.
 **Supersedes** the proposed layout in `FEED_CONTRACTS_AND_PUBLICATION.md` §3 for asset paths and versioning. The rights, state-machine and safety rules there remain in force.

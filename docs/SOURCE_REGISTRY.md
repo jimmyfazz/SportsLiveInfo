@@ -1,7 +1,7 @@
 # Free provider/source registry
 
 > **Current documentation context — reviewed 12 November 2026.** The current inventory is separated below from dated research. Registry entries and code budgets do not establish supplier availability, free-tier allowance or publication rights.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Research date:** 2026-11-12. **Status legend:** DOC-CONFIRMED = specific published claims verified against docs; CANDIDATE = must inspect exact endpoints/terms; RESTRICTED = restricted/unsuitable for production publication; NONE = no approved data ingest. These statuses are **not** successful integration tests.
 

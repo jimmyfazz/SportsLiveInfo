@@ -1,7 +1,7 @@
 # Build backlog — PR-sized independent tasks for Codex and Claude
 
 > **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Issued 12 November 2026**. This is a **dependency-ordered, auditable backlog**; packages below are acceptance requirements; current implementation is mixed and none should be marked fully accepted without its evidence. Evidence must be checked in before any change to DONE. Required for BOTH comprehensive EPG and sports event products.
 
@@ -60,7 +60,7 @@ Legend: `[C]` Codex lead; `[L]` Claude Code lead; `[B]` both review; `[O]` owner
 
 ## 3 — Home Assistant App and operator UX
 
-- **HA-001 [L,C]** HAOS App config.yaml/Dockerfile/run.sh with `ingress: true`, app-only `/data` storage, no advertised host ports, admin-only settings and runtime resource guards. Acceptance: starts and restarts on actual HAOS mini-PC.
+- **HA-001 [L,C]** HAOS App config.yaml and Dockerfile with `ingress: true`, app-only `/data` storage, no advertised host ports, admin-only settings and runtime resource guards. Acceptance: starts and restarts on actual HAOS mini-PC.
 - **HA-002 [L,C]** Ingress first-run wizard only on initial run: each supported provider link/key/save/test, key-free source, rights and quota indicator; UK/FR EPG sources. Acceptance: interrupted setup resumed and unrelated keys never overwritten; all credentials masked.
 - **HA-003 [L,C]** GitHub feed repo/branch/token Save+Test, publishing OFF until rights approved; Europe/London scheduler with 04:00 pre-05:00 objective, midday/evening refresh and source-SHA checks. Acceptance: scheduling/resets/DST/outage tests.
 - **HA-004 [L,C]** Dashboard for per-product EPG/sport coverage, missing channels/competitions, quotas/rights, import sanitized inventory, last-good and errors. Acceptance: owner sees why channel or sport missing.

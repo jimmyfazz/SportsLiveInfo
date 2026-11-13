@@ -206,7 +206,7 @@ class FeedBehaviourTests(unittest.TestCase):
     def test_atomic_publish_uploads_only_new_files_skips_unchanged_and_retains_ten(self):
         commits = []
         engine = Engine(self.store)
-        with patch.object(Engine, "_github_commit", side_effect=lambda *a: commits.append(a)), \
+        with patch.object(Engine, "_github_commit", side_effect=lambda *a, **k: commits.append(a)), \
              patch("sportsliveinfo.feed.datetime") as clock:
             clock.now.return_value = NOW
             clock.fromisoformat = datetime.fromisoformat

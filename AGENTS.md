@@ -1,7 +1,6 @@
 # AGENTS.md — controlling instructions for Codex, Claude and other development agents
 
-> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](docs/CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](docs/CURRENT_STATUS.md).
 
 ## READ BEFORE CODE
 
@@ -22,10 +21,10 @@ Read [forensic publishing/token/EPG/sports manifest audit](docs/FORENSIC_AUDIT_T
 
 ## Locked decisions
 
-- Private `jimmyfazz/SportsLiveInfo` source repo; deploy on owner's continuously powered personal mini PC with **Home Assistant OS expected directly on hardware** (verify installation type/CPU architecture). Proxmox is an alternative only.
+- Public `jimmyfazz/SportsLiveInfo` source repo; deploy on owner's continuously powered personal mini PC with **Home Assistant OS expected directly on hardware** (verify installation type/CPU architecture). Proxmox is an alternative only.
 - One HAOS App hosts standalone Python collection engines, scheduler, cache, permission checks, health and **Ingress-only admin** setup. No core integration required for heavy collection, no incoming WAN port, no remote Home Assistant exposure. HA notifications quiet/deduped; secure status dashboard.
 - User registers free permitted sport APIs **once** in App wizard with per-provider separate masked Save and Test; URL/doc/terms shown accurately; no-key/restricted/nonimplemented suppliers distinguished. Configure EPG source priorities, GitHub destination and source-aware GMT/BST scheduler.
-- Central output may be published via **outbound HTTPS only** to a distinct public static GitHub feed **only once public redistribution rights and owner approval are established**. Source private repo stays private. Source/rights/field gate defaults to deny.
+- Central output may be published via **outbound HTTPS only** to a distinct public static GitHub feed **only once public redistribution rights and owner approval are established**. Source/rights/field gate defaults to deny.
 - All ten B1 Android TVs are **read-only consumers**. No TV API registrations, Github writes, public or home inbound connections, private account uploads or secret exposure. Each B1 client locally maps stable canonical broadcast service + EPG source to its own current account/stream, honouring hidden channel/category, manual mapping, suppression, time shift and service region. No guessed stream.
 - **Never centralise TMDB, OMDb, VOD metadata, posters, hero images or other per-title artwork.** Those B1G APIs/caches stay on TV. Do not introduce any TV artwork proxy or cloud calls to HAOS.
 
@@ -59,4 +58,4 @@ Read [forensic publishing/token/EPG/sports manifest audit](docs/FORENSIC_AUDIT_T
 5. Outbound-only rights-approved asset/manifest delivery, versioned B1 consumer, local channel match with hidden/account state, ten-TV validation.
 6. Independent objective acceptance on EPG completeness and sport event accuracy.
 
-**Current development status (reviewed 12 Nov 2026):** Experimental **v0.3.0** source is present, including expanded sports/EPG candidates, SQLite, Ingress UI, scheduling, `sli/1.0` preview/publisher and suggestion-only EPG enrichment. Read [CURRENT_STATUS.md](docs/CURRENT_STATUS.md) first for the pinned baseline and exact evidence: **88 tests pass on Python 3.12.15**; socket tests use the in-memory HTTP-handler transport when loopback binds are denied. Do not reuse historical 7/19/43/55 counts as current. Actual HAOS/Docker acceptance, live accuracy, redistribution rights, verified broadcaster mapping, notifications and B1G device acceptance remain open. The source/installation repo stays private; the public daily-feed repo is `jimmyfazz/LiveSports-EPG`, checked README-only. Follow [private local installation](sportsliveinfo/DOCS.md). Existing authenticated owner HA remote access does not authorize public App exposure or TV connections to HA.
+See [current status and validation](docs/CURRENT_STATUS.md) and the [Home Assistant operator guide](sportsliveinfo/DOCS.md).

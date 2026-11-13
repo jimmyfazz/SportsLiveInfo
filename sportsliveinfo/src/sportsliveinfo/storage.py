@@ -15,11 +15,11 @@ DEFAULT = {
     "setup_complete": False,
     "sports": {name: name == "jolpica" for name in providers.SPORTS},
     "epg": {name: False for name in providers.EPG},
-    "options": {"thesportsdb_sports": list(providers.THESPORTSDB_SPORTS),
-                "openligadb_leagues": list(providers.OPENLIGADB_LEAGUES)},
+    "options": {"thesportsdb_sports": list(providers.THESPORTSDB_DEFAULT_SPORTS),
+                "openligadb_leagues": list(providers.OPENLIGADB_DEFAULT_LEAGUES)},
     "keys": {},
     "schedule": ["04:00", "12:00", "17:00"],
-    # Separate public *data* destination, not the private Home Assistant App repository.
+    # Separate public *data* destination, separate from the Home Assistant App repository.
     # Credentials and publication approval remain unset on installation.
     "github": {"owner": "jimmyfazz", "repository": "LiveSports-EPG", "branch": "main",
                "token": "", "enabled": False, "auto_publish": False},
@@ -111,8 +111,18 @@ class Store:
                             for k, v in value.items())
                     ):
                         raise ValueError("Unknown provider or invalid enabled state")
-                    if key == "github" and any(k not in expected for k in value):
+                    if key == "github" and any(k not in expected or type(v) is not type(expected[k])
+                                               for k, v in value.items()):
                         raise ValueError("Unsupported publication setting")
+                    if key == "keys" and any(not isinstance(v, str) for v in value.values()):
+                        raise ValueError("Provider keys must be text")
+                    if key == "options":
+                        for option, values in value.items():
+                            allowed = {"thesportsdb_sports": providers.THESPORTSDB_SPORTS,
+                                       "openligadb_leagues": providers.OPENLIGADB_LEAGUES}.get(option)
+                            if (allowed is None or not isinstance(values, list)
+                                    or any(not isinstance(entry, str) or entry not in allowed for entry in values)):
+                                raise ValueError("Invalid source options")
                     config[key].update(value)
                 elif isinstance(expected, bool):
                     if type(value) is not bool:
@@ -135,14 +145,34 @@ class Store:
             return config
 
     def snapshot(self, product):
+        return self.read_snapshots(products=(product,)).get(product)
+
+    def read_snapshots(self, *, products=(), timestamps_only=()):
+        """Read requested snapshots in one SQLite statement, omitting large payloads when possible."""
+        names = tuple(dict.fromkeys((*products, *timestamps_only)))
+        if not names:
+            return {}
+        full = ",".join("?" for _ in products) or "NULL"
+        requested = ",".join("?" for _ in names)
         with self._lock, self._db() as db:
-            row = db.execute("SELECT updated_at,data FROM snapshots WHERE product=?", (product,)).fetchone()
-            return {"updated_at": row[0], "data": json.loads(row[1])} if row else None
+            rows = db.execute(
+                f"SELECT product, updated_at, CASE WHEN product IN ({full}) THEN data END "
+                f"FROM snapshots WHERE product IN ({requested})", (*products, *names)
+            ).fetchall()
+        return {name: {"updated_at": updated_at, "data": json.loads(data) if data is not None else None}
+                for name, updated_at, data in rows}
 
     def save_snapshot(self, product, data):
-        encoded = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        self.save_snapshots({product: data})
+
+    def save_snapshots(self, products):
+        """Commit related products together using one refresh timestamp."""
+        updated_at = utcnow()
+        rows = [(product, updated_at, json.dumps(data, ensure_ascii=False, separators=(",", ":")))
+                for product, data in products.items()]
         with self._lock, self._db() as db:
-            db.execute("INSERT INTO snapshots(product,updated_at,data) VALUES(?,?,?) ON CONFLICT(product) DO UPDATE SET updated_at=excluded.updated_at,data=excluded.data", (product, utcnow(), encoded))
+            db.executemany("INSERT INTO snapshots(product,updated_at,data) VALUES(?,?,?) "
+                           "ON CONFLICT(product) DO UPDATE SET updated_at=excluded.updated_at,data=excluded.data", rows)
             db.commit()
 
     def job(self, provider, state, details=""):
@@ -153,9 +183,12 @@ class Store:
             db.execute("DELETE FROM jobs WHERE id NOT IN (SELECT id FROM jobs ORDER BY id DESC LIMIT 300)")
             db.commit()
 
-    def recent_jobs(self, limit=20):
+    def recent_jobs(self, limit=20, *, provider=None):
+        query = "SELECT time,provider,state,details FROM jobs"
+        where = " WHERE provider=?" if provider is not None else ""
+        params = (provider, limit) if provider is not None else (limit,)
         with self._lock, self._db() as db:
-            return [dict(x) for x in db.execute("SELECT time,provider,state,details FROM jobs ORDER BY id DESC LIMIT ?", (limit,))]
+            return [dict(row) for row in db.execute(query + where + " ORDER BY id DESC LIMIT ?", params)]
 
     def increment(self, provider, limit):
         """Reserve before network IO; atomic even across separate Store instances/processes.

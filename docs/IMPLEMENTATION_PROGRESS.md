@@ -1,11 +1,69 @@
 # SportsLiveInfo — implementation progress and agent handover
 
-> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.1 source is present (13 Nov code audit fixes: see docs/CODE_AUDIT_AND_FIXES_2026-11-13.md). Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Updated:** 12 November 2026  
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
+
+## 13 November 2026 — 0.3.4 audit integration
+
+The integration combines mobile/coverage head `17786a8` and audit head `95f79d5`, with selected operator-dashboard behaviour and the older indexing branch’s differential tests. It keeps fixture retention for sources of unknown completeness and the source-specific XMLTV declaration allowlist. Removed the unused launcher, superseded architecture and data-contract proposals, and obsolete golden-feed assets. Earlier revisions remain in Git history.
+
+The upgrade uses the existing App slug and database. See [current status](CURRENT_STATUS.md) for open deployment checks and [operator instructions](../sportsliveinfo/DOCS.md) for backup and rollback.
+
+## Collection consistency and EPG matching — 13 November 2026
+
+Baseline: private PR #10 commit `b963f66e5e37c2d08a934df2a42abc4c580d64eb`. SQLite commits the sports, today and EPG dashboard snapshots together. Guide data and its quality report also commit together. A failed combined write leaves the previous dashboard available and records a collector failure. This requires no database migration.
+
+EPG matching parses each fixture time once, skips expired programmes using an end-time index and retains source order for representative matches. Python 3.12.14 compiled the package and passed 98 tests, including a forced SQLite rollback and programme boundary tests. A synthetic run with 457 fixtures and 8,000 programme rows produced identical candidates for 443 fixtures. Runtime was 5.782 seconds before and 1.508 seconds after on this runner. HAOS runtime and live coverage are still unmeasured for this revision. Source rights and the public feed contract are unchanged. Rollback uses the prior App build and existing SQLite schema.
+
+Follow-up on baseline `49e6795ce7df695ed903afdb901fb7e1e5cb1caa`: Overview reads its three related snapshots in one SQLite statement. Feed builds similarly read combined sports and source snapshots together, fetching timestamps only for raw provider snapshots. Provider health can still show newer attempts while a refresh is in progress. The keyed provider form validates first and saves its enable switch and credential together. Python 3.12 compile and 100 tests passed, including byte-identical golden feed fixtures and regression tests for timestamp-only reads and rejected key edits. Live HAOS verification remains pending.
+
+Manual refresh follow-up on `0fbbcc6e430eef914563f465fe94076cfcb52e2e`: Overview offers Sports-only and EPG-only refreshes. Both use the existing worker lock and rebuild the dashboard from last-good inputs. Scoped refreshes call only the selected engine and skip automatic publication. Source cards show the last successful refresh, latest recorded activity and remaining local UTC-day requests. The existing scheduled collection path still refreshes both engines. Python 3.12 compile and all 103 tests passed. No provider, schema or source-rights changes. Live HAOS verification remains pending.
+
+Live Today follow-up on `3f689396dd1282a44985856e514c25561b8afa43`: filter the saved UK-day snapshot by sport, put live fixtures first within each competition and show finished, postponed or cancelled fixtures in collapsed details. The view flags a prior-day snapshot and retains the event list. The ordering uses saved provider statuses. Python 3.12 compiled the package and all 104 tests passed. No extra provider calls, data migration or feed contract changes. Live Ingress verification remains pending.
+
+Distribution note, 13 November: GitHub now reports the App source repository as public. The Home Assistant store identifies a GitHub repository installation by a repository-prefixed slug. The existing `local_sportsliveinfo` installation uses its local App files and retains its own data. To test v0.3.1 while keeping that data, use an in-place local update. A move to the repository-backed App needs a separate migration and verification of the saved data before removing the local App. The public daily data feed remains a separate repository.
+
+## v0.3.1 dashboard maintenance — 12 November 2026
+
+Baseline: private main `56ea1bee0611d1343f4a05f2d7983e146f415606`. The live v0.3.0 HAOS snapshot showed 1,223 sports events and eight EPG guides. This maintenance build fixes the fallback labels, zero rendering and misleading full-coverage rows using existing snapshots. It adds no provider requests, licence changes, schema changes or storage migrations.
+
+Verification: Python 3.12 compile and 95 tests, including regressions for dashboard rendering, collector status, EPG error handling and unconfirmed start times. The golden fixture includes the updated producer version and channel registry. The v0.3.1 Home Assistant update and persistence check are pending. Keep the existing local App installed for an in-place update, take an App backup first, and retain v0.3.0 App files and the backup for rollback.
+
+Follow-up: Overview displays the latest collector activity and live badges are explicitly as of the refresh. EPG diagnostics distinguish upstream HTTP status, network or timeout, size or record limits, local quota and invalid input without logging raw exception text. Events marked time TBC cannot create time-based EPG candidates or estimated live statuses.
+
+The 22:02–22:04 GMT v0.3.0 refresh reproduced generic failures across UK, France, US, Canada and Australia candidates. Both Hong Kong guides returned programmes but recognised zero canonical services. Next priorities are to measure repeat failure reasons using the new diagnostics, then add region-specific aliases against captured channel names and variants. Compare the clustered midnight starts against provider timestamps and schedules before treating them as missing times.
+
+Source setup now has separate bulk selections for keyless sports providers and private EPG guides. Tick all only changes the checkboxes; each group is saved independently in one transaction. Save leaves API keys, keyed provider switches and the other group intact. Provider tests remain individual and Save makes no network requests.
+
+Source research, 12 November: [dp247's Freeview file](https://github.com/dp247/Freeview-EPG/blob/master/epg.xml) is listed at 20.7 MB, beyond the former 14 MB download cap. [XML TV Fr](https://xmltvfr.fr/xmltv/) lists the France-only guide at about 70 MiB expanded, beyond the former 65 MB cap. Targeted limits are now 30 MB download and 85 MB expanded, respectively. Parser and record safeguards remain enabled. Retest both on HAOS before claiming a successful import. The same publisher lists a smaller France TNT candidate for further testing.
+
+[EPGTalk](https://github.com/acidjesuz/EPGTalk) lists both configured filenames; keep them pending the new diagnostics. [iptv-org](https://github.com/iptv-org/epg) documents locally generated guides; the failing static Sky, French and Foxtel URLs remain unverified. Matt Huisman's [Foxtel](https://i.mjh.nz/Foxtel/) and [Kayo](https://i.mjh.nz/Kayo/) indexes list guide files but their forward coverage needs measuring before use. No new feed endpoints or redistribution permissions were added.
+
+Hong Kong channel identity: added 25 distinct Now Sports and beIN services from the [Hong Kong Communications Authority Now TV lineup](https://www.coms-auth.hk/filemanager/en/content_1788/info_doc.pdf) (December 2025). Numbered Premier League and 4K services stay distinct. Conflicting explicit geographic prefixes are rejected for market-scoped name matches; exact source ID crosswalks retain precedence. The additive channel registry and synthetic golden manifest were regenerated. Actual recognition counts on the two HAOS guides and B1G reader acceptance remain pending. No live guide or event records were added to GitHub.
+
+## Code audit and fixes — 13 November 2026 (v0.3.1)
+
+**Branch:** `claude/sportsliveinfo-b1g-android-syyo8j` (merged `main` `56ea1be`). **Status:** SOURCE IMPLEMENTED + LOCAL TESTED, **118/118** tests (Python 3.12.3 and 3.13). Report: [CODE_AUDIT_AND_FIXES_2026-11-13.md](CODE_AUDIT_AND_FIXES_2026-11-13.md).
+
+**Fixed:**
+- server/GUI S1–S9 and GUI-1 to GUI-9;
+- engine E-01 to E-05, E-08 and E-10;
+- feed/publisher FA-01 to FA-08 and FEED-1;
+- matching D1–D14;
+- new icon/logo.
+
+**Open:**
+- E-06/TF-14: EPG storage memory and lock contention;
+- a self-hosted guide (local-source) exception;
+- background jobs for long UI actions;
+- packaging hardening (pinned base image, CI docker build, secret scan);
+- post-publish anonymous verification.
+
+**Ownership note:** Codex-owned engine/feed/adapter files were edited at the owner's direct request; Codex cross-review requested before merge. **NOT RUN:** live provider requests, Docker build, HAOS Supervisor/Ingress, B1G devices.
 
 ## Current documentation reconciliation — 12 November 2026
 
@@ -120,3 +178,54 @@ Implemented in the integration repair branch: atomic multi-connection API quota 
 **TEST STATUS:** Claude recorded 55 passing offline tests on its original branch. New integrated hardening tests and the combined branch have **not** been executed in a complete local checkout here. Existing GitHub Actions returned failures without readable logs. Do not mark this branch green, deployable or HAOS-accepted until the full source test suite and actual App installation pass.
 
 See [forensic integration and corrections](FORENSIC_INTEGRATION_AND_CORRECTIONS_2026-11-12.md) for per-module findings, code fixes and blocking tasks. B1G provider EPG remains primary; the new programme overlay is an opt-in verified *suggestion*, never an unconditional replacement.
+
+
+## EPG coverage repairs — 13 November 2026
+
+The Home Assistant 0.3.1 baseline (4045f46) imported 9 of 19 enabled guides. The EPG Share index and downloaded XMLTV samples confirmed US2 and CA2 as replacements for the endpoints returning 404. The Sky UK and Foxtel iptv-org URLs, the two French iptv-org URLs and the Matt Huisman Sky UK redirect destination also returned 404.
+
+| Feed | Channel entries | Full 24h | Full 168h |
+| --- | ---: | ---: | ---: |
+| EPG Share CA2 | 696 | 695 | 0 |
+| EPG Share US2 | 792 | 771 | 0 |
+| EPG Share US SPORTS1 | 299 | 299 | 245 |
+| IPTV-EPG.org GB | 932 | 899 | 426 |
+| IPTV-EPG.org AU | 490 | 483 | 210 |
+| XML TV Fr | 401 | 352 | 206 |
+| EPGTalk UK | 560 | 560 | 0 |
+
+The UK IPTV-EPG.org sample included 18 Sky Sports, 13 TNT Sports and five Premier Sports entries with full 24-hour schedules. EPGTalk Sports parsed but its long programme blocks need quality review. Source counts include variants. They do not establish unique services, stream matches or redistribution rights.
+
+Only the fixed external XMLTV marker is removed from the known prologues. Other DTDs and entity declarations are rejected. New sources default to disabled. This preserves the existing App slug, SQLite volume and saved provider settings. Retain a scoped backup for rollback. Home Assistant deployment and post-update verification are pending.
+
+## EPG and fixture coverage follow-up — 13 November 2026
+
+Baseline: 6471322, the checked v0.3.2 EPG repair branch.
+
+Downloaded guides from [IPTV-EPG.org](https://iptv-epg.org/guides) and analysed them with the app parser on 13 November at 08:45 GMT. Counts include regional and quality variants.
+
+| Market | Entries | Full 24h | Full 7 days |
+| --- | ---: | ---: | ---: |
+| Germany | 438 | 410 | 25 |
+| Italy | 306 | 289 | 123 |
+| Spain | 300 | 297 | 20 |
+| Netherlands | 184 | 183 | 0 |
+| Canada backup | 808 | 802 | 173 |
+
+Each of these samples had specific programme titles for every entry that met the 24-hour threshold. The dashboard now exposes generic-title gaps separately. That measure detects known placeholder titles and does not establish schedule accuracy. The five new guides are optional and for private collection.
+
+[OpenLigaDB](https://www.openligadb.de/) returned 56 DFB-Pokal, 182 Frauen-Bundesliga, 144 Champions League and 380 La Liga records for season 2026. For 13–20 November UTC the downloads contained 0, 8, 0 and 1 matches respectively. The Nations League endpoint returned an empty list and was left out. OpenLigaDB provides fixtures and results with ODbL attribution/share-alike. Existing selected leagues are retained.
+
+[Tennis API](https://docs.tennis-api.com/live-event-and-odds) documents a live singles board and upcoming ATP and WTA pages. The optional RapidAPI adapter makes three calls per refresh and uses a local cap of 40 against the documented free allowance of 50 per day. Upcoming coverage is capped at the first 50 per tour. Live state expires after 45 minutes and clears when a successful live-board refresh omits the match. The adapter was tested against synthetic payloads derived from the documented schema. A saved key is needed for an authenticated smoke test. ESPN's terms restrict automated extraction, so its undocumented scoreboard is not integrated. No odds or broadcaster claims are derived from the tennis data.
+
+HAOS deployment is pending. Roll back by restoring the prior app version and scoped backup. No SQLite schema changes.
+
+## Additional sport coverage — 13 November 2026
+
+TheSportsDB daily API samples returned athletics, esports, golf, darts and snooker records. The esports sample included an event with an inconsistent year in its title, so this source remains optional and its entries are provider reports. Bowling and Boxing returned no records in the 14 November sample. Cycling and horse racing were also empty that day. Several subsequent requests returned HTTP 429. Existing F1 sources are Jolpica and OpenF1. Motorcycle coverage uses the existing Motorsport filter, with additional Moto2, Moto3 and superbike classification when supplied.
+
+Added optional Athletics, Bowling, eSports and Boxing filters. Boxing distinguishes explicit PPV and premium labels, and a mixed Fighting record with explicit boxing wording routes to Boxing. No broadcast or access entitlement is inferred. Independent boxing card, ring-walk, regional PPV and bowling sources remain open.
+
+## Mobile Overview
+
+The Overview now puts refresh status and controls ahead of four linked metrics, separates provider-reported and estimated live counts, and uses readable source rows with the latest collection outcome and saved import time. The mobile navigation has three main tabs and a More menu. Desktop retains the full navigation. API usage remains in Diagnostics.

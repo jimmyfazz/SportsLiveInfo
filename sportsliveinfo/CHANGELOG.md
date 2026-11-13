@@ -1,7 +1,44 @@
 # Changelog
 
-> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](../docs/CURRENT_STATUS.md).
+[SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
+
+## 0.3.4 — Collector and dashboard audit integration
+
+- Keep group source saves and independent refresh actions. Add collapsible source settings, UK-date event filtering and pagination.
+- Recalculate Live Today on view. Retain future fixtures when a provider omits them from a response of unknown completeness.
+- Recover from scheduler errors, isolate corrupt guides, reject expired guide probes and reduce the number of guide payloads held in memory.
+- Keep regional feed and sports coverage additions. Tighten fixture matching and add source health and publication diagnostics.
+
+## 0.3.3 — Regional guides and fixture coverage
+
+- Add five opt-in regional guides and expose generic-title gaps in full schedules.
+- Add four selectable OpenLigaDB competitions and an optional keyed tennis adapter.
+- Expire reported tennis live status when its observation becomes stale.
+
+## 0.3.2 — EPG coverage repairs
+
+- Replace unavailable EPG Share US1 and CA1 endpoints with US2 and CA2 under the saved source IDs.
+- Add optional UK and Australian IPTV-EPG.org guides and the EPG Share US sports guide for private collection.
+- Restore XML TV Fr and EPGTalk imports by removing their fixed XMLTV DTD marker before parsing. Other declarations and entities are still rejected.
+- Set source-specific import limits from measured guide sizes.
+
+## 0.3.1 — Home Assistant dashboard maintenance
+
+- Label mixed fallback competition groups accurately and show when the Live today list is truncated.
+- Display zero counts and distinguish incomplete programme coverage from missing channel identity.
+- Show latest collection activity and label live statuses as of the snapshot refresh.
+- Explain common EPG failures without logging raw provider exception text.
+- Display date-only and time-TBC fixtures without an exact start time and exclude them from time-based EPG matching.
+- Save keyless sports providers and private EPG guides in separate groups with Tick all controls.
+- Raise only the Freeview download and XML TV Fr expanded-size caps to accommodate their listed files.
+- Add Hong Kong Now Sports and beIN channel identities and reject conflicting explicit country prefixes. Display non-UK markets on provisional channel matches.
+- Commit related dashboard snapshots together and show a collector failure if the combined write fails.
+- Skip expired guide programmes before comparing fixture titles to programme text.
+- Read dashboard snapshots together and fetch only provider timestamps where the feed health report needs no raw payload.
+- Validate key changes before saving provider toggles, then save both together.
+- Add manual Sports-only and EPG-only refreshes and show last-good imports, latest activity and local request budgets on source cards.
+- Add a Live Today sport filter, prioritise live fixtures, collapse completed or disrupted results and flag prior-day snapshots.
+- Keep the same App slug and persistent SQLite path for in-place updates. The feed fixture updates the producer version and channel registry.
 
 ## Documentation reconciliation — 12 November 2026 (no runtime version change)
 

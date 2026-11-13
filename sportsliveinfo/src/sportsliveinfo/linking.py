@@ -7,6 +7,7 @@ title/sub-title contains both teams. They never set broadcast_verified,
 because guide upstream lineage is not yet proven independent.
 """
 import re
+from bisect import bisect_left
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -16,6 +17,7 @@ from .guide import canonical_channel
 from .providers import EPG_FAMILY, SPORT_FAMILY
 
 LONDON = ZoneInfo("Europe/London")
+UNCONFIRMED_START_PRECISIONS = frozenset({"date_only", "time_tbc"})
 PRECISION_RANK = {"scheduled": 0, "provisional": 1, "not_before": 2, "estimated": 3, "time_tbc": 4, "date_only": 5}
 SOURCE_PREFERENCE = ["football_data", "openligadb", "jolpica", "openf1", "cricketdata", "api_sports"]
 FEATURED_TAGS = {"team:england", "team:england_women", "team:scotland", "team:wales", "team:northern_ireland",
@@ -25,9 +27,22 @@ _STOP = {"fc", "afc", "cf", "sc", "ac", "club", "the", "de", "cd", "ud", "sv", "
          "v", "vs", "calcio", "1", "football", "rfc", "rlfc", "cc", "ccc"}
 _ABBR = {"man": "manchester", "utd": "united", "spurs": "tottenham", "wolves": "wolverhampton",
          "nottm": "nottingham", "munchen": "munich", "w": "women", "womens": "women", "ladies": "women", "st": "saint"}
-_VARIANT = {"women", "u17", "u18", "u19", "u20", "u21", "u23", "ii", "b", "reserves", "xi", "a"}
+_VARIANT = {"women", "u17", "u18", "u19", "u20", "u21", "u23", "ii", "b", "reserves", "xi", "a", "jong"}
+# Suffix words that may be dropped without changing a club's identity
+# ("Leeds" == "Leeds United"). Anything else that differs (Miami, Northern,
+# Queens Park, Saint Germain) makes it a different team.
+_GENERIC = {"city", "united", "town", "county", "rovers", "athletic", "albion", "wanderers", "hotspur", "hove",
+            "fc", "afc", "club", "calcio", "football"}
+# Words a programme title may wrap around a fixture without naming a team.
+_PROGRAMME_WORDS = {"live", "ppv", "premier", "league", "football", "rugby", "cricket", "cup", "final", "semi", "quarter",
+                    "round", "match", "coverage", "uefa", "champions", "europa", "conference", "fa", "efl", "carabao",
+                    "championship", "super", "sunday", "monday", "friday", "saturday", "night", "nations", "series",
+                    "international", "internationals", "friendly", "qualifier", "qualifiers", "world", "euro", "the",
+                    "and", "on", "in", "at", "of", "game", "day", "matchday", "sports", "sport", "tv"}
+_SIDES = re.compile(r"\b(?:v|vs|versus)\b")
 _NEGATIVE = re.compile(r"\b(highlights|review|reaction|preview|classic|replay|rewind|magazine|best of|goals show|"
                        r"build up|countdown|extra|debate|analysis|recap|delayed)\b")
+_MAX_PROGRAMME = timedelta(hours=9)
 _SESSION_WORDS = {"race": ("race", "grand prix"), "qualifying": ("qualifying",), "sprint": ("sprint",),
                   "sprint_qualifying": ("sprint qualifying", "sprint shootout"),
                   "practice1": ("practice",), "practice2": ("practice",), "practice3": ("practice",)}
@@ -53,7 +68,10 @@ def same_team(a, b):
         return False
     if (a & _VARIANT) != (b & _VARIANT):
         return False
-    return a <= b or b <= a
+    if a == b:
+        return True
+    small, large = (a, b) if len(a) < len(b) else (b, a)
+    return small < large and bool(small - _GENERIC) and (large - small) <= _GENERIC
 
 
 def _source_rank(source_id):
@@ -80,6 +98,9 @@ def _same_event(a, b):
                 and a.get("session") and a.get("session") == b.get("session") and gap <= 5400)
     if gap > 3 * 3600:
         return False
+    ca, cb = a.get("competition_id"), b.get("competition_id")
+    if ca and cb and ca != cb:
+        return False
     ta, tb = a["_teams"], b["_teams"]
     if len(ta) == 2 and len(tb) == 2:
         return ((same_team(ta[0], tb[0]) and same_team(ta[1], tb[1])) or
@@ -89,8 +110,12 @@ def _same_event(a, b):
 
 def merge_events(events):
     """Fuse duplicate fixtures across providers; keep the most precise record as primary."""
+    latest = {}
+    for event in events:  # a later copy of the same provider id is the fresher one
+        if isinstance(event, dict) and event.get("id"):
+            latest[event["id"]] = event
     prepared = []
-    for event in events:
+    for event in latest.values():
         try:
             row = dict(event)
             row["_start"] = _dt(event["start_utc"])
@@ -148,16 +173,29 @@ def merge_events(events):
 
 
 def live_state(event, now):
+    if event.get("live_status_unconfirmed"):
+        return "unknown"
     status = event.get("status_normalized") or "unknown"
-    if status in ("finished", "postponed", "cancelled", "live"):
+    if status == "live" and event.get("live_observed_at"):
+        try:
+            if now - _dt(event["live_observed_at"]) > timedelta(minutes=45):
+                return "unknown"
+        except (TypeError, ValueError):
+            return "unknown"
+    if status in ("finished", "postponed", "cancelled"):
         return status
     try:
         start = _dt(event["start_utc"])
     except (KeyError, ValueError, TypeError):
         return "unknown"
-    if event.get("start_precision") == "date_only":
+    typical = timedelta(minutes=taxonomy.typical_minutes(event.get("sport")))
+    # A provider "live" flag is trusted only near the event; a stale snapshot or
+    # an expanded future cricket day must not stay LIVE indefinitely.
+    if status == "live" and start - timedelta(minutes=30) <= now < start + typical * 1.5:
+        return "live"
+    if event.get("start_precision") in UNCONFIRMED_START_PRECISIONS:
         return "time_tbc"
-    end = _dt(event["end_utc"]) if event.get("end_utc") else start + timedelta(minutes=taxonomy.typical_minutes(event.get("sport")))
+    end = _dt(event["end_utc"]) if event.get("end_utc") else start + typical
     if start <= now < end:
         return "live_probable"
     if now >= end:
@@ -168,7 +206,8 @@ def live_state(event, now):
 def _programme_index(epg_guides, window_start, window_end):
     """Recognised-channel programmes overlapping the window: (start, end, tokens, text, live, channel...)."""
     rows = []
-    for source_id, guide in epg_guides.items():
+    guides = epg_guides.items() if isinstance(epg_guides, dict) else epg_guides
+    for source_id, guide in guides:
         channels = guide.get("channels", {})
         identity = {}
         for programme in guide.get("programmes", []):
@@ -176,45 +215,82 @@ def _programme_index(epg_guides, window_start, window_end):
                 start, end = _dt(programme["start_utc"]), _dt(programme["end_utc"])
             except (KeyError, ValueError, TypeError):
                 continue
-            if end <= window_start or start >= window_end or programme.get("is_repeat"):
+            if end <= window_start or start >= window_end or programme.get("is_repeat") or end - start > _MAX_PROGRAMME:
                 continue
             channel_id = programme.get("channel_id", "")
             if channel_id not in identity:
                 identity[channel_id] = canonical_channel(source_id, channel_id, channels.get(channel_id, channel_id))
             canonical = identity[channel_id]
-            if not canonical:
+            if not canonical or ".news" in canonical:
                 continue
             text = taxonomy.norm("%s %s" % (programme.get("title", ""), programme.get("subtitle", "")))
             if _NEGATIVE.search(text):
                 continue
-            rows.append((start, end, set(tokens(text)), text, bool(programme.get("is_live")), canonical,
+            parts = [taxonomy.norm(programme.get("title", "")), taxonomy.norm(programme.get("subtitle", ""))]
+            rows.append((start, end, [p for p in parts if p], text, bool(programme.get("is_live")), canonical,
                          channels.get(channel_id, channel_id), source_id))
     return rows
 
 
-def _matches(event, row):
-    start = _dt(event["start_utc"])
-    p_start, p_end, words, text = row[0], row[1], row[2], row[3]
-    if not (p_start <= start + timedelta(minutes=20) and p_end >= start + timedelta(minutes=30)):
+def _side_matches(segment, team, allowed):
+    words = set(tokens(segment)) - _STOP
+    return bool(team) and "tbc" not in team and team <= words and (words - team) <= allowed
+
+
+def _fixture_in(text, home, away, allowed):
+    """True when text names the fixture as '<home> v <away>' (either order) with nothing but programme words around it."""
+    sides = _SIDES.split(text)
+    if len(sides) != 2:
         return False
+    left, right = sides
+    return ((_side_matches(left, home, allowed) and _side_matches(right, away, allowed)) or
+            (_side_matches(left, away, allowed) and _side_matches(right, home, allowed)))
+
+
+def _matches(event, row):
+    parts, text = row[2], row[3]
     if event.get("sport") == "motorsport":
         if not re.search(r"\b(f1|formula 1|formula one|grand prix)\b", text):
             return False
-        return any(w in text for w in _SESSION_WORDS.get(event.get("session"), ()))
+        session = event.get("session")
+        if any(w in text for other, words in _SESSION_WORDS.items() if other != session and other[:8] != (session or "")[:8]
+               for w in words if w not in _SESSION_WORDS.get(session, ())):
+            return False
+        return any(w in text for w in _SESSION_WORDS.get(session, ()))
     teams = [team_key(p) for p in event.get("participants") or []][:2]
-    return len(teams) == 2 and all(team and team <= words for team in teams)
+    if len(teams) != 2:
+        return False
+    allowed = _PROGRAMME_WORDS | set(tokens(event.get("competition", "")))
+    return any(_fixture_in(part, teams[0], teams[1], allowed) for part in parts)
 
 
 def broadcast_candidates(events, epg_guides, now):
     """Return {event_id: (status, [candidate...])} for the given events."""
-    if not events or not epg_guides:
-        return {}
-    starts = [_dt(e["start_utc"]) for e in events]
-    index = _programme_index(epg_guides, min(starts) - timedelta(hours=1), max(starts) + timedelta(hours=1))
-    result = {}
+    timed = []
     for event in events:
+        if event.get("start_precision") in UNCONFIRMED_START_PRECISIONS:
+            continue
+        try:
+            timed.append((event, _dt(event["start_utc"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    if not timed or not epg_guides:
+        return {}
+    starts = [start for _, start in timed]
+    # A programme starting earlier can still cover kickoff. Index by its end
+    # so long programmes remain eligible without rescanning expired rows.
+    rows = _programme_index(epg_guides, min(starts), max(starts) + timedelta(minutes=21))
+    by_end = sorted(enumerate(rows), key=lambda item: item[1][1])
+    ends = [row[1] for _, row in by_end]
+    result = {}
+    for event, start in timed:
         found = {}
-        for row in index:
+        earliest_end = start + timedelta(minutes=30)
+        latest_start = start + timedelta(minutes=20)
+        first = bisect_left(ends, earliest_end)
+        # Keep source order when choosing the representative channel name
+        # and programme times for a service reported by multiple guides.
+        for _, row in sorted(item for item in by_end[first:] if item[1][0] <= latest_start):
             if not _matches(event, row):
                 continue
             canonical = row[5]
@@ -242,7 +318,7 @@ def build_today(events, now, epg_guides=None):
                 todays.append(dict(event, live_state=live_state(event, now)))
         except (KeyError, ValueError, TypeError):
             continue
-    links = broadcast_candidates([e for e in todays if e.get("start_precision") != "date_only"], epg_guides or {}, now)
+    links = broadcast_candidates(todays, epg_guides or {}, now)
     for event in todays:
         status, candidates = links.get(event["id"], ("none", []))
         event["broadcast_status"] = status

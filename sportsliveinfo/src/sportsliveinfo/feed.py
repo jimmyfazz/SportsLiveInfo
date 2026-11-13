@@ -39,10 +39,12 @@ B1G_PRIORITY_GROUP = {
     "cricket": "Cricket", "golf": "Golf", "boxing": "Boxing", "basketball": "Basketball", "mma": "MMA",
     "snooker": "Snooker", "darts": "Darts", "american_football": "American football", "ice_hockey": "Ice hockey",
     "baseball": "Baseball", "cycling": "Cycling", "athletics": "Athletics", "motorsport": "Other motorsport",
+    "bowling": "Bowling", "esports": "Esports",
     "horse_racing": "Horse racing", "handball": "Handball", "volleyball": "Volleyball",
     "aussie_rules": "Australian rules football", "netball": "Netball", "other": "Other sport",
 }
-COMPETITION_PRIORITY_GROUP = {"motorsport.f1": "Formula 1", "motorsport.motogp": "Motorbike racing"}
+COMPETITION_PRIORITY_GROUP = {"motorsport.f1": "Formula 1", "motorsport.motogp": "Motorbike racing",
+                              "motorsport.moto2_moto3": "Motorbike racing", "motorsport.superbikes": "Motorbike racing"}
 
 ATTRIBUTION = {
     "jolpica": ("Formula 1 data from the Jolpica (Ergast-compatible) API", "CC BY-NC-SA 4.0"),
@@ -141,7 +143,7 @@ def channels_document():
         "matching_rules": {
             "precedence": ["user manual mapping (always wins)", "provider tvg-id exact", "source_crosswalk exact id",
                            "service name in the guide's own market", "generic name index"],
-            "market_gate": "a service name match is valid only in a guide whose market equals the service market",
+            "market_gate": "a service name match requires the guide market to equal the service market and any explicit country prefix to agree",
             "never_auto_match": ["regional variants", "+1 timeshift", "Sky Sports+", "numbered channels with a different number"],
             "families_are_diagnostic_only": True,
         },
@@ -171,7 +173,14 @@ def build_feed(store, now=None, previous_revision=None):
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     conf = store.config()
     approved = set(conf.get("publication_approvals", []))
-    snap = store.snapshot("sports")
+    enabled_sports = [name for name in providers.SPORTS if conf["sports"].get(name)]
+    enabled_guides = [name for name in providers.EPG if conf["epg"].get(name)]
+    snapshots = store.read_snapshots(
+        products=("sports", *("epg-quality:" + name for name in enabled_guides)),
+        timestamps_only=(*("sports:" + name for name in enabled_sports),
+                         *("epg:" + name for name in enabled_guides)),
+    )
+    snap = snapshots.get("sports")
     all_events = snap["data"]["events"] if snap else []
     # In a fused fixture, the primary source may be approved while another
     # source supplied a participant/time/status. Until field-level lineage is
@@ -182,10 +191,11 @@ def build_feed(store, now=None, previous_revision=None):
         return (isinstance(origin, str) and origin in approved
                 and isinstance(contributors, list) and bool(contributors)
                 and all(isinstance(src, str) and src in approved for src in contributors))
-    events = [_event_public(e) for e in all_events if licensed(e)]
+    # Legacy/unclassified snapshot rows still need category fields the schema requires.
+    events = [_event_public(e if "category_id" in e else taxonomy.classify(e)) for e in all_events if licensed(e)]
     omitted = sorted({src for e in all_events if not licensed(e)
                       for src in (e.get("sources") or [e.get("source_id")])
-                      if isinstance(src, str)})
+                      if isinstance(src, str) and src not in approved})
     by_day = {}
     for event in events:
         day = datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date().isoformat()
@@ -224,10 +234,15 @@ def build_feed(store, now=None, previous_revision=None):
             for sport, cats in sorted(groups.items(), key=lambda kv: taxonomy.sport_order(kv[0]))],
     }
     add("today", today_doc, "sli.today/1", True, date=window[0], records=len(todays))
-    add("health", health_document(store, conf), "sli.health/1", False)
+    add("health", health_document(store, conf, snapshots), "sli.health/1", False)
 
-    revision = hashlib.sha256("".join(a["sha256"] for a in assets).encode()).hexdigest()[:20]
     schedule = sorted(conf.get("schedule", []))
+    # Revision = data assets + meaningful manifest settings. The health asset is
+    # excluded because its timestamps change on every collection and would force
+    # a new GitHub commit each refresh with no data change.
+    stable = {"assets": [a["sha256"] for a in assets if a["kind"] != "health"], "approved": sorted(approved),
+              "schedule": schedule, "version": __version__, "format": [FORMAT_MAJOR, FORMAT_MINOR]}
+    revision = hashlib.sha256(_json(stable)).hexdigest()[:20]
     interval = _interval_minutes(schedule)
     by_sport = {}
     for event in events:
@@ -274,7 +289,7 @@ def _interval_minutes(schedule):
     return max(gaps)
 
 
-def health_document(store, conf):
+def health_document(store, conf, snapshots):
     jobs = store.recent_jobs(300)
     latest = {}
     for job in jobs:
@@ -284,14 +299,14 @@ def health_document(store, conf):
         for name in registry:
             if not enabled.get(name):
                 continue
-            snap = store.snapshot(("sports:" if kind == "sports" else "epg:") + name)
+            snap = snapshots.get(kind + ":" + name)
             job = latest.get(name, {})
             rows.append({"id": name, "kind": kind, "label": registry[name][0], "state": job.get("state", "unknown"),
                          "last_attempt": job.get("time"), "last_success": snap["updated_at"] if snap else None,
                          "upstream_family": providers.SPORT_FAMILY.get(name) if kind == "sports" else providers.EPG_FAMILY.get(name)})
     guides = []
     for name, on in conf["epg"].items():
-        quality = store.snapshot("epg-quality:" + name) if on else None
+        quality = snapshots.get("epg-quality:" + name) if on else None
         if quality:
             q = quality["data"]
             guides.append({"id": name, "market": q.get("country"), "channels": q.get("channels", 0),

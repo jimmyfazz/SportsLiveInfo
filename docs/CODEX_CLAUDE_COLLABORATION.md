@@ -1,7 +1,7 @@
 # Operating protocol for Codex and Claude Code — independent terminals, coordinated deliverables
 
 > **Current documentation context — reviewed 12 November 2026.** Worktree/file ownership and reciprocal review rules remain in force. The initial scaffold/contract phases and illustrative paths below are historical planning; extend the existing v0.3.0 modules and contracts.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Mandatory instructions for both agents — 12 November 2026**  
 **Baseline:** `SportsLiveInfo` private GitHub repository. In this plan, BOTH the comprehensive international EPG engine and the comprehensive multi-sport/event/broadcast engine are first-class, parallel deliverables. Existing private B1G is a separate repo; its read-only Android feed consumer remains a required integration, not a verified implementation in this review.

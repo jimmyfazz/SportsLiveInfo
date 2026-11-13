@@ -1,7 +1,7 @@
 # Quality engineering, security, operational resilience and objective acceptance
 
 > **Current documentation context — reviewed 12 November 2026.** This is the release acceptance plan. Existing flat tests cover part of the design; the current full suite is not green. Do not treat target test directories, metrics or privacy assertions as deployed proof.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Mandatory QA plan 1.0 — 12 Nov 2026.** Both EPG and sports engine require independent demonstrable functionality before 'complete'. End-to-end launch thresholds below remain unmeasured. Offline tests cover a subset of invariants; current offline test results and transport limits are recorded in [CURRENT_STATUS.md](CURRENT_STATUS.md).
 
@@ -69,7 +69,7 @@
 - Idempotent jobs, nonoverlap, persisted progress and bounded catch-up after HAOS reboot. No backlog storm. Last-good feed retained in on-disk state and on GitHub until validated replacement.
 - Run EPG source checks after *real upstream revision*, not hard-coded assumptions about source's scheduled GitHub Actions runs.
 - Health telemetry per sports/EPG separately; per-country/competition/priority, false positive audit and source lineage.
-- The PUBLIC daily-feed repo `jimmyfazz/LiveSports-EPG` exists; live publication stays disabled until owner authorization and source-rights gates. The PRIVATE source/installation repo stays private. No new public SportsLiveInfo/HAOS endpoint is required.
+- The PUBLIC daily-feed repo `jimmyfazz/LiveSports-EPG` exists; live publication stays disabled until owner authorization and source-rights gates. The public App source repository is separate. No new public SportsLiveInfo/HAOS endpoint is required.
 
 ## 7. Proposed acceptance metrics (targets, not achieved)
 

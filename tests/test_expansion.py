@@ -1,5 +1,6 @@
 """v0.3 source expansion, sports taxonomy, fusion, today view and broadcast candidates."""
 import json
+import sqlite3
 import tempfile
 import unittest
 import urllib.parse
@@ -162,6 +163,22 @@ class ChannelIdentityTests(unittest.TestCase):
         self.assertIsNone(canonical_channel("epgtalk_sports", "", "Sky Sports Main Event"), "multi-country guide has no market")
         self.assertEqual(normalized_name("SPORTS | beIN MAX 4"), "bein max 4")
 
+    def test_hong_kong_matches_keep_market_and_service_variants(self):
+        for source in ("epgshare_hk", "iptv_epg_hk"):
+            with self.subTest(source=source):
+                self.assertEqual(canonical_channel(source, "", "HKG | Now Sports 2 HD"), "hk.now.sports.2")
+                self.assertEqual(canonical_channel(source, "", "Now Sports Premier League TV"),
+                                 "hk.now.sports.premier_league")
+                self.assertEqual(canonical_channel(source, "", "Now Sports Premier League 2"),
+                                 "hk.now.sports.premier_league.2")
+                self.assertEqual(canonical_channel(source, "", "Now Sports 4K2"), "hk.now.sports.4k2")
+                self.assertEqual(canonical_channel(source, "", "beIN SPORTS 2 HD"), "hk.bein.sports.2")
+                self.assertIsNone(canonical_channel(source, "", "FR - beIN SPORTS 2 HD"))
+                self.assertIsNone(canonical_channel(source, "", "Now Sports 2 +1"))
+                self.assertIsNone(canonical_channel(source, "", "Now Sports 8"))
+        self.assertEqual(canonical_channel("iptv_epg_fr", "", "FR - beIN SPORTS 2 HD"), "fr.bein.sports.2")
+        self.assertIsNone(canonical_channel("iptv_epg_fr", "", "HK - beIN SPORTS 2 HD"))
+
     def test_lineup_families_from_owner_categories(self):
         self.assertIn("now_sports_hk", channel_families("Now Sports Premier League 2"))
         self.assertIn("peacock", channel_families("Peacock 05: NFL Sunday"))
@@ -240,6 +257,28 @@ class TodayAndBroadcastTests(unittest.TestCase):
         self.assertEqual(sorted(candidates[0]["epg_sources"]), ["farleyflex", "mjh_sky_uk"])
         today = linking.build_today([self.match], NOW, {"farleyflex": farley})
         self.assertFalse(today["sports"][0]["categories"][0]["events"][0]["broadcast_verified"])
+
+    def test_unconfirmed_start_cannot_produce_time_based_matches(self):
+        guide = _guide("farleyflex", "skysportsmainevent.uk", "Sky Sports Main Event",
+                       [dict(self.ko, title="Arsenal v Manchester City")])
+        for precision in ("date_only", "time_tbc"):
+            event = dict(self.match, start_precision=precision)
+            self.assertEqual(linking.broadcast_candidates([event], {"farleyflex": guide}, NOW), {})
+            self.assertEqual(linking.live_state(event, NOW), "time_tbc")
+
+    def test_candidate_time_boundaries_and_source_order(self):
+        first = _guide("farleyflex", "skysportsmainevent.uk", "First name", [
+            dict(self.ko, start_utc="2026-11-14T12:00:00+00:00",
+                 end_utc="2026-11-14T18:00:00+00:00", title="Arsenal v Manchester City")])
+        second = _guide("mjh_sky_uk", "x", "Sky Sports Main Event", [
+            dict(self.ko, start_utc="2026-11-14T15:20:00+00:00",
+                 end_utc="2026-11-14T15:30:00+00:00", title="Arsenal v Manchester City")])
+        status, candidates = linking.broadcast_candidates(
+            [self.match], {"farleyflex": first, "mjh_sky_uk": second}, NOW)["m1"]
+        self.assertEqual(status, "multi_guide_match")
+        self.assertEqual(candidates[0]["channel_name"], "First name")
+        second["programmes"][0]["end_utc"] = "2026-11-14T15:29:59+00:00"
+        self.assertEqual(linking.broadcast_candidates([self.match], {"mjh_sky_uk": second}, NOW), {})
 
     def test_hard_negatives_highlights_repeats_wrong_team_and_unknown_channel(self):
         guides = {
@@ -327,6 +366,53 @@ class EngineExpansionTests(unittest.TestCase):
         self.assertEqual(len(snap["scopes_ok"]), 2)
         self.assertEqual(len(snap["scopes_failed"]), 4)
 
+    def test_scoped_refresh_calls_only_selected_engine_and_skips_publishing(self):
+        self.store.configure({"setup_complete": True, "epg": {"farleyflex": True},
+                              "publication_approvals": ["jolpica"],
+                              "github": {"enabled": True, "auto_publish": True}})
+        engine = Engine(self.store)
+        with patch.object(engine, "_collect_sport", return_value=True) as sports, patch.object(
+                engine, "_collect_epg", return_value=True) as epg, patch.object(engine, "publish") as publish:
+            self.assertTrue(engine._collect_locked("sports"))
+            self.assertEqual(sports.call_args.args[0], "jolpica")
+            epg.assert_not_called()
+            sports.reset_mock()
+            self.assertTrue(engine._collect_locked("epg"))
+            sports.assert_not_called()
+            epg.assert_called_once_with("farleyflex")
+            publish.assert_not_called()
+        self.assertIn("EPG:", self.store.recent_jobs(1, provider="collector")[0]["details"])
+
+    def test_batch_read_can_fetch_guide_timestamp_without_decoding_payload(self):
+        self.store.save_snapshots({"sports": {"events": []}, "epg:farleyflex": {"programmes": [1]}})
+        snapshots = self.store.read_snapshots(products=("sports", "today"), timestamps_only=("epg:farleyflex",))
+        self.assertEqual(snapshots["sports"]["data"], {"events": []})
+        self.assertIsNone(snapshots["epg:farleyflex"]["data"])
+        self.assertEqual(snapshots["sports"]["updated_at"], snapshots["epg:farleyflex"]["updated_at"])
+        self.assertNotIn("today", snapshots)
+        self.assertEqual(self.store.snapshot("epg:farleyflex")["data"], {"programmes": [1]})
+
+    def test_snapshot_batch_rolls_back_if_second_write_fails(self):
+        self.store.save_snapshot("sports", {"events": ["previous"]})
+        with sqlite3.connect(self.store.path) as db:
+            db.execute("""CREATE TRIGGER fail_today BEFORE INSERT ON snapshots
+                          WHEN NEW.product = 'today' BEGIN SELECT RAISE(ABORT, 'test failure'); END""")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.save_snapshots({"sports": {"events": ["new"]}, "today": {}})
+        self.assertEqual(self.store.snapshot("sports")["data"], {"events": ["previous"]})
+        self.assertIsNone(self.store.snapshot("today"))
+
+    def test_collection_reports_failed_combined_snapshot(self):
+        self.store.configure({"setup_complete": True})
+        engine = Engine(self.store)
+        with patch.object(engine, "_collect_sport", return_value=True), patch.object(
+                engine, "_materialize", side_effect=RuntimeError("sensitive test input")):
+            self.assertFalse(engine.collect())
+        job = self.store.recent_jobs(1, provider="collector")[0]
+        self.assertEqual(job["state"], "failed")
+        self.assertIn("previous dashboard retained", job["details"])
+        self.assertNotIn("sensitive test input", job["details"])
+
     def test_materialize_writes_classified_deduplicated_today_snapshot(self):
         self.store.configure({"setup_complete": True, "sports": {"football_data": True, "api_sports": True}, "epg": {"farleyflex": True}})
         self.store.save_snapshot("sports:football_data", {"events": [ev(id="football-data:1", source_id="football_data", competition="Premier League",
@@ -338,7 +424,10 @@ class EngineExpansionTests(unittest.TestCase):
         self.store.save_snapshot("epg:farleyflex", _guide("farleyflex", "tntsports1.uk", "TNT Sports 1", [
             {"start_utc": "2026-11-14T14:00:00+00:00", "end_utc": "2026-11-14T17:00:00+00:00", "title": "Arsenal v Manchester City"}]))
         Engine(self.store)._materialize(now=NOW)
-        today = self.store.snapshot("today")["data"]
+        snapshots = [self.store.snapshot(name) for name in ("sports", "today", "epg")]
+        self.assertEqual(len({snapshot["updated_at"] for snapshot in snapshots}), 1)
+        self.assertEqual({snapshot["data"]["generated_at"] for snapshot in snapshots}, {NOW.isoformat()})
+        today = snapshots[1]["data"]
         football = today["sports"][0]
         self.assertEqual([c["id"] for c in football["categories"]], ["football.premier_league", "football.fa_cup"])
         pl = football["categories"][0]["events"][0]
@@ -353,7 +442,12 @@ class EngineExpansionTests(unittest.TestCase):
         self.store.save_snapshot("sports", {"events": [ev(id="openligadb:1", source_id="openligadb", broadcast_status="single_guide_match",
                                                           broadcast_candidates=[{"channel_name": "Private"}], fetch_scope="league:bl1")]})
         commits = []
-        with patch.object(Engine, "_github_commit", side_effect=lambda *a: commits.append(a)):
+        class FixedClock(datetime):  # the fixture event is dated 14 Nov 2026; keep it inside the 8-day window
+            @classmethod
+            def now(cls, tz=None):
+                return NOW if tz is None else NOW.astimezone(tz)
+        with patch.object(Engine, "_github_commit", side_effect=lambda *a, **k: commits.append(a)), \
+             patch("sportsliveinfo.feed.datetime", FixedClock):
             Engine(self.store).publish()
         uploads = commits[0][4]
         payload = b"".join(d for p, d in uploads.items() if "/assets/events/" in p).decode()
@@ -361,6 +455,12 @@ class EngineExpansionTests(unittest.TestCase):
         self.assertIn("v1/manifest.json", uploads)
         for private in ("broadcast_candidates", "Private", "fetch_scope", "broadcast_status"):
             self.assertNotIn(private, payload)
+
+
+class FixedUiClock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return NOW if tz is None else NOW.astimezone(tz)
 
 
 class IngressExpansionTests(unittest.TestCase):
@@ -395,17 +495,203 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertIn("EPG Share HK1", sources)
         self.assertIn("Setanta", sources)
 
+    def test_source_cards_show_remaining_budget_and_latest_failure(self):
+        self.store.save_snapshot("epg:farleyflex", {"programmes": []})
+        self.store.increment("epg:farleyflex", providers.EPG_DAILY_REQUEST_LIMIT)
+        self.store.job("farleyflex", "failed", "Upstream returned HTTP 404")
+        page = self.get("?page=sources")
+        self.assertIn("3 requests remaining today (UTC)", page)
+        self.assertIn("Upstream returned HTTP 404", page)
+
+    def test_refresh_form_passes_scope_to_collector(self):
+        self.store.configure({"setup_complete": True})
+        with patch.object(Engine, "start_collection", return_value=True) as start:
+            response = self.post({"action": "collect", "scope": "epg"})
+        start.assert_called_once_with("epg")
+        self.assertIn("Refresh started", response)
+        self.assertIn('name="scope" value="sports"', response)
+
+    def test_invalid_key_does_not_apply_provider_toggle(self):
+        self.store.configure({"sports": {"football_data": True}, "keys": {"football_data": "saved-key"}})
+        response = self.post({"action": "sports", "provider": "football_data", "key": "x" * 513})
+        self.assertIn("API key exceeds safe length", response)
+        self.assertTrue(self.store.config()["sports"]["football_data"])
+        self.assertEqual(self.store.config()["keys"]["football_data"], "saved-key")
+
+    def test_bulk_source_saves_keep_keys_and_other_groups(self):
+        self.store.configure({"sports": {"football_data": True},
+                              "keys": {"football_data": "saved-key"},
+                              "epg": {"farleyflex": True}})
+        sources = self.get("?page=sources")
+        self.assertEqual(sources.count("data-select-all hidden"), 2)
+        self.assertNotIn("saved-key", sources)
+        self.post({"action": "bulk_sources", "group": "keyless_sports", "selected": ["openf1", "openligadb"]})
+        saved = self.store.config()
+        self.assertFalse(saved["sports"]["jolpica"])
+        self.assertTrue(saved["sports"]["openf1"])
+        self.assertTrue(saved["sports"]["openligadb"])
+        self.assertTrue(saved["sports"]["football_data"])
+        self.assertTrue(saved["epg"]["farleyflex"])
+        rejected = self.post({"action": "bulk_sources", "group": "keyless_sports", "selected": ["football_data"]})
+        self.assertIn("outside this source group", rejected)
+        self.assertEqual(self.store.config(), saved)
+        self.post({"action": "bulk_sources", "group": "epg", "selected": ["epgshare_fr"]})
+        result = self.store.config()
+        self.assertFalse(result["epg"]["farleyflex"])
+        self.assertTrue(result["epg"]["epgshare_fr"])
+        self.assertEqual(result["sports"], saved["sports"])
+        self.assertEqual(result["keys"], {"football_data": "saved-key"})
+        self.assertEqual(self.store.usage(), {})
+
+    def test_overview_shows_collector_status_after_provider_activity(self):
+        self.store.configure({"setup_complete": True})
+        self.store.job("collector", "degraded", "8 of 19 sources refreshed")
+        for _ in range(36):
+            self.store.job("farleyflex", "test_ok")
+        page = self.get("?page=dashboard")
+        self.assertIn("Partial refresh</strong>", page)
+        self.assertIn("8 of 19 sources refreshed", page)
+        self.assertIn("Refresh sports for today", page)
+        self.assertIn('aria-current="page"', page)
+        self.assertIn("<summary>More</summary>", page)
+        self.assertLess(page.index("Collection status"), page.index("Events today"))
+
+    def test_epg_diagnostics_report_safe_failure_reasons(self):
+        engine = Engine(self.store)
+        with patch.object(providers, "fetch", side_effect=RuntimeError("HTTP 404 from upstream")):
+            self.assertFalse(engine._collect_epg("farleyflex"))
+        self.assertEqual(self.store.recent_jobs(1)[0]["details"], "Upstream returned HTTP 404")
+        with patch.object(providers, "fetch", side_effect=ValueError("private-url-with-token")):
+            self.assertIn("unsuccessful", engine.test_source("epg", "farleyflex"))
+        self.assertNotIn("private-url-with-token", self.get("?page=health"))
+        for _ in range(2):
+            self.store.increment("epg:farleyflex", 4)
+        self.assertIn("unsuccessful", engine.test_source("epg", "farleyflex"))
+        self.assertEqual(self.store.recent_jobs(1)[0]["details"], "Local daily request budget exhausted")
+
+    def test_today_prioritises_live_and_filters_sport(self):
+        events = [taxonomy.classify(ev(id=name, title=name, sport=sport, status_normalized=state,
+                                       start_utc=start))
+                  for name, sport, state, start in (
+                      ("Upcoming football", "football", "scheduled", "2026-11-14T15:00:00+00:00"),
+                      ("Live football", "football", "live", "2026-11-14T13:30:00+00:00"),
+                      ("Finished football", "football", "finished", "2026-11-14T12:00:00+00:00"),
+                      ("Upcoming basketball", "basketball", "scheduled", "2026-11-14T16:00:00+00:00"),
+                  )]
+        self.store.save_snapshot("today", linking.build_today(events, NOW))
+        with patch("sportsliveinfo.server.datetime", FixedUiClock):
+            page = self.get("?page=today&sport=football")
+        self.assertIn('value="football" selected', page)
+        self.assertNotIn("Upcoming basketball", page)
+        self.assertLess(page.index("Live football"), page.index("Upcoming football"))
+        self.assertLess(page.index("Upcoming football"), page.index("<details><summary>Finished"))
+        self.assertLess(page.index("<details><summary>Finished"), page.index("Finished football"))
+        with patch("sportsliveinfo.server.datetime", FixedUiClock):
+            self.assertIn("Upcoming basketball", self.get("?page=today&sport=unknown"))
+
+    def test_mixed_fallback_competitions_on_saved_snapshot(self):
+        events = [taxonomy.classify(ev(id=str(i), sport="basketball", competition=competition,
+                                       title="Fixture " + str(i)))
+                  for i, competition in enumerate(("NCAA", "LNB"))]
+        self.store.save_snapshot("today", linking.build_today(events, NOW))
+        self.store.save_snapshot("sports", {"events": events})
+        with patch("sportsliveinfo.server.datetime", FixedUiClock):
+            page = self.get("?page=today")
+        self.assertIn("<strong>Other competitions</strong> <small>(2)</small>", page)
+        self.assertNotIn("<strong>LNB</strong>", page)
+        self.assertIn("Fixture 0", page)
+        self.assertIn("Fixture 1", page)
+        filtered = self.get("?page=events&sport=basketball&category=basketball.other")
+        self.assertEqual(filtered.count('value="basketball.other"'), 1)
+        self.assertIn("2 of 2 events", filtered)
+
+    def test_guide_displays_zero_and_excludes_full_coverage_from_gaps(self):
+        self.store.save_snapshot("epg-quality:farleyflex", {
+            "channels": 2, "full_coverage_channels": {"24h": 1, "72h": 0},
+            "unmatched_canonical_channels": 2,
+            "channels_needing_attention": [
+                {"name": "No schedule", "coverage_hours": {"24h": 0}},
+                {"name": "Full schedule", "coverage_hours": {"24h": 24}},
+            ],
+        })
+        page = self.get("?page=guide")
+        self.assertIn("0 / 2", page)
+        self.assertIn("0 h</td>", page)
+        self.assertIn("No schedule", page)
+        self.assertNotIn("Full schedule", page)
+        self.assertIn("Channels without a recognised service ID: 2 / 2", page)
+
     def test_today_and_filtered_events_pages(self):
         self.store.configure({"setup_complete": True})
         events = [taxonomy.classify(ev(id="e1", competition="Friendlies", participants=["England", "Japan"])),
                   taxonomy.classify(ev(id="p1", competition="Premier League", competition_code="fd:PL", participants=["Arsenal", "Chelsea"]))]
         self.store.save_snapshot("today", linking.build_today(events, NOW))
         self.store.save_snapshot("sports", {"events": events})
-        page = self.get("?page=today")
+        class FixedClock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return NOW if tz is None else NOW.astimezone(tz)
+        with patch("sportsliveinfo.server.datetime", FixedClock):
+            page = self.get("?page=today")
+            filtered = self.get("?page=events&sport=football&category=football.premier_league")
         self.assertIn("Featured: England", page)
         self.assertIn("England (men) internationals", page)
-        filtered = self.get("?page=events&sport=football&category=football.premier_league")
         self.assertIn("1 of 2 events", filtered)
+        stale = self.get("?page=today")  # real clock: 13+ Nov is not the snapshot's day
+        if datetime.now(timezone.utc).date().isoformat() != "2026-11-14":
+            self.assertIn("The saved schedule is for", stale)
+            self.assertNotIn("Featured: England", stale)
+
+
+class CoverageFollowupTests(unittest.TestCase):
+    def test_new_sport_categories_and_explicit_boxing_labels(self):
+        self.assertEqual(taxonomy.classify(ev(sport="ESports", competition="BLAST Premier"))["category_id"],
+                         "esports.blast_premier")
+        self.assertEqual(taxonomy.classify(ev(sport="Bowling", competition="PBA Tour"))["category_id"],
+                         "bowling.pba")
+        ppv = taxonomy.classify(ev(sport="boxing", title="Boxing PPV"))
+        premium = taxonomy.classify(ev(sport="boxing", title="Premium boxing"))
+        self.assertIn("ppv", ppv["tags"])
+        self.assertEqual(ppv["category_id"], "boxing.ppv")
+        self.assertEqual(premium["category_id"], "boxing.premium")
+        self.assertNotIn("ppv", premium["tags"])
+        self.assertNotIn("Boxing", providers.THESPORTSDB_DEFAULT_SPORTS)
+
+    def test_generic_guide_is_not_counted_as_specific_title_coverage(self):
+        guide = {"channels": {"one": "One"}, "programmes": [
+            {"channel_id": "one", "title": "TBA", "start_utc": NOW.isoformat(),
+             "end_utc": (NOW + timedelta(days=1)).isoformat()},
+            {"channel_id": "one", "title": "Match of the Day", "start_utc": NOW.isoformat(),
+             "end_utc": (NOW + timedelta(hours=2)).isoformat()},
+        ]}
+        quality = analyze_guide(guide, NOW)
+        self.assertEqual(quality["full_coverage_channels"]["24h"], 1)
+        self.assertEqual(quality["channels_with_full_specific_titles_24h"], 0)
+        self.assertEqual(quality["generic_title_gaps"][0]["specific_title_hours_24h"], 2)
+
+    def test_openligadb_uses_competition_market_and_scoped_identity(self):
+        row = {"matchID": 1, "leagueShortcut": "la1", "matchDateTimeUTC": NOW.isoformat(),
+               "team1": {"teamName": "Home"}, "team2": {"teamName": "Away"}}
+        raw = json.dumps([row])
+        event, = providers.openligadb_events(raw, league="la1")
+        self.assertEqual(event["competition_country"], "Spain")
+        self.assertEqual(taxonomy.classify(event)["competition_id"], "football.la_liga")
+        self.assertEqual(providers.openligadb_events(raw, league="ucl"), [])
+
+    def test_tennis_uses_stable_match_key_and_expires_live_evidence(self):
+        row = {"matchKey": "1-2-3-4", "tourType": "wta", "status": "InPlay",
+               "startTimestamp": int(NOW.timestamp()), "league": "Sample Open",
+               "participant1": "Player A", "participant2": "Player B"}
+        live, = providers.tennis_api_events(json.dumps({"success": True, "results": [row]}), live=True)
+        scheduled, = providers.tennis_api_events(json.dumps(
+            {"success": True, "results": [dict(row, status="Not Started")]}))
+        self.assertEqual(live["id"], scheduled["id"])
+        self.assertFalse(live["broadcast_verified"])
+        live["live_observed_at"] = NOW.isoformat()
+        self.assertEqual(linking.live_state(live, NOW), "live")
+        self.assertEqual(linking.live_state(live, NOW + timedelta(hours=1)), "unknown")
+        with self.assertRaises(ValueError):
+            providers.tennis_api_events('{"success":false,"results":[]}', live=True)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 import gzip
 import io
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -17,46 +18,63 @@ EPG = {
     "epgshare_uk": ("UK broad · EPG Share UK1 (verify)", "https://epgshare01.online/epgshare01/epg_ripper_UK1.xml.gz"),
     "epgshare_ie": ("Ireland · EPG Share IE1 (verify)", "https://epgshare01.online/epgshare01/epg_ripper_IE1.xml.gz"),
     "epgshare_fr": ("France broad · EPG Share FR1 (verify)", "https://epgshare01.online/epgshare01/epg_ripper_FR1.xml.gz"),
-    "fr_programmetv": ("France · programme-tv.net via iptv-org (verify)", "https://iptv-org.github.io/epg/guides/fr/programme-tv.net.epg.xml.gz"),
-    "fr_telerama": ("France · Télérama via iptv-org (verify)", "https://iptv-org.github.io/epg/guides/fr/telerama.fr.epg.xml.gz"),
+    "fr_programmetv": ("France · programme-tv.net via iptv-org (verify); iptv-org pre-built guides may be discontinued", "https://iptv-org.github.io/epg/guides/fr/programme-tv.net.epg.xml.gz"),
+    "fr_telerama": ("France · Télérama via iptv-org (verify); iptv-org pre-built guides may be discontinued", "https://iptv-org.github.io/epg/guides/fr/telerama.fr.epg.xml.gz"),
     "fr_xmltv": ("France · XMLTV France (racacax/XML-TV-Fr)", "https://xmltvfr.fr/xmltv/xmltv_fr.xml.gz"),
     # Feeds already offered by the B1G Android backup-guide list (SkyGuideScene.backupFeeds).
     "mjh_sky_uk": ("UK Sky · Matt Huisman (B1G backup feed)", "https://i.mjh.nz/SkyUK/epg.xml.gz"),
-    "iptvorg_sky_uk": ("UK Sky · iptv-org sky.com (B1G backup feed; verify)", "https://iptv-org.github.io/epg/guides/uk/sky.com.epg.xml.gz"),
+    "iptvorg_sky_uk": ("UK Sky · iptv-org sky.com (B1G backup feed; verify); iptv-org pre-built guides may be discontinued", "https://iptv-org.github.io/epg/guides/uk/sky.com.epg.xml.gz"),
     "epgtalk_uk": ("UK national · EPGTalk (B1G suggested feed)", "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/UK_guide.xml.gz"),
     "epgtalk_sports": ("Sports · EPGTalk (B1G suggested feed)", "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz"),
     "iptv_epg_fr": ("France · IPTV-EPG.org (B1G; terms not explicit)", "https://iptv-epg.org/files/epg-fr.xml.gz"),
-    "epgshare_us": ("United States · EPG Share US1 (B1G backup feed)", "https://epgshare01.online/epgshare01/epg_ripper_US1.xml.gz"),
-    "iptvorg_foxtel_au": ("Australia · iptv-org Foxtel (B1G backup feed; verify)", "https://iptv-org.github.io/epg/guides/au/foxtel.com.au.epg.xml.gz"),
+    "epgshare_us": ("United States · EPG Share US2", "https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz"),
+    "epgshare_us_sports": ("United States sports · EPG Share US SPORTS1", "https://epgshare01.online/epgshare01/epg_ripper_US_SPORTS1.xml.gz"),
+    "iptv_epg_gb": ("UK broad · IPTV-EPG.org", "https://iptv-epg.org/files/epg-gb.xml.gz"),
+    "iptv_epg_au": ("Australia · IPTV-EPG.org", "https://iptv-epg.org/files/epg-au.xml.gz"),
+    "iptv_epg_de": ("Germany · IPTV-EPG.org", "https://iptv-epg.org/files/epg-de.xml.gz"),
+    "iptv_epg_it": ("Italy · IPTV-EPG.org", "https://iptv-epg.org/files/epg-it.xml.gz"),
+    "iptv_epg_es": ("Spain · IPTV-EPG.org", "https://iptv-epg.org/files/epg-es.xml.gz"),
+    "iptv_epg_nl": ("Netherlands · IPTV-EPG.org", "https://iptv-epg.org/files/epg-nl.xml.gz"),
+    "iptv_epg_ca": ("Canada · IPTV-EPG.org", "https://iptv-epg.org/files/epg-ca.xml.gz"),
+    "iptvorg_foxtel_au": ("Australia · iptv-org Foxtel (B1G backup feed; verify, may be discontinued)", "https://iptv-org.github.io/epg/guides/au/foxtel.com.au.epg.xml.gz"),
     # International sports lineups named in the B1G 10 Nov sports-coverage register entry.
     "epgshare_hk": ("Hong Kong · EPG Share HK1 — Now Sports/beIN (verify)", "https://epgshare01.online/epgshare01/epg_ripper_HK1.xml.gz"),
     "iptv_epg_hk": ("Hong Kong · IPTV-EPG.org (verify)", "https://iptv-epg.org/files/epg-hk.xml.gz"),
     "iptv_epg_ge": ("Georgia · IPTV-EPG.org — Setanta (verify)", "https://iptv-epg.org/files/epg-ge.xml.gz"),
     "epgshare_my": ("Malaysia · EPG Share MY1 — Astro (verify)", "https://epgshare01.online/epgshare01/epg_ripper_MY1.xml.gz"),
+    # Matt Huisman regional guides (path pattern reported in community forums).
+    "mjh_nz": ("New Zealand free-to-air · Matt Huisman (verify)", "https://i.mjh.nz/nz/epg.xml.gz"),
+    "mjh_au_sydney": ("Australia free-to-air (Sydney) · Matt Huisman (verify)", "https://i.mjh.nz/au/Sydney/epg.xml.gz"),
 }
 # Further markets present in the owner's provider categories (CA, AU, NZ, PT,
-# PL, GR, SG, IN). File names follow the confirmed epg_ripper_<CC>1 pattern
-# (UK1, US1, FR1, HK1); each must pass "Test EPG" before use.
+# PL, GR, SG, IN). Canada uses the publisher's CA2 feed.
 EPGSHARE_MARKETS = {
     "CA": "Canada (TSN/Sportsnet)", "AU": "Australia (Fox/Kayo)", "NZ": "New Zealand (Sky Sport NZ)",
     "PT": "Portugal (Sport TV)", "PL": "Poland (Polsat/Canal+ Sport)", "GR": "Greece (Nova/Cosmote)",
     "SG": "Singapore (Hub Sports)", "IN": "India (Star/Sony Sports)",
 }
 for _cc, _label in EPGSHARE_MARKETS.items():
-    EPG["epgshare_" + _cc.lower()] = ("%s · EPG Share %s1 (verify)" % (_label, _cc),
-                                      "https://epgshare01.online/epgshare01/epg_ripper_%s1.xml.gz" % _cc)
+    _tag = "CA2" if _cc == "CA" else _cc + "1"
+    EPG["epgshare_" + _cc.lower()] = ("%s · EPG Share %s (verify)" % (_label, _tag),
+                                      "https://epgshare01.online/epgshare01/epg_ripper_%s.xml.gz" % _tag)
 # Upstream families: two guides from one family are not independent evidence.
 EPG_FAMILY = {
     "farleyflex": "farleyflex", "uk_freeview": "freeview_epg",
     "epgshare_uk": "epgshare", "epgshare_ie": "epgshare", "epgshare_fr": "epgshare",
-    "epgshare_us": "epgshare", "epgshare_hk": "epgshare", "epgshare_my": "epgshare",
+    "epgshare_us": "epgshare", "epgshare_us_sports": "epgshare", "epgshare_hk": "epgshare", "epgshare_my": "epgshare",
     "fr_programmetv": "iptv_org", "fr_telerama": "iptv_org", "iptvorg_sky_uk": "iptv_org", "iptvorg_foxtel_au": "iptv_org",
-    "fr_xmltv": "xmltvfr", "mjh_sky_uk": "mjh", "epgtalk_uk": "epgtalk", "epgtalk_sports": "epgtalk",
+    "fr_xmltv": "xmltvfr", "mjh_sky_uk": "mjh", "mjh_nz": "mjh", "mjh_au_sydney": "mjh", "epgtalk_uk": "epgtalk", "epgtalk_sports": "epgtalk",
+    **{f"iptv_epg_{market}": "iptv_epg_org" for market in ("gb", "au", "de", "it", "es", "nl", "ca")},
     "iptv_epg_fr": "iptv_epg_org", "iptv_epg_hk": "iptv_epg_org", "iptv_epg_ge": "iptv_epg_org",
 }
 EPG_FAMILY.update({"epgshare_" + cc.lower(): "epgshare" for cc in EPGSHARE_MARKETS})
 # (max download bytes, max programmes) per guide; broad national guides are large.
 EPG_LIMITS = {
+    # The publisher serves an uncompressed file of about 21 MB.
+    "uk_freeview": (30_000_000, 100_000),
+    "iptv_epg_gb": (30_000_000, 180_000), "iptv_epg_au": (14_000_000, 100_000),
+    "epgshare_us_sports": (5_000_000, 150_000),
+    "iptv_epg_ca": (16_000_000, 175_000), "iptv_epg_nl": (20_000_000, 100_000),
     "epgshare_uk": (60_000_000, 300_000), "epgshare_fr": (40_000_000, 250_000),
     "epgshare_ie": (30_000_000, 200_000), "epgshare_us": (60_000_000, 300_000),
     "epgshare_hk": (30_000_000, 200_000), "epgshare_my": (30_000_000, 200_000),
@@ -65,13 +83,27 @@ EPG_LIMITS = {
     "iptvorg_foxtel_au": (40_000_000, 250_000),
 }
 EPG_LIMITS.update({"epgshare_" + cc.lower(): (40_000_000, 250_000) for cc in EPGSHARE_MARKETS})
+EPG_DAILY_REQUEST_LIMIT = 4
 DEFAULT_EPG_LIMIT = (14_000_000, 100_000)
+# XML TV Fr lists an expanded France-only file of about 70 MiB.
+EPG_EXPANDED_LIMITS = {
+    "fr_xmltv": 85_000_000, "epgshare_ca": 85_000_000, "epgshare_us": 95_000_000,
+    "iptv_epg_gb": 95_000_000, "iptv_epg_ca": 95_000_000, "epgtalk_uk": 115_000_000,
+}
+# Remove only the fixed external marker in these publishers' prologues.
+XMLTV_DTD_SOURCES = frozenset({"fr_xmltv", "epgtalk_uk", "epgtalk_sports"})
+_XMLTV_DTD_PROLOGUE = re.compile(
+    rb'\A((?:\xef\xbb\xbf)?(?:<\?xml [^<>]*\?>)?[ \t\r\n]*)'
+    rb'<!DOCTYPE tv SYSTEM "xmltv.dtd">'
+)
 
 # name -> (label, base URL, shared key name or None, conservative daily call budget)
+TENNIS_API_HOST = "tennis-api-atp-wta-itf.p.rapidapi.com"
 SPORTS = {
+    "tennis_api": ("Tennis · Tennis API (RapidAPI)", f"https://{TENNIS_API_HOST}/tennis/v2/extend/api/events", "tennis_api", 40),
     "jolpica": ("Formula 1 · Jolpica (Ergast)", "https://api.jolpi.ca/ergast/f1/current.json", None, 6),
     "openf1": ("Formula 1 sessions · OpenF1", "https://api.openf1.org/v1/sessions", None, 6),
-    "openligadb": ("Football · OpenLigaDB (Bundesliga 1–3)", "https://api.openligadb.de/getmatchdata", None, 12),
+    "openligadb": ("Football · OpenLigaDB", "https://api.openligadb.de/getmatchdata", None, 24),
     "football_data": ("Football · football-data.org (PL, CL, Championship, top European leagues)", "https://api.football-data.org/v4/matches", "football_data", 45),
     "api_sports": ("Football · API-Sports (worldwide incl. FA Cup, EFL Cup, UEL, UECL, internationals)", "https://v3.football.api-sports.io/fixtures", "api_sports", 80),
     "api_sports_rugby": ("Rugby union & league · API-Sports", "https://v1.rugby.api-sports.io/games", "api_sports", 80),
@@ -94,17 +126,28 @@ API_SPORTS_SPORT = {
     "api_sports_afl": "aussie_rules",
 }
 SOURCE_NOTES = {
+    "tennis_api": "Optional RapidAPI key. Live singles and the first 50 upcoming matches per tour, when supplied. Free plan: 50 requests/day. Private collection.",
     "jolpica": "Ergast-compatible F1 calendar incl. practice/qualifying/sprint. CC BY-NC-SA attribution.",
     "openf1": "Independent F1 session times with end times (2023+). Free, no key.",
-    "openligadb": "Community Bundesliga, 2. Bundesliga, 3. Liga fixtures. ODbL attribution/share-alike.",
+    "openligadb": "Community fixtures for selected German and European competitions. ODbL attribution/share-alike.",
     "football_data": "Free plan: 12 competitions incl. Premier League, Champions League, Championship, World Cup, Euros. 10 calls/min; delayed scores.",
     "api_sports": "Free plan 100 calls/day per sport API; one key works for every API-Sports sport below.",
     "thesportsdb": "Free public key 123: soccer, rugby, cricket, motorsport, fighting, golf, darts, snooker and more. Free-tier coverage is partial.",
     "cricketdata": "Free lifetime plan 100 hits/day. Key travels in the query string (provider requirement); never logged.",
 }
-THESPORTSDB_SPORTS = ["Soccer", "Rugby", "Cricket", "Motorsport", "Fighting", "Golf", "Darts", "Snooker",
+THESPORTSDB_DEFAULT_SPORTS = ["Soccer", "Rugby", "Cricket", "Motorsport", "Fighting", "Golf", "Darts", "Snooker",
                       "Tennis", "Ice Hockey", "Basketball", "American Football", "Cycling", "Horse Racing"]
-OPENLIGADB_LEAGUES = ["bl1", "bl2", "bl3"]
+THESPORTSDB_SPORTS = THESPORTSDB_DEFAULT_SPORTS + ["Athletics", "Bowling", "eSports", "Boxing"]
+OPENLIGADB_DEFAULT_LEAGUES = ("bl1", "bl2", "bl3")
+OPENLIGADB_LEAGUES = {
+    "bl1": ("Bundesliga", "Germany"),
+    "bl2": ("2. Bundesliga", "Germany"),
+    "bl3": ("3. Liga", "Germany"),
+    "dfb": ("DFB-Pokal", "Germany"),
+    "ffb1": ("Frauen-Bundesliga", "Germany"),
+    "ucl": ("UEFA Champions League", "World"),
+    "la1": ("La Liga", "Spain"),
+}
 
 ALLOW_HOSTS = {urllib.parse.urlparse(item[1]).hostname for item in list(EPG.values()) + list(SPORTS.values())}
 
@@ -159,7 +202,7 @@ _LIVE = {"1h", "2h", "ht", "et", "bt", "p", "pt", "live", "in_play", "paused", "
          "in progress", "1st half", "2nd half", "half time", "halftime", "extra time", "break time", "penalty in progress"}
 _FINISHED = {"ft", "aet", "pen", "finished", "match finished", "after over time", "after penalties", "awarded", "awd", "wo", "aw",
              "ended", "aot", "ap", "complete", "completed", "result"}
-_POSTPONED = {"pst", "post", "postponed", "susp", "suspended", "delayed"}
+_POSTPONED = {"pst", "post", "postponed", "match postponed", "susp", "suspended", "delayed"}
 _CANCELLED = {"canc", "cancelled", "canceled", "abd", "abandoned", "intr", "interrupted"}
 _SCHEDULED = {"ns", "tbd", "scheduled", "timed", "not started", "time to be defined", ""}
 
@@ -204,11 +247,12 @@ class _LimitedXmlInput:
     compressed HTTP response size.
     """
 
-    def __init__(self, stream, byte_limit):
+    def __init__(self, stream, byte_limit, strip_xmltv_dtd=False):
         self.stream = stream
         self.byte_limit = byte_limit
         self.total = 0
         self.tail = b""
+        self.strip_xmltv_dtd = strip_xmltv_dtd
 
     def read(self, size=-1):
         size = 65536 if size is None or size < 0 else min(size, 65536)
@@ -216,14 +260,19 @@ class _LimitedXmlInput:
         self.total += len(payload)
         if self.total > self.byte_limit:
             raise ValueError("XMLTV decompressed past safety limit")
+        if self.strip_xmltv_dtd:
+            # ElementTree's first read covers these prologues. A truncated
+            # or altered declaration still goes through the guard.
+            self.strip_xmltv_dtd = False
+            payload = _XMLTV_DTD_PROLOGUE.sub(rb"\1", payload, count=1)
         marker = (self.tail + payload).upper()
-        if b"<!DOCTYPE" in marker or b"<!ENTITY" in marker:
+        if b"<!DOCTYPE" in marker or b"<!ENTITY" in marker or b"\x00" in payload:
             raise ValueError("XMLTV declarations and entities are not allowed")
         self.tail = marker[-16:]
         return payload
 
 
-def decode_xmltv(raw, source, max_expanded=65_000_000, max_programmes=100_000,
+def decode_xmltv(raw, source, max_expanded=None, max_programmes=100_000,
                  max_channels=40_000):
     """Stream bounded XMLTV/gzip with source-aware programme detail.
 
@@ -235,10 +284,14 @@ def decode_xmltv(raw, source, max_expanded=65_000_000, max_programmes=100_000,
         stream = gzip.GzipFile(fileobj=io.BytesIO(raw))
     else:
         stream = io.BytesIO(raw)
+    if max_expanded is None:
+        max_expanded = EPG_EXPANDED_LIMITS.get(source, 65_000_000)
     channels, icons, programmes, bad = {}, {}, [], 0
     root = None
     with stream:
-        for event, node in ET.iterparse(_LimitedXmlInput(stream, max_expanded), events=("start", "end")):
+        for event, node in ET.iterparse(
+                _LimitedXmlInput(stream, max_expanded, source in XMLTV_DTD_SOURCES),
+                events=("start", "end")):
             if root is None:
                 root = node
                 if root.tag != "tv":
@@ -351,7 +404,7 @@ def openf1_events(data):
                 continue
             place = row.get("country_name") or row.get("location") or ""
             event = {"id": "openf1:%s" % row["session_key"], "sport": "motorsport", "competition": "Formula 1",
-                     "event_type": name, "session": session, "title": "Formula 1 %s — %s" % (place, name),
+                     "event_type": name, "session": session, "title": ("Formula 1 %s — %s" % (place, name)) if place else "Formula 1 — %s" % name,
                      "start_utc": _utc(row["date_start"]), "start_precision": "scheduled",
                      "venue": row.get("circuit_short_name") or row.get("location") or "", "country": row.get("country_name") or "",
                      "source_id": "openf1", "broadcasts": [], "broadcast_verified": False}
@@ -411,8 +464,9 @@ def api_sports_events(data):
         try:
             fixture = row["fixture"]
             when = datetime.fromisoformat(fixture["date"].replace("Z", "+00:00")).astimezone(timezone.utc)
-            home = row.get("teams", {}).get("home", {}).get("name") or "TBC"
-            away = row.get("teams", {}).get("away", {}).get("name") or "TBC"
+            teams = row.get("teams") or {}
+            home = (teams.get("home") or {}).get("name") or "TBC"
+            away = (teams.get("away") or {}).get("name") or "TBC"
             league = row.get("league") or {}
             short = (fixture.get("status") or {}).get("short", "NS")
             events.append({"id": f"api-sports:{fixture['id']}", "sport": "football", "competition": league.get("name", ""),
@@ -424,7 +478,7 @@ def api_sports_events(data):
                            "status": short, "status_normalized": status_of(short), "round": league.get("round") or "",
                            "venue": (fixture.get("venue") or {}).get("name") or "",
                            "source_id": "api_sports", "broadcasts": [], "broadcast_verified": False})
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError, AttributeError):
             continue
     return events
 
@@ -519,7 +573,7 @@ def thesportsdb_events(data):
             precision = "scheduled"
             if stamp:
                 when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
-            elif row.get("dateEvent") and row.get("strTime"):
+            elif row.get("dateEvent") and re.fullmatch(r"\d{2}:\d{2}(?::\d{2})?.*", str(row.get("strTime") or "")):
                 when = datetime.fromisoformat("%sT%s" % (row["dateEvent"], row["strTime"][:8]))
             elif row.get("dateEvent"):
                 when = datetime.fromisoformat(row["dateEvent"] + "T12:00:00")
@@ -531,10 +585,15 @@ def thesportsdb_events(data):
             home, away = row.get("strHomeTeam"), row.get("strAwayTeam")
             participants = [p for p in (home, away) if p]
             raw_status = "postponed" if str(row.get("strPostponed", "")).lower() == "yes" else row.get("strStatus") or ""
-            events.append({"id": "thesportsdb:%s" % row["idEvent"], "sport": row.get("strSport") or "other",
-                           "competition": row.get("strLeague") or "", "competition_country": row.get("strCountry") or "",
+            sport = row.get("strSport") or "other"
+            league = row.get("strLeague") or ""
+            title = row.get("strEvent") or " v ".join(participants)
+            if sport.casefold() == "fighting" and re.search(r"\bboxing\b", f"{league} {title}", re.I):
+                sport = "boxing"
+            events.append({"id": "thesportsdb:%s" % row["idEvent"], "sport": sport,
+                           "competition": league, "competition_country": row.get("strCountry") or "",
                            "event_type": "match" if len(participants) == 2 else "event",
-                           "title": row.get("strEvent") or (" v ".join(participants)), "participants": participants,
+                           "title": title, "participants": participants,
                            "start_utc": when.astimezone(timezone.utc).isoformat(timespec="seconds"), "start_precision": precision,
                            "time_basis": "provider_declared_utc",
                            "status": raw_status, "status_normalized": status_of(raw_status),
@@ -576,8 +635,11 @@ def cricketdata_events(data, horizon_days=8):
                     "venue": row.get("venue") or "", "source_id": "cricketdata", "broadcasts": [], "broadcast_verified": False}
             title = " v ".join(teams) if len(teams) == 2 else (parts[0] if parts else "Cricket")
             days = 5 if match_type == "test" else 1
+            ended = bool(row.get("matchEnded"))
             for day in range(min(days, horizon_days)):
                 day_start = start + timedelta(days=day)
+                if ended and day and day_start > datetime.now(timezone.utc):
+                    break  # a finished Test has no future playing days
                 event = dict(base, id="cricketdata:%s" % row["id"] + (":d%d" % (day + 1) if days > 1 else ""),
                              title=title + (" — Day %d" % (day + 1) if days > 1 else ""),
                              start_utc=day_start.isoformat(timespec="seconds"),
@@ -591,7 +653,7 @@ def cricketdata_events(data, horizon_days=8):
 
 
 def openligadb_events(data, league=None):
-    """Parse community-maintained Bundesliga match records (no supplied secret).
+    """Parse community-maintained football match records (no supplied secret).
 
     Prefer the unambiguous UTC timestamp. Never infer dates from a naïve
     local-time string or fabricate teams or television carriage.
@@ -616,10 +678,13 @@ def openligadb_events(data, league=None):
             if not home or not away:
                 continue
             shortcut = league or m.get("leagueShortcut") or "bl1"
+            if league and m.get("leagueShortcut") not in (None, league):
+                continue
+            label, country = OPENLIGADB_LEAGUES.get(shortcut, ("OpenLigaDB football", ""))
             events.append({
                 "id": "openligadb:%s" % m["matchID"],
-                "sport": "football", "competition": m.get("leagueName") or "German Bundesliga",
-                "competition_code": "old:%s" % shortcut, "competition_country": "Germany",
+                "sport": "football", "competition": label if shortcut in OPENLIGADB_LEAGUES else m.get("leagueName") or label,
+                "competition_code": "old:%s" % shortcut, "competition_country": country,
                 "event_type": "match", "title": f"{home} v {away}",
                 "participants": [home, away],
                 "participants_short": [m["team1"].get("shortName") or home, m["team2"].get("shortName") or away],
@@ -632,4 +697,53 @@ def openligadb_events(data, league=None):
             })
         except (TypeError, KeyError, ValueError):
             continue
+    return events
+
+
+def tennis_api_events(data, *, live=False):
+    """Normalise the documented Tennis API live-board records."""
+    payload = json.loads(data)
+    if not isinstance(payload, dict) or payload.get("success") is not True:
+        raise ValueError("Tennis API reported an upstream error")
+    rows = payload.get("results")
+    if not isinstance(rows, list):
+        raise ValueError("Tennis API results missing or invalid")
+    events = []
+    for row in rows:
+        try:
+            match_key = row["matchKey"]
+            if not isinstance(match_key, str) or not re.fullmatch(r"\d+-\d+-\d+-\d+", match_key):
+                continue
+            tour = row["tourType"].lower()
+            if tour not in ("atp", "wta"):
+                continue
+            players = [row.get(f"participant{i}") or (row.get(f"player{i}") or {}).get("name") for i in (1, 2)]
+            if not all(isinstance(p, str) and p.strip() for p in players):
+                continue
+            timestamp = row["startTimestamp"]
+            if type(timestamp) is not int or timestamp <= 0:
+                continue
+            status = row.get("status", "").casefold().replace(" ", "")
+            if live and status != "inplay":
+                continue
+            if not live and status not in ("notstarted", "upcoming"):
+                continue
+            tournament = (row.get("tournament") or {}).get("name") or row.get("league")
+            if not isinstance(tournament, str) or not tournament.strip():
+                continue
+            events.append({
+                "id": f"tennis-api:{tour}:{match_key}", "source_id": "tennis_api",
+                "sport": "tennis", "competition": tournament, "event_type": "match",
+                "title": " v ".join(players), "participants": players,
+                "start_utc": _epoch(timestamp), "start_precision": "scheduled",
+                "status_normalized": "live" if live else "scheduled",
+                "broadcasts": [], "broadcast_verified": False,
+            })
+        except (AttributeError, KeyError, TypeError, ValueError, OverflowError, OSError):
+            continue
+    if rows and not events and live:
+        # Non-live rows on the live board can be ignored. Invalid live rows
+        # should not invalidate otherwise useful upcoming scopes.
+        if any(isinstance(row, dict) and str(row.get("status", "")).casefold() == "inplay" for row in rows):
+            raise ValueError("Tennis API live records could not be decoded")
     return events
