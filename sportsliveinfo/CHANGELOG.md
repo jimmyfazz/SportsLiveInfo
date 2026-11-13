@@ -2,6 +2,12 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.13 — Publish channel links (owner decision D8)
+
+- Published events now carry `broadcast_links`: the channels the guides list the event on, as SportsLiveInfo canonical ids with coverage (network or regional, `parent_channel_id`, `not_on`), confidence and the number of guides. No guide channel names, programme titles or programme times are published, and a link never marks an event as verified (`broadcast_verified` stays false).
+- Feed format `sli/1.3` (new optional field; 1.x readers ignore it), capability `broadcast_links`, manifest `rights.broadcast_candidates = "channel_links_published_unverified"`. The event schema and feed contract (§6.1) document the field.
+- Guide-listed events (0.3.12) remain private: their guide sources do not permit republication.
+
 ## 0.3.12 — Allocate live action from the TV guides
 
 - **Guide-listed live sport.** Free event sources only cover a day or two ahead (API-Sports' free plan serves yesterday, today and tomorrow), so most of the week's live sport on UK channels had no event to attach a channel to. Live listings on recognised channels that no event matched now become private events with their channels: fixtures ("Spain v England", ITV1), sessions ("Grand Slam of Darts: Day 2", Sky Sports Main Event and Sky Sports+), with the same regional allocation as fixtures. They are shown in Live today and Sports events as "Listed live in TV guide".

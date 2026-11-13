@@ -123,7 +123,13 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertIn("ppv", events["api-sports-mma:77"]["tags"])
         self.assertEqual(events["cricketdata:ash1:d1"]["category_id"], "cricket.intl.england")
         self.assertEqual(events["api-sports-rugby:301"]["b1g_priority_group"], "Rugby")
-        allowed = set(feed.EVENT_FIELDS) | {"b1g_priority_group", "broadcasts"}
+        allowed = set(feed.EVENT_FIELDS) | {"b1g_priority_group", "broadcasts", "broadcast_links"}
+        # D8: guide-listed links are canonical ids and confidence only, never "verified".
+        self.assertEqual(events["football-data:5001"]["broadcast_links"],
+                         [{"canonical_channel_id": "gb.sky.sports.main_event", "confidence": "high", "coverage": "network",
+                           "guides": 1, "status": "guide_listed_unverified"}])
+        self.assertEqual(self.manifest["rights"]["broadcast_candidates"], "channel_links_published_unverified")
+        self.assertIn("broadcast_links", self.manifest["capabilities"])
         blob = json.dumps(events)
         for event in events.values():
             self.assertLessEqual(set(event), allowed, event["id"])

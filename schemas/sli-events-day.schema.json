@@ -48,6 +48,12 @@
         "start_conflict": {"type": "boolean"},
         "broadcast_verified": {"type": "boolean"},
         "broadcasts": {"type": "array", "items": {"type": "object", "required": ["canonical_channel_id"]}},
+        "broadcast_links": {"type": "array", "description": "Optional (1.3+). Guide-listed, unverified event->channel links: canonical ids only, no guide text or times. Never makes broadcast_verified true.",
+          "items": {"type": "object", "required": ["canonical_channel_id", "status", "coverage", "confidence", "guides"],
+            "properties": {"canonical_channel_id": {"type": "string"}, "status": {"const": "guide_listed_unverified"},
+              "coverage": {"enum": ["network", "regional"]}, "confidence": {"enum": ["high", "medium"]},
+              "guides": {"type": "integer", "minimum": 0}, "parent_channel_id": {"type": "string"},
+              "not_on": {"type": "array", "items": {"type": "string"}}}}},
         "b1g_priority_group": {"type": "string"}
       }
     }

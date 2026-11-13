@@ -100,6 +100,21 @@ For each adapter declare `allowed_local_test`, `allowed_private_internal`, `allo
 - The private SportsLiveInfo source repo need not become public. The PUBLIC daily-data repo is `jimmyfazz/LiveSports-EPG`; publication must be separately authorized after rights and validation gates; GitHub Free does not provide Pages for a private source repo.
 - If rights clearance fails, publish only permitted channel/fixture facts and use local device-owned EPG. **No change to the owner’s no-WAN-ingress decision.**
 
+### 6.1 Owner decision D8 (approved 13 November 2026): guide-listed channel links
+
+Published events (from owner-approved event sources only) may carry `broadcast_links` (format `sli/1.3`, capability `broadcast_links`, manifest `rights.broadcast_candidates = "channel_links_published_unverified"`):
+
+```json
+"broadcast_links": [{"canonical_channel_id": "gb.bbc.one.wales", "status": "guide_listed_unverified",
+                     "coverage": "regional", "parent_channel_id": "gb.bbc.one", "confidence": "high", "guides": 2},
+                    {"canonical_channel_id": "gb.bbc.two", "status": "guide_listed_unverified", "coverage": "network",
+                     "not_on": ["gb.bbc.two.ni", "gb.bbc.two.wales"], "confidence": "high", "guides": 3}]
+```
+
+- Only SportsLiveInfo's own canonical ids, coverage and confidence are published: **no guide channel names, programme titles, descriptions or programme times**, so no third-party programme text is republished.
+- A link means "a guide lists this event on this channel", not that the owner's provider stream carries it. `broadcast_verified` stays false and `broadcasts` stays reserved for verified evidence. The reader maps the canonical id to the account's own channel through `channels` (exact provider id first, user mappings always win), honours `coverage`/`not_on` for regional services (`regional_services` in the channels asset), and must not show "Watch" as verified.
+- **Guide-listed events** (live listings with no event-source fixture, `origin: guide_listing`, 0.3.12+) are **not** covered by D8: they are built from guide programme text, whose sources do not permit republication (e.g. EPGTalk: personal use only, no republishing without written permission). They stay private on Home Assistant; for the TVs they are delivered privately (LAN) or computed on the device from the provider's own guide.
+
 ## 7. Safe importer and exporter boundaries
 
 - Optional `Export Safe Channel Inventory` is B1 user-initiated; local file export strips server/playlist/stream URLs, username/password, device IDs, viewing history, direct stream IDs, user secrets and personal account identity; HAOS import via admin-only local Ingress.
