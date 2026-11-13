@@ -162,6 +162,24 @@ class XmltvAndNetworkTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             providers.decode_xmltv(gzip.compress(raw), "farleyflex", max_expanded=40)
 
+    def test_only_known_xmltv_prologue_is_removed(self):
+        marker = b'<!DOCTYPE tv SYSTEM "xmltv.dtd">'
+        prologue = b'<?xml version="1.0" encoding="UTF-8"?>\n' + marker
+        body = b'<tv><channel id="sample"><display-name>Sample</display-name></channel></tv>'
+        for source in ("fr_xmltv", "epgtalk_uk", "epgtalk_sports"):
+            with self.subTest(source=source):
+                self.assertEqual(providers.decode_xmltv(gzip.compress(prologue + body), source)["channels"],
+                                 {"sample": "Sample"})
+        for data, source in (
+            (prologue + body, "farleyflex"),
+            (marker + marker + body, "fr_xmltv"),
+            (b'<!DOCTYPE tv SYSTEM "https://example.com/external.dtd">' + body, "fr_xmltv"),
+            (b'<!DOCTYPE tv [<!ENTITY x "unsafe">]>' + body, "fr_xmltv"),
+            ((marker + body).decode().encode("utf-16"), "fr_xmltv"),
+        ):
+            with self.subTest(data=data, source=source), self.assertRaises(ValueError):
+                providers.decode_xmltv(data, source)
+
     def test_dtd_split_across_boundaries_is_rejected(self):
         payload = b"<tv>" + b" " * 65520 + b"<!DOC" + b"TYPE tv><channel id='a'/></tv>"
         with self.assertRaises(ValueError):
