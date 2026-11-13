@@ -16,7 +16,7 @@ DEFAULT = {
     "sports": {name: name == "jolpica" for name in providers.SPORTS},
     "epg": {name: False for name in providers.EPG},
     "options": {"thesportsdb_sports": list(providers.THESPORTSDB_SPORTS),
-                "openligadb_leagues": list(providers.OPENLIGADB_LEAGUES)},
+                "openligadb_leagues": list(providers.OPENLIGADB_DEFAULT_LEAGUES)},
     "keys": {},
     "schedule": ["04:00", "12:00", "17:00"],
     # Separate public *data* destination, not the private Home Assistant App repository.

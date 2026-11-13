@@ -171,3 +171,25 @@ The Home Assistant 0.3.1 baseline (4045f46) imported 9 of 19 enabled guides. The
 The UK IPTV-EPG.org sample included 18 Sky Sports, 13 TNT Sports and five Premier Sports entries with full 24-hour schedules. EPGTalk Sports parsed but its long programme blocks need quality review. Source counts include variants. They do not establish unique services, stream matches or redistribution rights.
 
 Only the fixed external XMLTV marker is removed from the known prologues. Other DTDs and entity declarations are rejected. New sources default to disabled. This preserves the existing App slug, SQLite volume and saved provider settings. Retain a scoped backup for rollback. Home Assistant deployment and post-update verification are pending.
+
+## EPG and fixture coverage follow-up — 13 November 2026
+
+Baseline: 6471322, the checked v0.3.2 EPG repair branch.
+
+Downloaded guides from [IPTV-EPG.org](https://iptv-epg.org/guides) and analysed them with the app parser on 13 November at 08:45 GMT. Counts include regional and quality variants.
+
+| Market | Entries | Full 24h | Full 7 days |
+| --- | ---: | ---: | ---: |
+| Germany | 438 | 410 | 25 |
+| Italy | 306 | 289 | 123 |
+| Spain | 300 | 297 | 20 |
+| Netherlands | 184 | 183 | 0 |
+| Canada backup | 808 | 802 | 173 |
+
+Each of these samples had specific programme titles for every entry that met the 24-hour threshold. The dashboard now exposes generic-title gaps separately. That measure detects known placeholder titles and does not establish schedule accuracy. The five new guides are optional and for private collection.
+
+[OpenLigaDB](https://www.openligadb.de/) returned 56 DFB-Pokal, 182 Frauen-Bundesliga, 144 Champions League and 380 La Liga records for season 2026. For 13–20 November UTC the downloads contained 0, 8, 0 and 1 matches respectively. The Nations League endpoint returned an empty list and was left out. OpenLigaDB provides fixtures and results with ODbL attribution/share-alike. Existing selected leagues are retained.
+
+[Tennis API](https://docs.tennis-api.com/live-event-and-odds) documents a live singles board and upcoming ATP and WTA pages. The optional RapidAPI adapter makes three calls per refresh and uses a local cap of 40 against the documented free allowance of 50 per day. Upcoming coverage is capped at the first 50 per tour. Live state expires after 45 minutes and clears when a successful live-board refresh omits the match. The adapter was tested against synthetic payloads derived from the documented schema. A saved key is needed for an authenticated smoke test. ESPN's terms restrict automated extraction, so its undocumented scoreboard is not integrated. No odds or broadcaster claims are derived from the tennis data.
+
+HAOS deployment is pending. Roll back by restoring the prior app version and scoped backup. No SQLite schema changes.

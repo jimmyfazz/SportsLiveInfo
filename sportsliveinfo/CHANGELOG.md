@@ -2,6 +2,12 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.3 — Regional guides and fixture coverage
+
+- Add five opt-in regional guides and expose generic-title gaps in full schedules.
+- Add four selectable OpenLigaDB competitions and an optional keyed tennis adapter.
+- Expire reported tennis live status when its observation becomes stale.
+
 ## 0.3.2 — EPG coverage repairs
 
 - Replace unavailable EPG Share US1 and CA1 endpoints with US2 and CA2 under the saved source IDs.

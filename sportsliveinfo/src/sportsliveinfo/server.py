@@ -369,7 +369,7 @@ class UI(BaseHTTPRequestHandler):
         option_form = '<h3>TheSportsDB sports (one call per sport per day)</h3><div class="formrow">'
         option_form += ''.join('<label><input type="checkbox" name="tsdb" value="%s" %s> %s</label>' % (e(s), "checked" if s in chosen_sports else "", e(s)) for s in providers.THESPORTSDB_SPORTS)
         option_form += '</div><h3>OpenLigaDB leagues</h3><div class="formrow">'
-        option_form += ''.join('<label><input type="checkbox" name="old" value="%s" %s> %s</label>' % (e(l), "checked" if l in chosen_leagues else "", e(l)) for l in providers.OPENLIGADB_LEAGUES)
+        option_form += ''.join('<label><input type="checkbox" name="old" value="%s" %s> %s</label>' % (e(l), "checked" if l in chosen_leagues else "", e(label)) for l, (label, _) in providers.OPENLIGADB_LEAGUES.items())
         option_form += '</div><button type="submit">Save source options</button>'
         body += '</div><section class="card" style="margin-top:16px"><h2>Source options</h2>%s</section>' % self._form("options", option_form)
         body += '<h2 style="margin-top:28px">International television EPG sources</h2><p>Sources marked "verify" use a URL pattern that must pass Test EPG first. Optional, private guide collection only. Public re-publication of third-party programme text is DISABLED until verified rights are available. Source quality, geography and licence restrictions vary.</p><div class="grid">'
@@ -544,6 +544,16 @@ class UI(BaseHTTPRequestHandler):
                 body += '</table>'
             elif full.get("24h") == total:
                 body += '<p>All channels meet the 24-hour coverage threshold.</p>'
+            if "channels_with_full_specific_titles_24h" in q:
+                body += '<p>Channels with 24-hour coverage from specific titles: %s / %s.</p>' % (
+                    e(q["channels_with_full_specific_titles_24h"]), e(total))
+            generic_gaps = q.get("generic_title_gaps", [])
+            if generic_gaps:
+                body += '<h3>Full schedules with generic listings</h3><table><tr><th>Channel</th><th>Hours with specific titles</th></tr>'
+                for row in generic_gaps:
+                    body += '<tr><td>%s</td><td>%s h</td></tr>' % (
+                        e(row["name"]), e(row["specific_title_hours_24h"]))
+                body += '</table>'
             unmatched = q.get("unmatched_canonical_channels")
             if unmatched is not None:
                 body += '<p>Channels without a recognised service ID: %s / %s.</p>' % (e(unmatched), e(total))
