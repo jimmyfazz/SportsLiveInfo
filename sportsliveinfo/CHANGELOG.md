@@ -1,7 +1,13 @@
 # Changelog
 
-> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](../docs/CURRENT_STATUS.md).
+[SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
+
+## 0.3.2 — EPG coverage repairs
+
+- Replace unavailable EPG Share US1 and CA1 endpoints with US2 and CA2 under the saved source IDs.
+- Add optional UK and Australian IPTV-EPG.org guides and the EPG Share US sports guide for private collection.
+- Restore XML TV Fr and EPGTalk imports by removing their fixed XMLTV DTD marker before parsing. Other declarations and entities are still rejected.
+- Set source-specific import limits from measured guide sizes.
 
 ## 0.3.1 — Home Assistant dashboard maintenance
 
