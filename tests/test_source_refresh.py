@@ -31,6 +31,15 @@ class SourceRefreshTests(unittest.TestCase):
             self.engine._reserve_epg("farleyflex", scheduled=True)
         self.assertEqual(self.store.usage()["epg:farleyflex"], 2)
 
+    def test_collection_reports_deferral_when_every_guide_is_deferred(self):
+        self.store.configure({"setup_complete": True, "schedule": [], "epg": {"farleyflex": True}})
+        for _ in range(providers.EPG_DAILY_REQUEST_LIMIT):
+            self.store.increment("epg:farleyflex", providers.EPG_DAILY_REQUEST_LIMIT)
+        with patch.object(providers, "fetch") as fetch:
+            self.assertFalse(self.engine._collect_locked("epg"))
+        fetch.assert_not_called()
+        self.assertEqual(self.store.recent_jobs(1, provider="collector")[0]["state"], "deferred")
+
     def test_304_retains_the_guide_and_timestamp(self):
         self.store.configure({"schedule": []})
         now = datetime.now(timezone.utc)

@@ -438,9 +438,9 @@ class UI(BaseHTTPRequestHandler):
         jobs = self.store.recent_jobs(1, provider="collector")
         if jobs:
             job = jobs[0]
-            state = {"started": "Refreshing…", "degraded": "Partial refresh", "finished": "Refresh complete"}.get(
+            state = {"started": "Refreshing…", "degraded": "Partial refresh", "deferred": "Refresh deferred", "finished": "Refresh complete"}.get(
                 job["state"], job["state"].replace("_", " ").capitalize())
-            tone = {"degraded": "warn", "failed": "critical", "finished": "ok"}.get(job["state"], "")
+            tone = {"degraded": "warn", "deferred": "warn", "failed": "critical", "finished": "ok"}.get(job["state"], "")
             result += '<p><strong class="%s">%s</strong> · %s · <a href="?page=health">Details</a></p>' % (
                 tone, e(state), e(self._uk_timestamp(job["time"])))
             if job["details"]:

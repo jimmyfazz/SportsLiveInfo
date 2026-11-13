@@ -151,6 +151,7 @@ class Engine:
         # Each sports provider is its own lane; EPG guides share one sequential
         # lane so several large XMLTV parses never run at once on the mini PC.
         successes = 0
+        deferrals = 0
         with ThreadPoolExecutor(max_workers=max(1, min(6, len(sports) + 1)), thread_name_prefix="sli-lane") as pool:
             futures = [pool.submit(self._collect_sport, name, conf) for name in sports]
             if guides:
@@ -159,14 +160,16 @@ class Engine:
             for future in futures:
                 try:
                     result = future.result()
-                    if isinstance(result, list):
-                        successes += sum(bool(item) for item in result)
-                    else:
-                        successes += bool(result)
+                    results = result if isinstance(result, list) else [result]
+                    successes += sum(bool(item) for item in results)
+                    deferrals += sum(item is None for item in results)
                 except Exception as exc:  # A crashed lane must not mask missing data.
                     LOGGER.error("Collector lane failed (%s)", type(exc).__name__)
                     self.store.job("collector", "lane_error", type(exc).__name__)
         attempted = len(sports) + len(guides)
+        if attempted and deferrals == attempted:
+            self.store.job("collector", "deferred", f"{label}: all {attempted} sources deferred; last-good retained")
+            return False
         if not successes:
             state = "failed" if attempted else "no_sources"
             self.store.job("collector", state, "%s: %d of %d enabled sources refreshed; last-good retained" %
@@ -365,7 +368,7 @@ class Engine:
         backoff = self.store._get(provider_key) or ""
         if backoff > now.isoformat():
             self.store.job(name, "deferred", f"Provider quota or throttling; retry after {backoff}")
-            return False
+            return None
 
         planned = {item["scope"] for item in plan}
         cached = set()
@@ -415,8 +418,9 @@ class Engine:
             if not missing and cached:
                 self.store.job(name, "unchanged", "Using recently collected schedule")
                 return True
-            self.store.job(name, "deferred" if deferred and not failed else "failed", detail or "No request scopes configured")
-            return False
+            state = "deferred" if deferred and not failed else "failed"
+            self.store.job(name, state, detail or "No request scopes configured")
+            return None if state == "deferred" else False
         cutoff = datetime.now(timezone.utc) - timedelta(days=2)
         # A 200 OK with a partial free-plan response does NOT prove all other
         # fixtures in that competition/day have disappeared. Keep unexpired
@@ -564,7 +568,7 @@ class Engine:
             return True
         except QuotaExhausted as exc:
             self.store.job(name, "deferred", str(exc))
-            return False
+            return None
         except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, json.JSONDecodeError, ET.ParseError, zlib.error) as exc:
             reason = _guide_failure(exc)
             self.store.job(name, "failed", reason)

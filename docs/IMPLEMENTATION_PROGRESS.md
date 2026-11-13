@@ -21,7 +21,7 @@ An offline replay of sampled XMLTV files produced these counts. Each count is th
 | IPTV-EPG.org CA | 122,781 | 0 | 11 |
 | EPG Share US SPORTS1 | 102,292 | 0 | 0 |
 
-Python 3.12 compiled the package and passed 153 tests. The mappings match exact channel IDs within each source. The US SPORTS1 sample provided no verified canonical service IDs. Programme and fixture coverage, provider reachability from HAOS and the authenticated PandaScore response still need verification. Dedicated calendars for the remaining sports and event-specific boxing PPV broadcast confirmation remain open. Publication permissions are unchanged. The App uses the existing slug and database with no migration. Roll back through the previous App build or the App backup.
+Python 3.12 compiled the package and passed 154 tests. The mappings match exact channel IDs within each source. The US SPORTS1 sample provided no verified canonical service IDs. Programme and fixture coverage, provider reachability from HAOS and the authenticated PandaScore response still need verification. Dedicated calendars for the remaining sports and event-specific boxing PPV broadcast confirmation remain open. Publication permissions are unchanged. The App uses the existing slug and database with no migration. Roll back through the previous App build or the App backup.
 
 ## 13 November 2026 — 0.3.4 audit integration
 
