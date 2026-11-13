@@ -137,7 +137,21 @@ def channels_document():
             "quality_suffixes": ["hd", "fhd", "sd", "uhd", "4k", "hevc", "h265", "h264", "2160p", "1080p", "720p"],
             "synonyms": [["\\bbbc\\s*1\\b", "bbc one"], ["\\bbbc\\s*2\\b", "bbc two"], ["\\bitv\\s*one\\b", "itv 1"],
                          ["\\bitv\\s*([1-4])\\b", "itv $1"], ["\\brte\\s*2\\b", "rte 2"], ["be in sports", "bein sports"]],
-            "identity_bearing_never_stripped": ["+1", "+", "sports+", "region names", "numbers", "plus"],
+            "identity_bearing_never_stripped": ["+1", "+", "sports+", "region names", "numbers", "plus",
+                                                "(ie)/(roi) kept as 'roi'", "bracketed markets and cities, e.g. (MX), (METRO)",
+                                                "beIN feed letters (G)/(N)/(F)"],
+            "provider_annotations_ignored_for_matching": ["trailing *", "(UK)", "(GB)", "(From hh:mm UK)", "(Live Event Only)",
+                                                         "(Events Only)", "(X)", "(D)", "(M)", "' - HEVC' / ' - 4K'",
+                                                         "50fps/60fps/HDR/VIP/RAW/backup in the trailing run"],
+        },
+        "display_variants": {
+            "rule": "never merge or hide a provider channel for display; show base name plus variant tags in this order; "
+                    "identical labels within one category are numbered in provider order (' · 2')",
+            "tag_order": ["4K", "FHD", "HD", "SD", "HDR", "50fps/60fps", "HEVC", "Ireland", "from hh:mm", "Events only",
+                          "VIP", "RAW", "Backup", "Alt", "Alt feed (*)", "Source X/D/M"],
+            "separator": " · ",
+            "matching_vs_display": "normalised names decide which guide a channel uses (quality copies share one guide); "
+                                   "display labels keep every copy distinct",
         },
         "services": sorted(services.values(), key=lambda s: s["id"]),
         "source_crosswalk": crosswalk,
