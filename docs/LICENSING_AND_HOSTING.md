@@ -1,7 +1,7 @@
 # Licensing, provenance, private development and £0 hosting
 
 > **Current documentation context — reviewed 12 November 2026.** The public daily-feed destination already exists; it was README-only at this review. No new supplier rights clearance occurred. Private source visibility and public data rights are separate decisions.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 ## Core rule: free != republishable
 

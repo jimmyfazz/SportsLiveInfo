@@ -1,11 +1,17 @@
 # SportsLiveInfo — implementation progress and agent handover
 
-> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.1 source is present (13 Nov code audit fixes: see docs/CODE_AUDIT_AND_FIXES_2026-11-13.md). Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Updated:** 12 November 2026  
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
+
+## 13 November 2026 — 0.3.4 audit integration
+
+The integration combines mobile/coverage head `17786a8` and audit head `95f79d5`, with selected operator-dashboard behaviour and the older indexing branch’s differential tests. It keeps fixture retention for sources of unknown completeness and the source-specific XMLTV declaration allowlist. Removed the unused launcher, superseded architecture and data-contract proposals, and obsolete golden-feed assets. Earlier revisions remain in Git history.
+
+The upgrade uses the existing App slug and database. See [current status](CURRENT_STATUS.md) for open deployment checks and [operator instructions](../sportsliveinfo/DOCS.md) for backup and rollback.
 
 ## Collection consistency and EPG matching — 13 November 2026
 
@@ -38,6 +44,26 @@ Source research, 12 November: [dp247's Freeview file](https://github.com/dp247/F
 [EPGTalk](https://github.com/acidjesuz/EPGTalk) lists both configured filenames; keep them pending the new diagnostics. [iptv-org](https://github.com/iptv-org/epg) documents locally generated guides; the failing static Sky, French and Foxtel URLs remain unverified. Matt Huisman's [Foxtel](https://i.mjh.nz/Foxtel/) and [Kayo](https://i.mjh.nz/Kayo/) indexes list guide files but their forward coverage needs measuring before use. No new feed endpoints or redistribution permissions were added.
 
 Hong Kong channel identity: added 25 distinct Now Sports and beIN services from the [Hong Kong Communications Authority Now TV lineup](https://www.coms-auth.hk/filemanager/en/content_1788/info_doc.pdf) (December 2025). Numbered Premier League and 4K services stay distinct. Conflicting explicit geographic prefixes are rejected for market-scoped name matches; exact source ID crosswalks retain precedence. The additive channel registry and synthetic golden manifest were regenerated. Actual recognition counts on the two HAOS guides and B1G reader acceptance remain pending. No live guide or event records were added to GitHub.
+
+## Code audit and fixes — 13 November 2026 (v0.3.1)
+
+**Branch:** `claude/sportsliveinfo-b1g-android-syyo8j` (merged `main` `56ea1be`). **Status:** SOURCE IMPLEMENTED + LOCAL TESTED, **118/118** tests (Python 3.12.3 and 3.13). Report: [CODE_AUDIT_AND_FIXES_2026-11-13.md](CODE_AUDIT_AND_FIXES_2026-11-13.md).
+
+**Fixed:**
+- server/GUI S1–S9 and GUI-1 to GUI-9;
+- engine E-01 to E-05, E-08 and E-10;
+- feed/publisher FA-01 to FA-08 and FEED-1;
+- matching D1–D14;
+- new icon/logo.
+
+**Open:**
+- E-06/TF-14: EPG storage memory and lock contention;
+- a self-hosted guide (local-source) exception;
+- background jobs for long UI actions;
+- packaging hardening (pinned base image, CI docker build, secret scan);
+- post-publish anonymous verification.
+
+**Ownership note:** Codex-owned engine/feed/adapter files were edited at the owner's direct request; Codex cross-review requested before merge. **NOT RUN:** live provider requests, Docker build, HAOS Supervisor/Ingress, B1G devices.
 
 ## Current documentation reconciliation — 12 November 2026
 

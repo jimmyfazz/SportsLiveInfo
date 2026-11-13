@@ -1,22 +1,21 @@
 # SportsLiveInfo
 
-> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](docs/CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](docs/CURRENT_STATUS.md).
 
-SportsLiveInfo is an experimental **v0.3.0 Home Assistant OS App** for two equally required products: international full-channel EPG and multi-sport event intelligence. It collects centrally on the owner's always-on home mini PC; the planned ten B1G TV clients read shared static data and resolve playable channels locally.
+SportsLiveInfo is an experimental **v0.3.4 Home Assistant OS App** for two equally required products: international full-channel EPG and multi-sport event intelligence. It collects centrally on the owner's always-on home mini PC; the planned ten B1G TV clients read shared static data and resolve playable channels locally.
 
-**Current source and test status, reviewed 12 November 2026:** 16 sports adapter entries, 27 candidate EPG feeds, private coverage diagnostics, Live today/events UI, SQLite, scheduling and a rights-gated static feed writer exist. Python 3.12.15 validation: **88 tests passed**. HTTP-handler tests use an in-memory transport in this socket-restricted runner; see current status for limits. Docker/actual HAOS operation, live provider accuracy, source rights and B1G device integration remain unverified. See [current status and evidence](docs/CURRENT_STATUS.md).
+See [current status](docs/CURRENT_STATUS.md) for the combined audit changes, validation and open Home Assistant checks.
 
 | Repository | Visibility | Purpose |
 |---|---|---|
-| [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) | **Private; stays private** | Source and Home Assistant App installation package |
+| [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) | **Public** | Source and Home Assistant App installation package |
 | [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) | **Public** | Daily static feed destination; not an App installation repository |
 
 The public repository contained only its README when checked on 12 November 2026. The writer exists, but a live feed is not deployed. Token setup, successful GET tests and repository creation do not grant redistribution rights or authorize publication.
 
 ## Install and operate
 
-Follow the [private App installation and operator guide](sportsliveinfo/DOCS.md). Obtain the private source using your existing GitHub access and copy the `sportsliveinfo/` App directory into HAOS `local_apps/sportsliveinfo/`. Do not change source-repository visibility or use the public feed repo as an installation source. Actual installation acceptance remains open.
+Follow the [installation and operator guide](sportsliveinfo/DOCS.md) to update the existing local App in place or install SportsLiveInfo from the public App repository.
 
 The Ingress UI provides provider/source setup, separate Save/Test controls, schedule, Live today, events, EPG coverage, Publishing and Diagnostics. Optional sports-key settings are API-Sports, football-data.org and CricketData.org. GitHub credentials are only for optional rights-approved publishing. Secrets stay in private App storage and sensitive backups.
 

@@ -19,7 +19,7 @@ DEFAULT = {
                 "openligadb_leagues": list(providers.OPENLIGADB_DEFAULT_LEAGUES)},
     "keys": {},
     "schedule": ["04:00", "12:00", "17:00"],
-    # Separate public *data* destination, not the private Home Assistant App repository.
+    # Separate public *data* destination, separate from the Home Assistant App repository.
     # Credentials and publication approval remain unset on installation.
     "github": {"owner": "jimmyfazz", "repository": "LiveSports-EPG", "branch": "main",
                "token": "", "enabled": False, "auto_publish": False},
@@ -111,8 +111,18 @@ class Store:
                             for k, v in value.items())
                     ):
                         raise ValueError("Unknown provider or invalid enabled state")
-                    if key == "github" and any(k not in expected for k in value):
+                    if key == "github" and any(k not in expected or type(v) is not type(expected[k])
+                                               for k, v in value.items()):
                         raise ValueError("Unsupported publication setting")
+                    if key == "keys" and any(not isinstance(v, str) for v in value.values()):
+                        raise ValueError("Provider keys must be text")
+                    if key == "options":
+                        for option, values in value.items():
+                            allowed = {"thesportsdb_sports": providers.THESPORTSDB_SPORTS,
+                                       "openligadb_leagues": providers.OPENLIGADB_LEAGUES}.get(option)
+                            if (allowed is None or not isinstance(values, list)
+                                    or any(not isinstance(entry, str) or entry not in allowed for entry in values)):
+                                raise ValueError("Invalid source options")
                     config[key].update(value)
                 elif isinstance(expected, bool):
                     if type(value) is not bool:

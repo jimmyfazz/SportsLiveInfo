@@ -2,6 +2,13 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.4 — Collector and dashboard audit integration
+
+- Keep group source saves and independent refresh actions. Add collapsible source settings, UK-date event filtering and pagination.
+- Recalculate Live Today on view. Retain future fixtures when a provider omits them from a response of unknown completeness.
+- Recover from scheduler errors, isolate corrupt guides, reject expired guide probes and reduce the number of guide payloads held in memory.
+- Keep regional feed and sports coverage additions. Tighten fixture matching and add source health and publication diagnostics.
+
 ## 0.3.3 — Regional guides and fixture coverage
 
 - Add five opt-in regional guides and expose generic-title gaps in full schedules.

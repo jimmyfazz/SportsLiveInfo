@@ -16,6 +16,7 @@ COUNTRY_BY_SOURCE = {
     "fr_programmetv": "FR", "fr_telerama": "FR", "fr_xmltv": "FR", "epgshare_fr": "FR", "iptv_epg_fr": "FR",
     "epgshare_us": "US", "epgshare_us_sports": "US", "iptvorg_foxtel_au": "AU", "iptv_epg_au": "AU",
     "epgshare_hk": "HK", "iptv_epg_hk": "HK", "iptv_epg_ge": "GE", "epgshare_my": "MY",
+    "mjh_nz": "NZ", "mjh_au_sydney": "AU",
     "epgshare_ca": "CA", "epgshare_au": "AU", "epgshare_nz": "NZ", "epgshare_pt": "PT",
     "epgshare_pl": "PL", "epgshare_gr": "GR", "epgshare_sg": "SG", "epgshare_in": "IN",
 }
@@ -138,10 +139,10 @@ CHANNEL_FAMILIES = [
     ("peacock", "Peacock", r"^peacock\b"),
     ("paramount_plus", "Paramount+", r"^paramount ?\+"),
     ("fubo", "Fubo Sports", r"^fubo\b"),
-    ("us_networks", "US networks (ABC/CBS/NBC/Fox/USA)", r"^(?:abc|cbs|nbc|fox|usa network|tnt|tbs|nbcsn)\b(?! (?:sports? \d|footy|cricket|league))"),
+    ("us_networks", "US networks (ABC/CBS/NBC/Fox/USA)", r"^(?:abc|cbs|nbc|fox|usa network|tnt|tbs|nbcsn)\b(?! (?:sports?\b|footy|cricket|league))"),
     ("us_team_channels", "US league/team channels (MLB/NBA/WNBA/NFL/NHL)", r"^(?:mlb|nba|wnba|nfl|nhl)\b"),
     ("kayo_stan", "Kayo / Stan Sport (AU)", r"^(?:kayo|stan sports?)\b"),
-    ("sky_sport_nz", "Sky Sport (NZ)", r"^(?:nz:? )?sky sport (?:nz|[1-9]|now|select)\b"),
+    ("sky_sport_nz", "Sky Sport (NZ)", r"(?:^|\| )(?:nz\b.*\bsky sports?\b|sky sports? (?:\d+ )?nz\b|sky sport (?:now|select)\b)"),
     ("tennis_channel", "Tennis Channel", r"^tennis channel\b"),
     ("onefootball", "OneFootball", r"^onefootball\b"),
     ("coupang_play", "Coupang Play (KR)", r"^coupang\b"),
@@ -156,6 +157,8 @@ CHANNEL_FAMILIES = [
 ]
 _FAMILY_PATTERNS = [(fid, label, re.compile(pattern)) for fid, label, pattern in CHANNEL_FAMILIES]
 
+DECORATION = re.compile(r"\s*[\[(](?:vip|sd|hd|fhd|uhd|4k|hevc|backup|back up|alt|b|raw|multi|50 ?fps|60 ?fps|1080p|720p)[\])]\s*", re.I)
+TRAILING_JUNK = re.compile(r"\s+(?:vip|backup|50 ?fps|60 ?fps)$", re.I)
 QUALITY_SUFFIX = re.compile(r"\s+(?:hd|fhd|sd|uhd|4k|hevc|h265|h264|2160p|1080p|720p)$", re.I)
 COUNTRY_PREFIX = re.compile(r"^(uk|gb|fr|france|ie|irl|us|usa|ca|can|au|aus|nz|hk|hkg|my|mys|sg|ge|geo|pt|pl|gr|in|pk|ar|ara|arabic|mena|int|sports)\s*(?:[|:\-])\s*", re.I)
 COUNTRY_PREFIX_ALIASES = {
@@ -170,9 +173,11 @@ def normalized_name(name):
     """Remove safe decorations while retaining identity-bearing service variants."""
     value = unicodedata.normalize("NFKD", str(name))
     value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    value = DECORATION.sub(" ", value.replace("\u00ae", "").replace("\u2122", ""))
     value = value.casefold().replace("&", " and ").strip()
     value = COUNTRY_PREFIX.sub("", value)
     value = SPACES.sub(" ", value)
+    value = TRAILING_JUNK.sub("", value)
     while True:
         new = QUALITY_SUFFIX.sub("", value).strip()
         if new == value:
@@ -207,9 +212,15 @@ def canonical_channel(source_id, epg_id, display_name):
     return SERVICES.get(market, {}).get(normalized_name(display_name))
 
 
+_RAW_FAMILIES = {"sky_sport_nz"}  # need the market prefix that normalized_name() strips
+
+
 def channel_families(display_name):
     name = normalized_name(display_name)
-    return [fid for fid, _, pattern in _FAMILY_PATTERNS if pattern.search(name)]
+    raw = unicodedata.normalize("NFKD", str(display_name))
+    raw = SPACES.sub(" ", "".join(ch for ch in raw if not unicodedata.combining(ch)).casefold()).strip()
+    return [fid for fid, _, pattern in _FAMILY_PATTERNS
+            if pattern.search(name) or (fid in _RAW_FAMILIES and pattern.search(raw))]
 
 
 def _dt(value):
@@ -310,6 +321,8 @@ def analyze_guide(guide, now=None, detail_limit=30):
         "generic_title_gaps": detail_gaps[:detail_limit],
         "channels_needing_attention": breakdown[:detail_limit],
         "unmatched_canonical_channels": sum(not x["canonical_id"] for x in breakdown),
+        # How far ahead the guide really reaches; thin files (e.g. ~3 days) show up here.
+        "horizon_hours": round(max(((b - now).total_seconds() / 3600 for spans in grouped.values() for _, b in spans), default=0), 1),
         "matched_canonical_channels": sorted({x["canonical_id"] for x in breakdown if x["canonical_id"]}),
         "families": {fid: row for fid, row in families.items() if row["channels"]},
         "analysed_at": now.isoformat(timespec="seconds"),

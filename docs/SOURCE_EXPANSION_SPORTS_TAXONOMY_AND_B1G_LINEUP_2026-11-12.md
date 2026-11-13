@@ -1,7 +1,7 @@
 # SportsLiveInfo v0.3.0 — Source expansion, sports sub-categories and B1G lineup cross-reference
 
 > **Historical audit / receipt — reviewed 12 November 2026.** Preserved against its stated original revision. Findings, branch/merge positions, provider claims and pass counts below are historical, not freshly verified current facts. Current source is v0.3.0; the combined review attempted 86 tests (81 passed, five errors, three of those environment-blocked). Use CURRENT_STATUS for resolved/remaining work; no new live source, licence or device verification occurred.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Dated:** 12 November 2026 · **Branch:** `claude/sportsliveinfo-b1g-android-syyo8j`
 **Status:** SOURCE IMPLEMENTED + LOCAL TESTED (43/43 offline tests). **No live provider call was made from this environment** (outbound access to provider hosts is blocked here). Every new source is **disabled by default** and must pass the Ingress *Test connection / Test EPG* button on the HAOS mini PC before use. HAOS install, real quotas and live accuracy remain **NOT VERIFIED**.

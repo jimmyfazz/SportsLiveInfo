@@ -442,7 +442,12 @@ class EngineExpansionTests(unittest.TestCase):
         self.store.save_snapshot("sports", {"events": [ev(id="openligadb:1", source_id="openligadb", broadcast_status="single_guide_match",
                                                           broadcast_candidates=[{"channel_name": "Private"}], fetch_scope="league:bl1")]})
         commits = []
-        with patch.object(Engine, "_github_commit", side_effect=lambda *a: commits.append(a)):
+        class FixedClock(datetime):  # the fixture event is dated 14 Nov 2026; keep it inside the 8-day window
+            @classmethod
+            def now(cls, tz=None):
+                return NOW if tz is None else NOW.astimezone(tz)
+        with patch.object(Engine, "_github_commit", side_effect=lambda *a, **k: commits.append(a)), \
+             patch("sportsliveinfo.feed.datetime", FixedClock):
             Engine(self.store).publish()
         uploads = commits[0][4]
         payload = b"".join(d for p, d in uploads.items() if "/assets/events/" in p).decode()
@@ -450,6 +455,12 @@ class EngineExpansionTests(unittest.TestCase):
         self.assertIn("v1/manifest.json", uploads)
         for private in ("broadcast_candidates", "Private", "fetch_scope", "broadcast_status"):
             self.assertNotIn(private, payload)
+
+
+class FixedUiClock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return NOW if tz is None else NOW.astimezone(tz)
 
 
 class IngressExpansionTests(unittest.TestCase):
@@ -563,18 +574,20 @@ class IngressExpansionTests(unittest.TestCase):
                                        start_utc=start))
                   for name, sport, state, start in (
                       ("Upcoming football", "football", "scheduled", "2026-11-14T15:00:00+00:00"),
-                      ("Live football", "football", "live", "2026-11-14T15:30:00+00:00"),
+                      ("Live football", "football", "live", "2026-11-14T13:30:00+00:00"),
                       ("Finished football", "football", "finished", "2026-11-14T12:00:00+00:00"),
                       ("Upcoming basketball", "basketball", "scheduled", "2026-11-14T16:00:00+00:00"),
                   )]
         self.store.save_snapshot("today", linking.build_today(events, NOW))
-        page = self.get("?page=today&sport=football")
+        with patch("sportsliveinfo.server.datetime", FixedUiClock):
+            page = self.get("?page=today&sport=football")
         self.assertIn('value="football" selected', page)
         self.assertNotIn("Upcoming basketball", page)
         self.assertLess(page.index("Live football"), page.index("Upcoming football"))
         self.assertLess(page.index("Upcoming football"), page.index("<details><summary>Finished"))
         self.assertLess(page.index("<details><summary>Finished"), page.index("Finished football"))
-        self.assertIn("Upcoming basketball", self.get("?page=today&sport=unknown"))
+        with patch("sportsliveinfo.server.datetime", FixedUiClock):
+            self.assertIn("Upcoming basketball", self.get("?page=today&sport=unknown"))
 
     def test_mixed_fallback_competitions_on_saved_snapshot(self):
         events = [taxonomy.classify(ev(id=str(i), sport="basketball", competition=competition,
@@ -582,7 +595,8 @@ class IngressExpansionTests(unittest.TestCase):
                   for i, competition in enumerate(("NCAA", "LNB"))]
         self.store.save_snapshot("today", linking.build_today(events, NOW))
         self.store.save_snapshot("sports", {"events": events})
-        page = self.get("?page=today")
+        with patch("sportsliveinfo.server.datetime", FixedUiClock):
+            page = self.get("?page=today")
         self.assertIn("<strong>Other competitions</strong> <small>(2)</small>", page)
         self.assertNotIn("<strong>LNB</strong>", page)
         self.assertIn("Fixture 0", page)
@@ -613,11 +627,20 @@ class IngressExpansionTests(unittest.TestCase):
                   taxonomy.classify(ev(id="p1", competition="Premier League", competition_code="fd:PL", participants=["Arsenal", "Chelsea"]))]
         self.store.save_snapshot("today", linking.build_today(events, NOW))
         self.store.save_snapshot("sports", {"events": events})
-        page = self.get("?page=today")
+        class FixedClock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return NOW if tz is None else NOW.astimezone(tz)
+        with patch("sportsliveinfo.server.datetime", FixedClock):
+            page = self.get("?page=today")
+            filtered = self.get("?page=events&sport=football&category=football.premier_league")
         self.assertIn("Featured: England", page)
         self.assertIn("England (men) internationals", page)
-        filtered = self.get("?page=events&sport=football&category=football.premier_league")
         self.assertIn("1 of 2 events", filtered)
+        stale = self.get("?page=today")  # real clock: 13+ Nov is not the snapshot's day
+        if datetime.now(timezone.utc).date().isoformat() != "2026-11-14":
+            self.assertIn("The saved schedule is for", stale)
+            self.assertNotIn("Featured: England", stale)
 
 
 class CoverageFollowupTests(unittest.TestCase):

@@ -83,24 +83,29 @@ COMPETITIONS = {
         C("football.conference_league", "UEFA Conference League", 8,
           ["uefa europa conference league", "uefa conference league", "europa conference league", "conference league"],
           WORLD + ("",), ["as:848"]),
-        C("football.fa_cup", "FA Cup", 9, ["fa cup", "emirates fa cup", "the fa cup"], ENG + ("",), ["as:45"]),
+        C("football.fa_cup", "FA Cup", 9, ["fa cup", "emirates fa cup", "the fa cup", "english fa cup"], ENG + ("",), ["as:45"]),
         C("football.efl_cup", "EFL Cup (Carabao Cup)", 10,
           ["efl cup", "carabao cup", "league cup", "english league cup"], ENG + ("",), ["as:48"]),
         C("football.championship", "EFL Championship", 11,
           ["championship", "efl championship", "english league championship", "sky bet championship"], ENG + ("",),
           ["fd:ELC", "as:40"]),
-        C("football.league_one", "EFL League One", 12, ["league one", "efl league one", "english league 1"], ENG, ["as:41"]),
-        C("football.league_two", "EFL League Two", 13, ["league two", "efl league two", "english league 2"], ENG, ["as:42"]),
+        C("football.league_one", "EFL League One", 12, ["league one", "efl league one", "english league 1", "english league one"], ENG + ("",), ["as:41"]),
+        C("football.league_two", "EFL League Two", 13, ["league two", "efl league two", "english league 2", "english league two"], ENG + ("",), ["as:42"]),
         C("football.efl_trophy", "EFL Trophy", 14, ["efl trophy", "football league trophy"], ENG),
         C("football.community_shield", "Community Shield", 14, ["community shield", "fa community shield"], ENG + ("",)),
         C("football.wsl", "Women's Super League", 15,
-          ["womens super league", "fa womens super league", "wsl", "english womens super league", "barclays womens super league"], ENG + ("",)),
+          ["womens super league", "fa womens super league", "wsl", "english womens super league", "barclays womens super league", "fa wsl", "barclays wsl"], ENG + ("",)),
         C("football.womens_champions_league", "UEFA Women's Champions League", 16,
-          ["uefa womens champions league", "womens champions league"], WORLD + ("",)),
+          ["uefa womens champions league", "womens champions league", "uefa champions league women", "champions league women"], WORLD + ("",)),
         C("football.scottish_premiership", "Scottish Premiership", 17,
           ["premiership", "scottish premiership", "scottish premier league"], SCO + ("",)),
         C("football.scottish_cup", "Scottish Cup", 18, ["scottish cup", "fa cup"], SCO),
         C("football.scottish_league_cup", "Scottish League Cup", 18, ["scottish league cup", "league cup"], SCO),
+        C("football.womens_world_cup", "FIFA Women's World Cup", 19,
+          ["fifa womens world cup", "womens world cup", "world cup women", "fifa world cup women"], WORLD + ("",)),
+        C("football.womens_euro", "UEFA Women's Euro", 19,
+          ["uefa womens euro", "womens euro", "uefa womens championship", "euro championship women", "uefa euro women"], WORLD + ("",)),
+        C("football.womens_fa_cup", "Women's FA Cup", 16, ["womens fa cup", "fa cup women", "fa womens cup", "adobe womens fa cup"], ENG + ("",)),
         C("football.world_cup", "FIFA World Cup", 19, ["world cup", "fifa world cup"], WORLD + ("",), ["fd:WC", "as:1"]),
         C("football.euro", "UEFA European Championship", 19,
           ["euro championship", "european championship", "uefa european championship", "uefa euro"], WORLD + ("",), ["fd:EC", "as:4"]),
@@ -126,7 +131,7 @@ COMPETITIONS = {
           ["copa del rey", "coppa italia", "dfb pokal", "coupe de france", "knvb beker", "taca de portugal"], None, ["old:dfb"]),
         C("football.frauen_bundesliga", "Frauen-Bundesliga", 30,
           ["frauen bundesliga", "frauen fussballbundesliga"], ("germany",), ["old:ffb1"]),
-        C("football.mls", "Major League Soccer", 32, ["major league soccer", "mls"], ("usa", "")),
+        C("football.mls", "Major League Soccer", 32, ["major league soccer", "mls", "american major league soccer"], ("usa", "")),
         C("football.brasileirao", "Brazil Série A", 33, ["campeonato brasileiro serie a", "brasileirao", "serie a"], ("brazil",), ["fd:BSA"]),
         C("football.saudi_pro_league", "Saudi Pro League", 34, ["pro league", "saudi pro league", "roshn saudi league"], ("saudi arabia",)),
         C("football.libertadores", "Copa Libertadores", 34, ["copa libertadores", "conmebol libertadores"], WORLD + ("south america", "")),
@@ -144,12 +149,13 @@ COMPETITIONS = {
     ],
     "rugby_union": [
         C("rugby_union.six_nations", "Six Nations", 1, ["six nations", "six nations championship", "guinness six nations"], WORLD + ("",)),
-        C("rugby_union.womens_six_nations", "Women's Six Nations", 2, ["womens six nations", "guinness womens six nations"], WORLD + ("",)),
+        C("rugby_union.womens_six_nations", "Women's Six Nations", 2, ["womens six nations", "guinness womens six nations", "six nations women"], WORLD + ("",)),
+        C("rugby_union.six_nations_u20", "U20 Six Nations", 3, ["six nations u20", "u20 six nations", "under 20 six nations"], WORLD + ("",)),
         C("rugby_union.autumn_nations", "Autumn internationals", 2,
           ["autumn nations series", "autumn internationals", "quilter nations series", "nations championship"], WORLD + ("",)),
         C("rugby_union.world_cup", "Rugby World Cup", 2, ["rugby world cup", "world cup"], WORLD + ("",)),
         C("rugby_union.premiership", "Premiership Rugby", 3,
-          ["premiership rugby", "gallagher premiership", "premiership", "prem rugby"], ENG + ("",)),
+          ["premiership rugby", "gallagher premiership", "premiership", "prem rugby", "english premiership rugby"], ENG + ("",)),
         C("rugby_union.urc", "United Rugby Championship", 4, ["united rugby championship", "urc", "pro14"], WORLD + ("",)),
         C("rugby_union.champions_cup", "European Champions Cup", 5,
           ["european rugby champions cup", "champions cup", "investec champions cup", "heineken champions cup"], WORLD + ("",)),
@@ -315,8 +321,14 @@ NATIONAL_CATEGORIES = {
 # National sides only count as "internationals" where the competition is
 # plausibly international; a club called e.g. "Wales Bonner FC" never matches
 # because the participant name must be exactly the nation.
-_INTERNATIONAL_FOOTBALL = {"football.world_cup", "football.euro", "football.nations_league", "football.wc_qualifying",
+_WOMENS_CATEGORIES = {"football.womens_world_cup", "football.womens_euro", "football.womens_fa_cup",
+                      "football.wsl", "football.womens_champions_league", "football.nwsl"}
+_INTERNATIONAL_FOOTBALL = {"football.womens_world_cup", "football.womens_euro", "football.world_cup", "football.euro", "football.nations_league", "football.wc_qualifying",
                            "football.euro_qualifying", "football.international_friendly", "football.other"}
+_BOXING = re.compile(r"\b(?:boxing|wbc|wba|ibf|wbo|undisputed)\b")
+_WOMENS = re.compile(r"\b(?:women|womens|ladies|feminine|feminin|w)\b")
+_CLUBS = re.compile(r"\bclubs?\b")
+_WOMENS_NATION = {"england": "england_women", "scotland": "scotland_women", "wales": "wales_women"}
 _PPV = re.compile(r"\b(?:ppv|box office|pay per view)\b")
 _PUNCT = re.compile(r"[^a-z0-9 ]+")
 _SPACE = re.compile(r"\s+")
@@ -332,8 +344,9 @@ def norm(value):
 
 def sport_id(raw):
     value = norm(raw)
-    if value in SPORTS:
-        return value
+    for candidate in (value, value.replace(" ", "_")):
+        if candidate in SPORTS:
+            return candidate
     return SPORT_ALIASES.get(value, "other")
 
 
@@ -369,13 +382,16 @@ def classify(event):
     out = dict(event)
     sport = sport_id(event.get("sport"))
     name = norm(event.get("competition"))
+    if norm(event.get("sport")) == "fighting" and _BOXING.search(name + " " + norm(event.get("title"))):
+        sport = "boxing"
     country = norm(event.get("competition_country"))
     codes = [c for c in [event.get("competition_code")] if c]
     entry = None
     if sport == "rugby":
         # Provider did not state the code; only a named competition can decide it.
         for code in ("rugby_union", "rugby_league"):
-            entry = _match(COMPETITIONS[code], name, country, codes)
+            # A bare "Championship" exists in both codes; it cannot decide the code.
+            entry = None if name == "championship" else _match(COMPETITIONS[code], name, country, codes)
             if entry:
                 sport = code
                 break
@@ -385,7 +401,8 @@ def classify(event):
         category = (entry["id"], entry["label"], entry["priority"])
     else:
         category = (sport + ".other", event.get("competition") or "Other " + SPORTS[sport][0].lower(), 90)
-    nations = nation_tags(event.get("participants"))
+    womens = bool(_WOMENS.search(name)) or category[0] in _WOMENS_CATEGORIES
+    nations = [_WOMENS_NATION.get(n, n) if womens else n for n in nation_tags(event.get("participants"))]
     extra_tags = set()
     if sport in ("boxing", "mma") and _PPV.search(norm(" ".join(str(event.get(k) or "") for k in ("title", "competition", "event_type")))):
         extra_tags.add("ppv")
@@ -396,7 +413,7 @@ def classify(event):
         elif re.search(r"\bpremium\b", description):
             category = ("boxing.premium", "Premium boxing", 1)
     national = NATIONAL_CATEGORIES.get(sport, {})
-    international_context = sport != "football" or category[0] in _INTERNATIONAL_FOOTBALL
+    international_context = (sport != "football" or category[0] in _INTERNATIONAL_FOOTBALL) and not _CLUBS.search(name)
     for nation in nations:
         if nation in national and international_context:
             category = national[nation]

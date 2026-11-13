@@ -3,7 +3,7 @@
 # Deployment decision — Home Assistant App or Proxmox LXC
 
 > **Superseded reference — reviewed 12 November 2026.** Preserved as an earlier proposal, not installation or current wire-format instructions. Use the master roadmap, implemented sli/1.0 contract and private local App operator guide. UK-only/optional-B1/Proxmox-primary assumptions are superseded.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Research date:** 2026-11-12. **Status:** architecture proposal only; no installation or integration implemented.
 
@@ -40,7 +40,6 @@ Suggested relative tree (not present yet):
       sportsliveinfo/
         config.yaml
         Dockerfile
-        run.sh
         DOCS.md
     src/sportsliveinfo/
       core/

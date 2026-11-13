@@ -1,7 +1,7 @@
 # Current delivery sequence
 
 > **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Reviewed 12 November 2026.** The experimental v0.3.0 App is implemented in source; implementation has started and must not be restarted from an empty scaffold. See [current status](CURRENT_STATUS.md), [master roadmap](MASTER_IMPLEMENTATION_ROADMAP.md) and [package backlog](WORK_PACKAGE_BACKLOG.md) for evidence, detailed requirements and ownership.
 

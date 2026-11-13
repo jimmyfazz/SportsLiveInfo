@@ -1,7 +1,7 @@
 # SportsLiveInfo Home Assistant App — first-run setup wizard, credentials, scheduler, GitHub and notifications
 
 > **Current documentation context — reviewed 12 November 2026.** Basic setup, Save/Test, schedule and publishing UI exist. Advanced state/coverage controls and persistent notifications below are acceptance requirements, not all current controls. Source candidates named in the specification are not all implemented.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Specification date:** 12 November 2026  
 **Decision:** MANDATORY for the planned private Home Assistant OS App on the always-on home mini PC (direct HAOS installation, no Proxmox).  

@@ -1,7 +1,7 @@
 # Subscription-driven, multi-region EPG enrichment — mandatory scope
 
 > **Current documentation context — reviewed 12 November 2026.** Candidate multi-market collection is implemented, but real subscription-driven coverage/import and TV Guide integration remain unverified. Both general EPG and sports are required.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Decision 12 November 2026.** The owner wishes to serve up to ten personal B1G televisions using a single **Home Assistant OS mini-PC** collector. The collector must prioritise (1) comprehensive corrected EPG for **UK and French channels**, (2) other countries/channels genuinely found in the user's configured subscriptions, and (3) accurate Sports Today cards showing event, competitors, time and real playable broadcaster. Movie/series TMDB/OMDb/poster/hero lookup remains **in B1G**, outside SportsLiveInfo.
 

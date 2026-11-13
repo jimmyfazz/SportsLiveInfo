@@ -1,6 +1,6 @@
 name: SportsLiveInfo
 slug: sportsliveinfo
-version: "0.3.3"
+version: "0.3.4"
 description: International television EPG and multi-sport event intelligence
 url: https://github.com/jimmyfazz/SportsLiveInfo
 arch:
@@ -8,9 +8,10 @@ arch:
   - aarch64
 startup: application
 boot: auto
-init: false
+init: true
 ingress: true
 ingress_port: 8099
+watchdog: "tcp://[HOST]:[PORT:8099]"
 stage: experimental
 panel_icon: mdi:television-guide
 panel_title: SportsLiveInfo

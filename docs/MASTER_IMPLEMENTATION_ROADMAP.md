@@ -1,7 +1,7 @@
 # SportsLiveInfo — authoritative master architecture, construction sequence and rollout
 
 > **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Version:** plan 1.0, dated 12 November 2026  
 **Priority:** NORMATIVE BUILD PLAN. Supersedes earlier documents where they treat UK-only EPG, optional B1 consumption, or future-proofing of sports coverage as a lesser priority.  
@@ -158,7 +158,6 @@ One Home Assistant App, one SQLite/local cache and provider quota/scheduler coor
         sportsliveinfo/
           config.yaml
           Dockerfile
-          run.sh
           DOCS.md
       frontend/
         package.json              # optional small TS/Vite client

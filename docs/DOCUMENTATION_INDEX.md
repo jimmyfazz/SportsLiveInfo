@@ -1,8 +1,8 @@
 # Documentation index and precedence
 
-**Reconciled 12 November 2026 against main `579541fa9a8f7f0108e454f654221c01049b6e76`.** Every existing Markdown document was included. This index distinguishes current requirements from original research; it does not revalidate all external provider terms or the separate B1 codebase.
+**Reconciled 13 November 2026 for the v0.3.4 integration.**
 
-The source/installation repository [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is **PRIVATE and stays private**. The daily-feed repository [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is **PUBLIC**, checked README-only. The App operator guide documents private local delivery; no source visibility change is needed.
+SportsLiveInfo is the public App source repository. LiveSports-EPG is the separate public data destination. Installation and in-place update steps are in the [operator guide](../sportsliveinfo/DOCS.md).
 
 ## Precedence
 
@@ -19,7 +19,6 @@ The source/installation repository [SportsLiveInfo](https://github.com/jimmyfazz
 | [AGENTS.md](../AGENTS.md) | Current specification / guide |
 | [CLAUDE.md](../CLAUDE.md) | Current specification / guide |
 | [README.md](../README.md) | Current specification / guide |
-| [docs/ARCHITECTURE.md](ARCHITECTURE.md) | Superseded proposal / fallback |
 | [docs/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md](AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md) | Historical audit / receipt |
 | [docs/B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md](B1G_READ_ONLY_FEED_AND_INVENTORY_POLICY.md) | Current specification / guide |
 | [docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md) | Historical audit / receipt |
@@ -27,8 +26,8 @@ The source/installation repository [SportsLiveInfo](https://github.com/jimmyfazz
 | [docs/CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md](CHANNEL_IDENTITY_AND_EPG_ALLOCATION_SPEC.md) | Current specification / guide |
 | [docs/CODEX_B1G_SUBSCRIPTION_INVENTORY_HANDOVER.md](CODEX_B1G_SUBSCRIPTION_INVENTORY_HANDOVER.md) | Current specification / guide |
 | [docs/CODEX_CLAUDE_COLLABORATION.md](CODEX_CLAUDE_COLLABORATION.md) | Current specification / guide |
+| [Claude’s 13 November audit](CODE_AUDIT_AND_FIXES_2026-11-13.md) | Historical audit and integration input |
 | [docs/CURRENT_STATUS.md](CURRENT_STATUS.md) | Current implementation and evidence authority |
-| [docs/DATA_CONTRACT.md](DATA_CONTRACT.md) | Superseded proposal / fallback |
 | [docs/DELIVERY_PLAN.md](DELIVERY_PLAN.md) | Current specification / guide |
 | [docs/FEED_CONTRACTS_AND_PUBLICATION.md](FEED_CONTRACTS_AND_PUBLICATION.md) | Current specification / guide |
 | [docs/FEED_CONTRACT_SLI_V1.md](FEED_CONTRACT_SLI_V1.md) | Current specification / guide |
