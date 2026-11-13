@@ -141,7 +141,8 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertTrue(any(s["id"] == "ge.setanta.sports.1" for s in channels["services"]))
         self.assertTrue(any(f["id"] == "now_sports_hk" for f in channels["families"]))
         guide_ids = {g["id"] for g in channels["guide_catalogue"]}
-        self.assertTrue({"epgshare_hk", "iptv_epg_ge", "mjh_sky_uk"} <= guide_ids)
+        self.assertTrue({"epgshare_hk", "iptv_epg_ge", "mjh_nz", "mjh_au_sydney"} <= guide_ids)
+        self.assertNotIn("mjh_sky_uk", guide_ids)
         self.assertFalse(any(g["automatic_fallback"] for g in channels["guide_catalogue"]))
 
     def test_today_references_existing_events_and_featured_row(self):
