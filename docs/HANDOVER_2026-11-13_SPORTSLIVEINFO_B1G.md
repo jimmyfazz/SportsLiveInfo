@@ -39,6 +39,18 @@ PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests
 - All work is docs only, on the Claude branch, **not merged** into B1 `main`.
 - No Android code has been written. The Android Gradle build cannot run in the cloud; pure-Kotlin JVM tests can, using the Gradle-embedded kotlinc 2.0.21 and JUnit (`-language-version 1.9`).
 
+### 1.1 Verified after enabling the dictionary (13 Nov 20:55 UTC)
+
+- **Feed revision `cbbb9ca3`** (3,447 events) is published in format **`sli/1.2`** by 0.3.8, with capabilities `channel_identity` and `channel_dictionary`. All asset hashes verify, and the iptv-org attribution is present.
+- **Dictionary asset:** 10,264 channels (3.06 MB).
+- **Identity asset** (built over 27 guides on Home Assistant):
+  - 1,529 services, 1,520 of them linked across guides, covering 4,068 guide channels;
+  - 607 timeshift links;
+  - by market: GB 425, FR 341, CA 253, PL 164, AU 140, HK 102, DE 29.
+- **Guide fixes:**
+  - EPGShare NZ now imports (100 channels), so the XMLTV prologue fix worked.
+  - **mjh_sky_uk, mjh_nz and mjh_au_sydney still fail** with the generic "empty, invalid or blocked" message, so the cause is not DOCTYPE and not a parse error. Most likely `RedirectGuard` raises a ValueError because i.mjh.nz redirects to another host. **Next:** make the redirect/allow-list failure reason specific, confirm the target host, and add it to the allow-list only if it is a legitimate mirror.
+
 ## 2. What was built in SportsLiveInfo (versions 0.3.6–0.3.8)
 
 | Version | Feature | Files |
