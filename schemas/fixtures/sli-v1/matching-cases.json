@@ -106,6 +106,16 @@
    "epg_id": "",
    "name": "TNT Sports 8",
    "normalised": "tnt sports 8",
+   "canonical_id": "gb.tnt.sports.8",
+   "families": [
+    "tnt_sports"
+   ]
+  },
+  {
+   "source_id": "epgshare_us",
+   "epg_id": "",
+   "name": "TNT Sports 8",
+   "normalised": "tnt sports 8",
    "canonical_id": null,
    "families": [
     "tnt_sports"

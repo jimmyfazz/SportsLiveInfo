@@ -156,6 +156,8 @@ class SourceRefreshTests(unittest.TestCase):
 
     def test_source_specific_services_do_not_match_other_feeds_or_alternates(self):
         self.assertEqual(guide.canonical_channel("iptv_epg_gb", "TNTSports8.uk", "UK - TNT Sports 8"), "gb.tnt.sports.8")
-        self.assertIsNone(guide.canonical_channel("mjh_sky_uk", "TNTSports8.uk", "UK - TNT Sports 8"))
+        # The UK name resolves in UK guides only (0.3.12 added TNT Sports 5-10 to the UK registry).
+        self.assertEqual(guide.canonical_channel("epgtalk_uk", "", "UK - TNT Sports 8"), "gb.tnt.sports.8")
+        self.assertIsNone(guide.canonical_channel("epgshare_us", "", "TNT Sports 8"))
         self.assertEqual(guide.canonical_channel("epgshare_ca", "TSN.4.HD.ca2", "TSN 4 HD"), "ca.tsn.4")
         self.assertIsNone(guide.canonical_channel("epgshare_us", "ESPN2.(Alternate).us2", "ESPN2 (Alternate)"))

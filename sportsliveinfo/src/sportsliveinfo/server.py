@@ -648,7 +648,11 @@ class UI(BaseHTTPRequestHandler):
 
     def _event_row(self, event, fmt="%d %b %H:%M %Z", show_sport=False):
         sources = event.get("sources") or [event.get("source_id", "")]
-        confidence = "%s · %s" % (event.get("fixture_confidence", "reported"), ", ".join(sources))
+        if event.get("origin") == "guide_listing":
+            # Not from an event source: the TV guides list it as live (private, never published).
+            confidence = "Listed live in TV guide · %s" % ", ".join(event.get("epg_sources") or [])
+        else:
+            confidence = "%s · %s" % (event.get("fixture_confidence", "reported"), ", ".join(sources))
         if event.get("start_conflict"):
             confidence += " · start time disagreement"
         state = event.get("live_state", "")
