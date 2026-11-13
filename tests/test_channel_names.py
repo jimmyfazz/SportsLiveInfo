@@ -17,8 +17,8 @@ class MatchingKeyTests(unittest.TestCase):
         self.assertEqual(normalized_name("(FR) (M) France 2"), "france 2")
         self.assertEqual(normalized_name("beIN SPORTS 1 (G) - HEVC"), "bein sports 1 (g)")
         self.assertEqual(normalized_name("Premier Sports 1 FHD (IE)"), "premier sports 1 roi")
-        self.assertEqual(normalized_name("(MX) (IZ) Canal 6 (METRO)"), "(mx) (iz) canal 6 (metro)")
-        self.assertEqual(normalized_name("98.1 Pearl FM (720p)"), "98.1 pearl fm")
+        self.assertEqual(normalized_name("(QX) (ZZ) Canal 9 (CENTRO)"), "(qx) (zz) canal 9 (centro)")
+        self.assertEqual(normalized_name("99.5 Example FM (720p)"), "99.5 example fm")
         self.assertEqual(normalized_name("That&apos;s TV"), "that's tv")
         self.assertNotEqual(normalized_name("Sky Sports Main Event +1"), normalized_name("Sky Sports Main Event"))
         self.assertNotEqual(normalized_name("BBC One Scotland HD"), normalized_name("BBC One HD"))
@@ -35,15 +35,15 @@ class DisplayLabelTests(unittest.TestCase):
             "BBC Three · HD · from 19:00", "Premier Sports 1 · FHD · Ireland", "Sky Sports+ 01 · Events only"])
 
     def test_identical_visible_names_are_numbered_never_dropped(self):
-        self.assertEqual(display_labels(["US A&E", "US A&E ", "CA TSN1 (HD)", "CA TSN1 HD"]),
-                         ["US A&E", "US A&E · 2", "CA TSN1 · HD", "CA TSN1 · HD · 2"])
+        self.assertEqual(display_labels(["Example One", "Example One ", "Example Sport 2 (HD)", "Example Sport 2 HD"]),
+                         ["Example One", "Example One · 2", "Example Sport 2 · HD", "Example Sport 2 · HD · 2"])
 
     def test_identity_parts_stay_in_the_base_name(self):
-        self.assertEqual(channel_variant("beIN SPORTS 2 (N) - 4K")["label"], "beIN SPORTS 2 (N) · 4K")
-        self.assertEqual(channel_variant("UK: BEIN SPORTS HD EN 1")["label"], "BEIN SPORTS EN 1 · HD")
-        self.assertEqual(channel_variant("(MX) (IZ) Canal 6 (METRO)")["label"], "(MX) (IZ) Canal 6 (METRO)")
+        self.assertEqual(channel_variant("beIN SPORTS 3 (N) - 4K")["label"], "beIN SPORTS 3 (N) · 4K")
+        self.assertEqual(channel_variant("UK: SAMPLE SPORTS HD EN 3")["label"], "SAMPLE SPORTS EN 3 · HD")
+        self.assertEqual(channel_variant("(QX) (ZZ) Canal 9 (CENTRO)")["label"], "(QX) (ZZ) Canal 9 (CENTRO)")
         self.assertEqual(channel_variant("Channel 4 +1 HD")["base"], "Channel 4 +1")
-        self.assertEqual(channel_variant("HD Retro")["base"], "HD Retro")      # leading word may be the brand
+        self.assertEqual(channel_variant("HD Example")["base"], "HD Example")      # leading word may be the brand
 
     def test_label_is_never_empty(self):
         self.assertEqual(channel_variant("HD")["base"], "HD")

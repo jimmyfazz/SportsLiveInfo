@@ -193,8 +193,8 @@ CHANNEL_FAMILIES = [
 _FAMILY_PATTERNS = [(fid, label, re.compile(pattern)) for fid, label, pattern in CHANNEL_FAMILIES]
 
 DECORATION = re.compile(r"\s*[\[(](?:vip|sd|hd|fhd|uhd|4k|hdr|hevc|backup|back up|alt|b|raw|multi|50 ?fps|60 ?fps|1080p|720p)[\])]\s*", re.I)
-# Provider annotations that never change the service. Exact forms only: "(MX)", "(DET)" or a
-# city in brackets are market/location identity and must survive.
+# Provider annotations that never change the service. Exact forms only: a bracketed market
+# code or a city in brackets is market/location identity and must survive.
 ANNOTATION = re.compile(r"\s*\((?:uk|gb|x|d|m|from [^)]*|(?:live )?events? only|live event only)\)\s*", re.I)
 IRISH_FEED = re.compile(r"\s*\((?:ie|roi)\)\s*", re.I)
 TRAILING_JUNK = re.compile(r"\s+(?:vip|backup|raw|50 ?fps|60 ?fps)$", re.I)

@@ -138,7 +138,7 @@ def channels_document():
             "synonyms": [["\\bbbc\\s*1\\b", "bbc one"], ["\\bbbc\\s*2\\b", "bbc two"], ["\\bitv\\s*one\\b", "itv 1"],
                          ["\\bitv\\s*([1-4])\\b", "itv $1"], ["\\brte\\s*2\\b", "rte 2"], ["be in sports", "bein sports"]],
             "identity_bearing_never_stripped": ["+1", "+", "sports+", "region names", "numbers", "plus",
-                                                "(ie)/(roi) kept as 'roi'", "bracketed markets and cities, e.g. (MX), (METRO)",
+                                                "(ie)/(roi) kept as 'roi'", "bracketed markets and cities, e.g. (XX), (CITY)",
                                                 "beIN feed letters (G)/(N)/(F)"],
             "provider_annotations_ignored_for_matching": ["trailing *", "(UK)", "(GB)", "(From hh:mm UK)", "(Live Event Only)",
                                                          "(Events Only)", "(X)", "(D)", "(M)", "' - HEVC' / ' - 4K'",
