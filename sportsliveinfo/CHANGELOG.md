@@ -2,6 +2,17 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.8 — UK and Europe channel identification
+
+- New optional **channel identity dictionary** for UK and Europe, built from the public-domain iptv-org database. It is off until you enable it under Sources. When on, it downloads about 3 MB at most once a day, using conditional requests and keeping the last good copy.
+  - It covers about 10,000 channels and 13,000 regional, HD and +1 feeds, with alternative names, rebrands, closures, genre and website.
+  - Pan-regional channels such as beIN, DAZN and Eurosport are included through feeds that broadcast into Europe, with region codes expanded to countries.
+  - It is published as feed asset `dictionary` (format `sli/1.2`, capability `channel_dictionary`). A reference resolver gives B1G the exact lookup order and confidence rules.
+- **Measured on a real 7,701-channel UK and Europe lineup** (private, not committed): channels identified by name rose from 37.9 % to 54.8 %. Every one of 70 hand-checked matches was correct. Examples: France 50 → 61 %, Spain 0 → 59 %, Italy 38 → 72 %, Scandinavia 12 → 43 %.
+- **Provider prefix grammar:** "|NO|", "VIP RU |", "C+PL|", "ES TI|", "[M+]", "(VF)/(OP)/(M)", "[IT-EN]" and "[Multi-Language]" are now understood. Mis-encoded accents ("DÃ©couverte") are repaired, broken-export fragments are removed, and French "et" is treated as "&". A bare country code such as "IT " is removed only when it matches the channel's own market, so "Al Jazeera" and "De Ochtend" are untouched.
+- Guides that start with the standard `<!DOCTYPE tv SYSTEM "xmltv.dtd">` prologue are now accepted from every source; embedded DTDs and entities are still refused. This is the likely cause of the Matt Huisman Sky UK, NZ and Sydney and EPGShare NZ failures. Guide failures now give a specific reason: blocked declaration, not XMLTV, empty, not well-formed, or truncated.
+- Retired four dead guides that iptv-org no longer hosts (HTTP 404): programme-tv and Télérama (France), Sky UK and Foxtel. iptv-epg.org and EPGShare cover the same markets. Retired sources disappear from saved choices automatically.
+
 ## 0.3.7 — Channel identity across guides
 
 - New channel identity graph. After each guide refresh, channels in different guides that show the same programmes at the same times, and whose names agree apart from decoration (HD, TV, country prefixes), are linked as one service. B1G can then use another guide's data for a provider channel whose guide ID comes from a different guide family.

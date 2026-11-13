@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sli-dictionary.schema.json",
+  "title": "SportsLiveInfo channel identity dictionary (sli.dictionary/1)",
+  "description": "UK and Europe channels from the public-domain iptv-org database: names, alternative names, feeds (regional/HD/+1) with broadcast areas, network, categories, website, closures and rebrands. Readers resolve a provider channel name within its market with market_key() and the published rules.",
+  "type": "object",
+  "required": ["schema", "source", "market_countries", "bare_market_codes", "rules", "channels"],
+  "properties": {
+    "schema": {"const": "sli.dictionary/1"},
+    "source": {"type": "object", "required": ["name", "licence", "url"]},
+    "market_countries": {"type": "object"},
+    "bare_market_codes": {"type": "object"},
+    "rules": {"type": "object", "required": ["lookup", "confidence", "closed", "precedence"]},
+    "channels": {"type": "array", "items": {"type": "object", "required": ["id", "name", "country"],
+      "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "country": {"type": "string"},
+                     "alt_names": {"type": "array", "items": {"type": "string"}},
+                     "categories": {"type": "array", "items": {"type": "string"}},
+                     "feeds": {"type": "array", "items": {"type": "object", "required": ["id", "name"],
+                       "properties": {"areas": {"type": "array", "items": {"type": "string"}}}}}}}}
+  }
+}

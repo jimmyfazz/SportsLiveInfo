@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 from . import __version__, providers, taxonomy
 from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, SERVICES, SOURCE_ID_CROSSWALK
 
-FORMAT_MAJOR, FORMAT_MINOR = 1, 1  # 1.1: optional `identity` asset (channel_identity)
+FORMAT_MAJOR, FORMAT_MINOR = 1, 2  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset
 ROOT = "v1"
 LONDON = ZoneInfo("Europe/London")
 
@@ -180,6 +180,15 @@ def identity_document(store):
                                    for s in used if s in providers.EPG])
 
 
+def dictionary_document(store, conf):
+    """Published UK/Europe channel dictionary (public-domain iptv-org database), when the owner enabled it."""
+    if not conf.get("dictionary", {}).get("iptvorg"):
+        return None
+    snapshot = store.snapshot("channel-dictionary")
+    document = (snapshot or {}).get("data", {}).get("document") if snapshot else None
+    return document if isinstance(document, dict) and document.get("channels") else None
+
+
 def _event_public(event):
     row = {k: event[k] for k in EVENT_FIELDS if k in event and event[k] not in (None, "", [])}
     # A cached event must not become a "verified broadcaster" merely
@@ -247,6 +256,9 @@ def build_feed(store, now=None, previous_revision=None):
     identity_doc = identity_document(store)
     if identity_doc:
         add("identity", identity_doc, "sli.identity/1", False)
+    dictionary_doc = dictionary_document(store, conf)
+    if dictionary_doc:
+        add("dictionary", dictionary_doc, "sli.dictionary/1", False)
     for day in window:
         rows = sorted(by_day.get(day, []), key=lambda e: (e["start_utc"], e["id"]))
         add("events:" + day, {"schema": "sli.events-day/1", "date": day, "timezone": "Europe/London", "events": rows},
@@ -295,6 +307,7 @@ def build_feed(store, now=None, previous_revision=None):
         "capabilities": ["taxonomy", "channel_registry", "channel_families", "guide_catalogue", "events_by_day",
                          "today", "source_health", "fixture_corroboration"]
                         + (["channel_identity"] if identity_doc else [])
+                        + (["channel_dictionary"] if dictionary_doc else [])
                         + (["verified_broadcasts"] if any(e["broadcast_verified"] for e in events) else []),
         "assets": assets,
         "coverage": {"events": len(events), "today": len(todays), "by_sport": dict(sorted(by_sport.items())),
@@ -306,7 +319,9 @@ def build_feed(store, now=None, previous_revision=None):
         "rights": {"events": {"approved_sources": sorted(approved), "omitted_unapproved_sources": omitted},
                    "epg_programmes": "not_published", "broadcast_candidates": "not_published",
                    "attribution": [{"source": s, "text": ATTRIBUTION[s][0], "licence": ATTRIBUTION[s][1]}
-                                   for s in sorted({providers.SPORT_FAMILY.get(a, a) for a in approved}) if s in ATTRIBUTION]},
+                                   for s in sorted({providers.SPORT_FAMILY.get(a, a) for a in approved}) if s in ATTRIBUTION]
+                                  + ([{"source": "iptv_org_database", "text": "Channel dictionary from the iptv-org database",
+                                       "licence": "Unlicense (public domain)"}] if dictionary_doc else [])},
         "display_policy": {"sports_today_body_cards": 10, "ppv_pinned_extra_card": True, "featured_tags": featured_tags,
                            "user_settings_override": True},
         "notices": [] if events else ["No rights-approved sporting events in this revision; registry assets remain valid."],

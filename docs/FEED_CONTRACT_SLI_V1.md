@@ -62,6 +62,23 @@ JSON is UTF-8, compact, keys sorted. The SHA-256 in the manifest covers the exac
 
 SportsLiveInfo **must not** make a breaking change inside `v1/`. A future `v2/` lives beside `v1/` until all TVs are updated.
 
+| `dictionary` (since 1.2, capability `channel_dictionary`) | `sli.dictionary/1` | no | **UK and Europe channel dictionary** from the public-domain iptv-org database (when the owner enables it): channel id, name, alternative names, country, network, owners, categories, website, launched, closed/replaced_by, and feeds (regional/HD/+1) with broadcast-area countries. Includes `market_countries`, `bare_market_codes` and lookup `rules` |
+
+### 4.0 Using the dictionary (B1G reader)
+
+1. Determine the channel's market from the provider category (e.g. "UK |" → GB, "INT \| France" → FR) or from its name prefix ("|NO|" → NO).
+2. Compute `market_key(name, market)`: the published normalisation, after removing a bare upper-case code equal to the market.
+3. Look up, in order:
+   - exact normalised name, alternative name, or "base + feed" name of a channel in `market_countries[market]`, in list order (own country first), allowing a no-spaces fallback;
+   - then decoration-only equality;
+   - then channels whose feeds broadcast into those countries.
+4. One channel id is **high** confidence. Several ids are **ambiguous**: never apply them automatically.
+5. Precedence: below user manual mappings, provider tvg-id exact and `channels.source_crosswalk`.
+6. A resolved id may select a guide whose channel id equals it (many guides use these ids), or link through `identity` members.
+7. **Closed channels** never supply a guide; they only explain a name via `replaced_by`.
+8. For channels without any guide, `name`, `network`, `categories` and `website` may be shown as an information card.
+9. Attribution "Channel dictionary from the iptv-org database" (Unlicense) is listed in `rights.attribution`.
+
 ### 4.1 Using the identity graph (B1G reader)
 
 The identity graph lets a provider tvg-id from one guide family use another guide's rows for the same channel:

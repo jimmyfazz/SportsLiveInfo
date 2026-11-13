@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "schemas" / "fixtures" / "sli-v1"
 SCHEMAS = {"sli.manifest/1": "sli-manifest", "sli.taxonomy/1": "sli-taxonomy", "sli.channels/1": "sli-channels",
            "sli.events-day/1": "sli-events-day", "sli.today/1": "sli-today", "sli.health/1": "sli-health",
-           "sli.identity/1": "sli-identity"}
+           "sli.identity/1": "sli-identity", "sli.dictionary/1": "sli-dictionary"}
 NOW = datetime(2026, 11, 14, 14, 0, tzinfo=timezone.utc)
 _spec = importlib.util.spec_from_file_location("feed_fixtures", ROOT / "tools" / "generate_feed_fixtures.py")
 fixtures_tool = importlib.util.module_from_spec(_spec)
@@ -89,7 +89,7 @@ class GoldenFixtureContractTests(unittest.TestCase):
             schema = load_schema(asset["schema"])
             validate(json.loads(data), schema, schema)
             kinds.add(asset["kind"].split(":")[0])
-        self.assertEqual(kinds, {"taxonomy", "channels", "identity", "events", "today", "health"})
+        self.assertEqual(kinds, {"taxonomy", "channels", "identity", "dictionary", "events", "today", "health"})
         self.assertEqual(sum(a["kind"].startswith("events:") for a in self.manifest["assets"]), 8)
 
     def asset(self, kind):
@@ -159,7 +159,8 @@ class GoldenFixtureContractTests(unittest.TestCase):
                          (1, "ignore", "other"))
         self.assertEqual(m["rights"]["epg_programmes"], "not_published")
         self.assertEqual({a["source"] for a in m["rights"]["attribution"]},
-                         {"api_sports", "cricketdata", "football_data", "jolpica", "openf1", "thesportsdb"})
+                         {"api_sports", "cricketdata", "football_data", "jolpica", "openf1", "thesportsdb",
+                      "iptv_org_database"})
         jolpica = next(a for a in m["rights"]["attribution"] if a["source"] == "jolpica")
         self.assertEqual(jolpica["licence"], "CC BY-NC-SA 4.0")
         self.assertTrue({"taxonomy", "channel_registry", "guide_catalogue", "today"} <= set(m["capabilities"]))

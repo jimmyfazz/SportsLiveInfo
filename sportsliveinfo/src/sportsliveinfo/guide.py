@@ -201,6 +201,42 @@ TRAILING_JUNK = re.compile(r"\s+(?:vip|backup|raw|50 ?fps|60 ?fps)$", re.I)
 QUALITY_SUFFIX = re.compile(r"\s+(?:hd|fhd|sd|uhd|4k|hdr|hevc|h265|h264|2160p|1080p|720p|vip|backup|raw|50 ?fps|60 ?fps)$", re.I)
 COUNTRY_PREFIX = re.compile(r"^(uk|gb|fr|france|ie|irl|us|usa|ca|can|au|aus|nz|hk|hkg|my|mys|sg|ge|geo|pt|pl|gr|in|pk|ar|ara|arabic|mena|int|sports)\s*(?:[|:\-])\s*", re.I)
 BRACKET_COUNTRY = re.compile(r"^\((uk|gb|fr|ie|us|ca|au|nz|hk|my|sg|ge|pt|pl|gr|in|pk)\)\s*", re.I)
+# European provider prefixes: only with "|" or ":" (or a spaced " - ") after the code, so
+# names such as "No-Limit TV" or "De Ochtend" survive.
+_EU = r"(?:de|at|ch|es|it|nl|be|se|sw|no|dk|fi|tr|trk|al|ro|bg|hu|cz|sk|ru|ukr|lu|pt|pl|gr|fr|uk|ie)"
+_LEADING_MARKERS = re.compile(
+    r"^\s*(?:[\u2022\u25cf\u2605\-]+\s*)?(?:"
+    r"\|" + _EU + r"\|\s*|\[" + _EU + r"\]\s*|\[m\+\]\s*|\((?:vf|op|m|c\+fr|c\+pl)\)\s*|ti\s*[|:]\s*|"
+    r"(?:vip\s+)?(?:c\+)?" + _EU + r"(?:\s+ti)?\s*[|:]+\s*|" + _EU + r"\s+-\s+|\(" + _EU + r"\)\s*)", re.I)
+_LANGUAGE_TAG = re.compile(r"\s*\[(?:[a-z]{2}(?:-[a-z]{2})?|multi-?language)\]\s*", re.I)
+_EXPORT_JUNK = re.compile(r'^[^"]{0,80}",\s*')
+# Bare upper-case market codes ("IT Rai Movie") are stripped only when they match the
+# channel's market (market_key); "Al Jazeera" or "No Limit" are never touched.
+BARE_MARKET_CODES = {"GB": {"UK", "GB"}, "IE": {"IE"}, "FR": {"FR", "BE", "CH"}, "DE": {"DE", "AT", "CH"},
+                     "ES": {"ES"}, "IT": {"IT"}, "PT": {"PT"}, "NL": {"NL", "BE"}, "PL": {"PL"},
+                     "SE": {"SE", "SW"}, "NO": {"NO"}, "DK": {"DK"}, "FI": {"FI"}, "TR": {"TR", "TRK"},
+                     "GR": {"GR"}, "RO": {"RO"}, "BG": {"BG"}, "HU": {"HU"}, "CZ": {"CZ"}, "SK": {"SK"},
+                     "AL": {"AL"}, "RU": {"RU"}, "UA": {"UKR", "UA"}}
+
+
+def repair_text(text):
+    """Undo common mis-encoding ("DÃ©couverte" -> "Découverte") and broken-export junk."""
+    value = str(text)
+    if "\u00c3" in value or "\u00c2" in value:
+        try:
+            value = value.encode("latin-1").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+    return _EXPORT_JUNK.sub("", value)
+
+
+def _strip_leading_markers(value):
+    for _ in range(4):
+        new = _LEADING_MARKERS.sub("", value, count=1)
+        if new == value:
+            break
+        value = new
+    return value
 COUNTRY_PREFIX_ALIASES = {
     "uk": "gb", "france": "fr", "irl": "ie", "usa": "us", "can": "ca",
     "aus": "au", "hkg": "hk", "mys": "my", "geo": "ge",
@@ -211,7 +247,9 @@ GENERIC_PROGRAMME = re.compile(r"^(?:live (?:football|sport|sports|rugby|cricket
 
 def normalized_name(name):
     """Remove safe decorations while retaining identity-bearing service variants."""
-    value = unicodedata.normalize("NFKD", html.unescape(str(name)))
+    value = _strip_leading_markers(repair_text(html.unescape(str(name))))
+    value = _LANGUAGE_TAG.sub(" ", value)
+    value = unicodedata.normalize("NFKD", value)
     value = "".join(ch for ch in value if not unicodedata.combining(ch))
     value = value.replace("*", " ")
     irish = bool(IRISH_FEED.search(value))     # Irish feed of a UK service: identity-bearing, kept as "roi"
@@ -219,6 +257,7 @@ def normalized_name(name):
     value = ANNOTATION.sub(" ", value)
     value = DECORATION.sub(" ", value.replace("\u00ae", "").replace("\u2122", ""))
     value = value.casefold().replace("&", " and ").strip()
+    value = re.sub(r"\s+et\s+", " and ", value)          # French "Chasse et Peche" = "Chasse & Peche"
     value = BRACKET_COUNTRY.sub("", value)
     value = COUNTRY_PREFIX.sub("", value)
     value = SPACES.sub(" ", value)
@@ -284,6 +323,15 @@ def display_labels(names):
         seen[label] += 1
         out.append(label if seen[label] == 1 else "%s · %d" % (label, seen[label]))
     return out
+
+
+def market_key(name, market):
+    """normalized_name after removing a bare upper-case code that equals the channel's market."""
+    value = repair_text(html.unescape(str(name)))
+    match = re.match(r"^\s*([A-Z]{2,3})\s+(?=\S)", value)
+    if match and match.group(1) in BARE_MARKET_CODES.get(str(market or "").upper(), ()):
+        value = re.sub(r"^\s*[|:\-]+\s*", "", value[match.end():])
+    return normalized_name(value)
 
 
 def canonical_channel(source_id, epg_id, display_name):

@@ -115,9 +115,20 @@ GUIDE_B = {"source_id": "epgtalk_uk",
            "programmes": _schedule("SkySpMainEvHD.uk", NOW) + _schedule("SkySpMainEv1.uk", NOW, offset_minutes=60)}
 
 
+# Tiny public-domain dictionary sample (same shape as the iptv-org database files).
+DICT_CHANNELS = """id,name,alt_names,network,owners,country,categories,is_nsfw,launched,closed,replaced_by,website
+SkySportsMainEvent.uk,Sky Sports Main Event,,,Sky,UK,sports,FALSE,,,,
+CanalPlusSport.fr,Canal+ Sport,,,Canal+,FR,sports,FALSE,1998-08-31,,,
+beINSports1.qa,beIN Sports 1,,,beIN Media Group,QA,sports,FALSE,,,,
+"""
+DICT_FEEDS = """channel,id,name,alt_names,is_main,broadcast_area,timezones,languages,format
+beINSports1.qa,France,France,,FALSE,c/FR,Europe/Paris,fra,1080i
+"""
+
+
 def build():
     """Return (manifest, files) for the fixed fixture day."""
-    from sportsliveinfo import feed, identity
+    from sportsliveinfo import dictionary, feed, identity
     from sportsliveinfo.engine import Engine
     from sportsliveinfo.guide import analyze_guide
     from sportsliveinfo.storage import Store
@@ -125,7 +136,8 @@ def build():
         store = Store(Path(tmp) / "fixture.sqlite3")
         store.configure({"setup_complete": True, "schedule": ["04:00", "12:00", "17:00"],
                          "sports": {name: True for name in SNAPSHOTS} | {"jolpica": True},
-                         "epg": {"farleyflex": True, "epgtalk_uk": True}, "publication_approvals": sorted(SNAPSHOTS)})
+                         "epg": {"farleyflex": True, "epgtalk_uk": True}, "publication_approvals": sorted(SNAPSHOTS),
+                         "dictionary": {"iptvorg": True}})
         for name, events in SNAPSHOTS.items():
             store.save_snapshot("sports:" + name, {"events": events, "source_id": name})
         store.save_snapshot("epg:farleyflex", GUIDE)
@@ -134,6 +146,8 @@ def build():
         store.save_snapshot("epg-quality:epgtalk_uk", analyze_guide(GUIDE_B, now=NOW))
         document, report = identity.build_from_store(store, ["farleyflex", "epgtalk_uk"], now=NOW)
         store.save_snapshot("channel-identity", {"document": document, "report": report})
+        store.save_snapshot("channel-dictionary", {"document": dictionary.build_document(DICT_CHANNELS, DICT_FEEDS),
+                                                   "meta": {"channels": 3}})
         Engine(store)._materialize(now=NOW)
         return feed.build_feed(store, now=NOW)
 
