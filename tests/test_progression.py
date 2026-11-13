@@ -26,8 +26,11 @@ class InternationalEpgTests(unittest.TestCase):
         self.assertEqual(canonical_channel("farleyflex", "", "UK | Sky Sports Main Event FHD"), "gb.sky.sports.main_event")
         self.assertEqual(canonical_channel("fr_programmetv", "", "FR: Canal+ Sport HD"), "fr.canal.sport")
         self.assertEqual(canonical_channel("farleyflex", "", "BBC 1"), "gb.bbc.one")
-        for bad in ["BBC One Scotland", "BBC One +1", "Sky Sports+", "Sky Sports News +1", "Sky News", "Sky Sports Premier League UHD +1"]:
+        for bad in ["BBC One +1", "Sky Sports News +1", "Sky News", "Sky Sports Premier League UHD +1", "BBC One Narnia"]:
             self.assertIsNone(canonical_channel("farleyflex", "", bad), bad)
+        # Identity-bearing qualifiers give their own service, never the parent or a sibling.
+        self.assertEqual(canonical_channel("farleyflex", "", "BBC One Scotland"), "gb.bbc.one.scotland")
+        self.assertEqual(canonical_channel("farleyflex", "", "Sky Sports+"), "gb.sky.sports.plus")
         for bad in ["Canal+ Sport 360 +1", "beIN Sports 4", "beIN Sports 1 +1", "RMC Sport 2 UHD +1"]:
             self.assertIsNone(canonical_channel("fr_programmetv", "", bad), bad)
         self.assertIsNone(canonical_channel("fr_telerama", "", "Sky Sports Main Event"))
