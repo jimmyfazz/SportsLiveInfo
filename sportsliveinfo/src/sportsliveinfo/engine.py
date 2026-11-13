@@ -22,6 +22,7 @@ from .storage import utcnow
 from .guide import analyze_guide
 
 LOGGER = logging.getLogger(__name__)
+COLLECTION_SCOPES = {"both": "Sports and EPG", "sports": "Sports", "epg": "EPG"}
 LONDON = ZoneInfo("Europe/London")
 # Minimum seconds between calls to one provider (published per-minute limits).
 PACING = {"thesportsdb": 2.1, "football_data": 6.5, **{n: 6.1 for n in providers.SPORTS if n.startswith("api_sports")}}
@@ -80,14 +81,19 @@ class Engine:
         finally:
             self._busy.release()
 
-    def _collect_locked(self):
+    def _collect_locked(self, scope="both"):
         conf = self.store.config()
         if not conf["setup_complete"]:
             self.store.job("collector", "skipped", "Setup not completed")
             return False
-        self.store.job("collector", "started")
+        label = COLLECTION_SCOPES[scope]
+        self.store.job("collector", "started", label)
         sports = [n for n, on in conf["sports"].items() if on and n in providers.SPORTS]
         guides = [n for n, on in conf["epg"].items() if on and n in providers.EPG]
+        if scope == "sports":
+            guides = []
+        elif scope == "epg":
+            sports = []
         # Each sports provider is its own lane; EPG guides share one sequential
         # lane so several large XMLTV parses never run at once on the mini PC.
         successes = 0
@@ -108,8 +114,8 @@ class Engine:
         attempted = len(sports) + len(guides)
         if not successes:
             state = "failed" if attempted else "no_sources"
-            self.store.job("collector", state, "%d of %d enabled sources refreshed; last-good retained" %
-                           (successes, attempted))
+            self.store.job("collector", state, "%s: %d of %d enabled sources refreshed; last-good retained" %
+                           (label, successes, attempted))
             return False
         try:
             self._materialize()
@@ -118,10 +124,11 @@ class Engine:
             self.store.job("collector", "failed", "Combined snapshot update failed; previous dashboard retained")
             return False
         state = "finished" if successes == attempted else "degraded"
-        self.store.job("collector", state, "%d of %d sources refreshed; older last-good retained as needed" %
-                       (successes, attempted))
+        self.store.job("collector", state, "%s: %d of %d sources refreshed; older last-good retained as needed" %
+                       (label, successes, attempted))
         github = conf["github"]
-        if github.get("enabled") and github.get("auto_publish") and conf.get("publication_approvals"):
+        if (scope == "both" and github.get("enabled") and github.get("auto_publish")
+                and conf.get("publication_approvals")):
             try:
                 self.publish()
             except (ValueError, RuntimeError, OSError) as exc:
@@ -315,7 +322,7 @@ class Engine:
         _, url = providers.EPG[name]
         max_bytes, max_programmes = providers.EPG_LIMITS.get(name, providers.DEFAULT_EPG_LIMIT)
         try:
-            self.store.increment("epg:" + name, 4)
+            self.store.increment("epg:" + name, providers.EPG_DAILY_REQUEST_LIMIT)
             raw = providers.fetch(url, max_bytes=max_bytes)
             parsed = providers.decode_xmltv(raw, name, max_programmes=max_programmes)
             if not parsed["programmes"]:
@@ -444,7 +451,7 @@ class Engine:
             _, url = providers.EPG[name]
             max_bytes, max_programmes = providers.EPG_LIMITS.get(name, providers.DEFAULT_EPG_LIMIT)
             try:
-                self.store.increment("epg:" + name, 4)
+                self.store.increment("epg:" + name, providers.EPG_DAILY_REQUEST_LIMIT)
                 guide = providers.decode_xmltv(providers.fetch(url, max_bytes=max_bytes), name, max_programmes=max_programmes)
                 if not guide["programmes"]:
                     raise ValueError("Empty EPG programme list")
@@ -455,18 +462,24 @@ class Engine:
                 return "%s EPG test unsuccessful; see Diagnostics" % name
         raise ValueError("Unknown provider")
 
-    def start_collection(self):
+    def start_collection(self, scope="both"):
+        if scope not in COLLECTION_SCOPES:
+            raise ValueError("Unknown refresh scope")
         # Reserve the job slot before threading: multiple UI presses must not
         # incorrectly report that additional refreshes have been scheduled.
         if not self._busy.acquire(blocking=False):
             return False
         def worker():
             try:
-                self._collect_locked()
+                self._collect_locked(scope)
             finally:
                 self._busy.release()
         thread = threading.Thread(target=worker, name="sportsliveinfo-collect", daemon=True)
-        thread.start()
+        try:
+            thread.start()
+        except RuntimeError:
+            self._busy.release()
+            raise
         return True
 
     def run_scheduler(self):

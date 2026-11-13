@@ -67,6 +67,7 @@ EPG_LIMITS = {
     "iptvorg_foxtel_au": (40_000_000, 250_000),
 }
 EPG_LIMITS.update({"epgshare_" + cc.lower(): (40_000_000, 250_000) for cc in EPGSHARE_MARKETS})
+EPG_DAILY_REQUEST_LIMIT = 4
 DEFAULT_EPG_LIMIT = (14_000_000, 100_000)
 # XML TV Fr lists an expanded France-only file of about 70 MiB.
 EPG_EXPANDED_LIMITS = {"fr_xmltv": 85_000_000}

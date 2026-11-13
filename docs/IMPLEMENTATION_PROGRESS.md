@@ -15,6 +15,8 @@ EPG matching parses each fixture time once, skips expired programmes using an en
 
 Follow-up on baseline `49e6795ce7df695ed903afdb901fb7e1e5cb1caa`: Overview reads its three related snapshots in one SQLite statement. Feed builds similarly read combined sports and source snapshots together, fetching timestamps only for raw provider snapshots. Provider health can still show newer attempts while a refresh is in progress. The keyed provider form validates first and saves its enable switch and credential together. Python 3.12 compile and 100 tests passed, including byte-identical golden feed fixtures and regression tests for timestamp-only reads and rejected key edits. Live HAOS verification remains pending.
 
+Manual refresh follow-up on `0fbbcc6e430eef914563f465fe94076cfcb52e2e`: Overview offers Sports-only and EPG-only refreshes. Both use the existing worker lock and rebuild the dashboard from last-good inputs. Scoped refreshes call only the selected engine and skip automatic publication. Source cards show the last successful refresh, latest recorded activity and remaining local UTC-day requests. The existing scheduled collection path still refreshes both engines. Python 3.12 compile and all 103 tests passed. No provider, schema or source-rights changes. Live HAOS verification remains pending.
+
 ## v0.3.1 dashboard maintenance — 12 November 2026
 
 Baseline: private main `56ea1bee0611d1343f4a05f2d7983e146f415606`. The live v0.3.0 HAOS snapshot showed 1,223 sports events and eight EPG guides. This maintenance build fixes the fallback labels, zero rendering and misleading full-coverage rows using existing snapshots. It adds no provider requests, licence changes, schema changes or storage migrations.

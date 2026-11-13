@@ -17,6 +17,7 @@
 - Skip expired guide programmes before comparing fixture titles to programme text.
 - Read dashboard snapshots together and fetch only provider timestamps where the feed health report needs no raw payload.
 - Validate key changes before saving provider toggles, then save both together.
+- Add manual Sports-only and EPG-only refreshes and show last-good imports, latest activity and local request budgets on source cards.
 - Keep the same App slug and persistent SQLite path for in-place updates. The feed fixture updates the producer version and channel registry.
 
 ## Documentation reconciliation — 12 November 2026 (no runtime version change)

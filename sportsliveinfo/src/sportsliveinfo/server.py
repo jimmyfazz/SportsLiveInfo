@@ -223,7 +223,7 @@ class UI(BaseHTTPRequestHandler):
             elif action == "collect":
                 if not self.store.config()["setup_complete"]:
                     raise ValueError("Finish initial setup first")
-                started = self.engine.start_collection()
+                started = self.engine.start_collection(value("scope") or "both")
                 page = "dashboard"
                 message = "Refresh started. Check source history shortly" if started else "A refresh is already running"
             elif action == "publish":
@@ -302,7 +302,11 @@ class UI(BaseHTTPRequestHandler):
                 e(job["state"].replace("_", " ").capitalize()), e(job["time"]),
                 " · " + e(job["details"]) if job["details"] else "")
         result += '<p class="warn">TV broadcaster confirmation is not yet implemented in the live adapters. All unverified sporting events are deliberately non-playable in the planned B1G feed.</p>'
-        result += self._form("collect", '<button type="submit">Refresh both engines now</button>')
+        result += self._form("collect", '<div class="formrow">'
+                             '<button type="submit" name="scope" value="both">Refresh both engines now</button>'
+                             '<button type="submit" class="secondary" name="scope" value="sports">Refresh sports</button>'
+                             '<button type="submit" class="secondary" name="scope" value="epg">Refresh EPG</button>'
+                             '</div>')
         result += '</section><div class="grid" style="margin-top:16px"><section class="card"><h2>Sports coverage</h2><p>%s</p></section><section class="card"><h2>EPG coverage</h2><p>%s</p></section></div>' % (
             e(", ".join(s["id"] + " (%s)" % s["events"] for s in sport["data"].get("sources", [])) if sport else "No sporting source collected yet"),
             e(", ".join(s["id"] + " (%s programmes)" % s["programmes"] for s in sources) or "No EPG source collected yet"))
@@ -321,7 +325,24 @@ class UI(BaseHTTPRequestHandler):
         form = self._form("bulk_sources", content, '<input type="hidden" name="group" value="%s">' % e(group))
         return '<section class="card"><h3>%s</h3>%s</section>' % (e(title), form)
 
+    @staticmethod
+    def _source_status(snapshot, job, remaining):
+        result = '<p class="help">Last successful refresh: %s · %s requests remaining today (UTC)</p>' % (
+            e(snapshot["updated_at"] if snapshot else "None"), e(remaining))
+        if job:
+            result += '<p class="help">Latest activity: %s · %s%s</p>' % (
+                e(job["state"].replace("_", " ")), e(job["time"]),
+                " · " + e(job["details"]) if job["details"] else "")
+        return result
+
     def sources(self, config):
+        snapshots = self.store.read_snapshots(timestamps_only=(
+            *("sports:" + name for name in providers.SPORTS), *("epg:" + name for name in providers.EPG),
+        ))
+        usage = self.store.usage()
+        latest = {}
+        for job in self.store.recent_jobs(300):
+            latest.setdefault(job["provider"], job)
         body = '<h2>Sporting event APIs</h2><p>Keys are entered once on Home Assistant, never on the ten televisions. Each Save preserves keys for other providers; no-key services are clearly labelled. One API-Sports key serves every API-Sports sport (each sport has its own free daily allowance).</p><div class="grid">'
         body += self._bulk_sources(config, "keyless_sports", "Sports providers without API keys",
                                    "Choose sources individually or tick all, then save the group once.")
@@ -340,7 +361,9 @@ class UI(BaseHTTPRequestHandler):
             test_button = self._form("test_source", '<button class="secondary" type="submit">Test connection (uses 1 quota call)</button>',
                 '<input type="hidden" name="kind" value="sports"><input type="hidden" name="provider" value="%s">' % e(name))
             body += '<section class="card"><h3>%s</h3><p class="help">Endpoint: %s</p>%s%s</section>' % (
-                e(label), e(urllib.parse.urlsplit(url).hostname), content, test_button)
+                e(label), e(urllib.parse.urlsplit(url).hostname), self._source_status(
+                    snapshots.get("sports:" + name), latest.get(name), max(0, limit - usage.get(name, 0))
+                ) + content, test_button)
         options = config.get("options", {})
         chosen_sports, chosen_leagues = set(options.get("thesportsdb_sports", [])), set(options.get("openligadb_leagues", []))
         option_form = '<h3>TheSportsDB sports (one call per sport per day)</h3><div class="formrow">'
@@ -355,8 +378,11 @@ class UI(BaseHTTPRequestHandler):
         for name, (label, url) in providers.EPG.items():
             test_button = self._form("test_source", '<button class="secondary" type="submit">Test EPG (downloads guide)</button>',
                 '<input type="hidden" name="kind" value="epg"><input type="hidden" name="provider" value="%s">' % e(name))
-            body += '<section class="card"><h3>%s</h3><p class="help">Source: %s</p>%s</section>' % (
-                e(label), e(urllib.parse.urlsplit(url).hostname), test_button)
+            body += '<section class="card"><h3>%s</h3><p class="help">Source: %s</p>%s%s</section>' % (
+                e(label), e(urllib.parse.urlsplit(url).hostname), self._source_status(
+                    snapshots.get("epg:" + name), latest.get(name),
+                    max(0, providers.EPG_DAILY_REQUEST_LIMIT - usage.get("epg:" + name, 0)),
+                ), test_button)
         return body + '</div><script>' + BULK_SELECTION_SCRIPT + '</script>'
 
     @staticmethod

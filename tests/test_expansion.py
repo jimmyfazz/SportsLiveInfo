@@ -366,6 +366,23 @@ class EngineExpansionTests(unittest.TestCase):
         self.assertEqual(len(snap["scopes_ok"]), 2)
         self.assertEqual(len(snap["scopes_failed"]), 4)
 
+    def test_scoped_refresh_calls_only_selected_engine_and_skips_publishing(self):
+        self.store.configure({"setup_complete": True, "epg": {"farleyflex": True},
+                              "publication_approvals": ["jolpica"],
+                              "github": {"enabled": True, "auto_publish": True}})
+        engine = Engine(self.store)
+        with patch.object(engine, "_collect_sport", return_value=True) as sports, patch.object(
+                engine, "_collect_epg", return_value=True) as epg, patch.object(engine, "publish") as publish:
+            self.assertTrue(engine._collect_locked("sports"))
+            self.assertEqual(sports.call_args.args[0], "jolpica")
+            epg.assert_not_called()
+            sports.reset_mock()
+            self.assertTrue(engine._collect_locked("epg"))
+            sports.assert_not_called()
+            epg.assert_called_once_with("farleyflex")
+            publish.assert_not_called()
+        self.assertIn("EPG:", self.store.recent_jobs(1, provider="collector")[0]["details"])
+
     def test_batch_read_can_fetch_guide_timestamp_without_decoding_payload(self):
         self.store.save_snapshots({"sports": {"events": []}, "epg:farleyflex": {"programmes": [1]}})
         snapshots = self.store.read_snapshots(products=("sports", "today"), timestamps_only=("epg:farleyflex",))
@@ -466,6 +483,22 @@ class IngressExpansionTests(unittest.TestCase):
         self.assertNotIn("shared-secret", sources)
         self.assertIn("EPG Share HK1", sources)
         self.assertIn("Setanta", sources)
+
+    def test_source_cards_show_remaining_budget_and_latest_failure(self):
+        self.store.save_snapshot("epg:farleyflex", {"programmes": []})
+        self.store.increment("epg:farleyflex", providers.EPG_DAILY_REQUEST_LIMIT)
+        self.store.job("farleyflex", "failed", "Upstream returned HTTP 404")
+        page = self.get("?page=sources")
+        self.assertIn("3 requests remaining today (UTC)", page)
+        self.assertIn("Upstream returned HTTP 404", page)
+
+    def test_refresh_form_passes_scope_to_collector(self):
+        self.store.configure({"setup_complete": True})
+        with patch.object(Engine, "start_collection", return_value=True) as start:
+            response = self.post({"action": "collect", "scope": "epg"})
+        start.assert_called_once_with("epg")
+        self.assertIn("Refresh started", response)
+        self.assertIn('name="scope" value="sports"', response)
 
     def test_invalid_key_does_not_apply_provider_toggle(self):
         self.store.configure({"sports": {"football_data": True}, "keys": {"football_data": "saved-key"}})
