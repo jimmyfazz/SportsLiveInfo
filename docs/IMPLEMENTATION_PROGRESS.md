@@ -262,6 +262,22 @@ TheSportsDB daily API samples returned athletics, esports, golf, darts and snook
 
 Added optional Athletics, Bowling, eSports and Boxing filters. Boxing distinguishes explicit PPV and premium labels, and a mixed Fighting record with explicit boxing wording routes to Boxing. No broadcast or access entitlement is inferred. Independent boxing card, ring-walk, regional PPV and bowling sources remain open.
 
+## Event-to-channel matcher benchmark — 13 November 2026
+
+Work branch: `codex/event-channel-matcher-2026-11-13`, based on deployed main `c71b954`.
+
+Implemented stricter event/team matching (distinctive team tokens and exact aliases; generic directional tokens do not identify a side), competition-age/gender variant checks, sport-appropriate channel filtering, radio/shopping rejection, and stable channel resolution through the broadcaster registry, optional public iptv-org dictionary and curated identity graph. No guide text or private channel inventory is stored in this repository.
+
+Reproduced the requested inputs: `LiveSports-EPG` revision `1fe6052e6bcaa722b30d` (14 and 15 November event assets) and the three supplied public XMLTV guides. Parsing used `providers.decode_xmltv()` with a 160,000-programme cap; the largest guide parsed 101,618 rows. The event assets contain 2,521 records; the measured high-priority team-fixture cohort is 172 records (two or more participants, taxonomy priority ≤20). This cohort definition is explicit and is **not** the handover's 38-fixture denominator, whose selection rule was not supplied; therefore the earlier “1 of 38” baseline is not directly comparable and is not claimed as reproduced.
+
+On this cohort, 6 fixtures had strict team-title guide hits and all 6 resolve to stable channel ids after the change (10 candidate channel links; 5 via registry and 5 via public dictionary). The prior run on the same downloaded inputs found the same 6 title hits but only 1 mapped fixture and 5 `matching_channel_unmapped`; the new mapping path recovers those five. No emitted candidate used a radio/shopping channel or a channel with an incompatible sport family. Synthetic tests cover these hard negatives, generic “North/West” names, age/gender variants, dictionary identity and curated identity mapping.
+
+Measured proxy precision is 6/6 fixture-title hits meeting the strict team/title and channel-sport eligibility rules, and 10/10 emitted channel candidates have a stable registry/dictionary mapping. This is **not independently verified broadcaster/stream precision**: XMLTV proves only that a guide lists the event on a channel, not that the provider's stream carries it. The observed cohort hit rate is 6/172 (3.5%), but most cohort fixtures may not appear in these guides; it must not be described as guide-present recall. Of the six observed title hits, the matcher maps all six (6/6 guide-title-hit mapping recall). No false positive was observed in this sample; sample size is small.
+
+Validation: `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests -v` — 205 tests passed; `PYTHONPATH=sportsliveinfo/src python3 -m compileall -q sportsliveinfo/src tests` — passed. The raw feeds, guide names/programme text and benchmark script were kept outside the repository.
+
+**Pending owner decision D8:** whether the public feed may carry these guide-listed but unverified event→channel links as canonical ids plus confidence (never programme text), or whether they must remain private on Home Assistant. No links have been published. HA backup and deployment have not been performed.
+
 ## Mobile Overview
 
 The Overview now puts refresh status and controls ahead of four linked metrics, separates provider-reported and estimated live counts, and uses readable source rows with the latest collection outcome and saved import time. The mobile navigation has three main tabs and a More menu. Desktop retains the full navigation. API usage remains in Diagnostics.
