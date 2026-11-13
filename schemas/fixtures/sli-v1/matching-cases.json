@@ -37,7 +37,7 @@
    "epg_id": "",
    "name": "Sky Sports+",
    "normalised": "sky sports+",
-   "canonical_id": null,
+   "canonical_id": "gb.sky.sports.plus",
    "families": [
     "sky_sports",
     "sky_sports_plus"
@@ -66,7 +66,7 @@
    "epg_id": "",
    "name": "BBC One Scotland",
    "normalised": "bbc one scotland",
-   "canonical_id": null,
+   "canonical_id": "gb.bbc.one.scotland",
    "families": [
     "uk_ie_fta"
    ]

@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from . import __version__, providers, taxonomy
-from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, SERVICES, SOURCE_ID_CROSSWALK
+from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, REGIONAL_PARENTS, REGIONAL_RULES, SERVICES, SOURCE_ID_CROSSWALK
 
 FORMAT_MAJOR, FORMAT_MINOR = 1, 2  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset
 ROOT = "v1"
@@ -119,6 +119,9 @@ def channels_document():
             services.setdefault(service_id, {"id": service_id, "market": COUNTRY_BY_SOURCE[source_id],
                                              "names": [channel_id]})
         crosswalk.append({"source_id": source_id, "source_url": providers.EPG[source_id][1], "ids": ids})
+    for service_id, (parent, region) in REGIONAL_PARENTS.items():
+        row = services.setdefault(service_id, {"id": service_id, "market": "GB", "names": []})
+        row.update(parent=parent, region=region)
     guides = []
     for gid, (label, url) in providers.EPG.items():
         guides.append({"id": gid, "label": label, "url": url, "market": COUNTRY_BY_SOURCE.get(gid),
@@ -154,6 +157,19 @@ def channels_document():
                                    "display labels keep every copy distinct",
         },
         "services": sorted(services.values(), key=lambda s: s["id"]),
+        "regional_services": {
+            "rules": [{"pattern": pattern, "service": target} for pattern, target in REGIONAL_RULES],
+            "rule_syntax": "java/ecmascript regex, full match on the normalised name; {0} is capture group 1; "
+                           "applies to UK-market names only, after the services name table",
+            "irish_names_in_uk_guides": ["rte one", "rte 2", "tg4", "virgin media one"],
+            "english_regions": "carry network sport and resolve to the network id",
+            "nations": "Scotland, Wales and Northern Ireland versions are separate services with parent and region; "
+                       "a provider channel is never merged with another region",
+            "event_allocation": "a broadcast candidate names the parent (coverage 'network') only when the guides show "
+                                "every observed nation carrying the event, or a same-slot shortened title (simulcast); "
+                                "nations that showed something else are listed in not_on. Otherwise each carrying "
+                                "nation is its own candidate (coverage 'regional', parent_channel_id)",
+        },
         "source_crosswalk": crosswalk,
         "families": [{"id": fid, "label": label, "pattern": pattern, "pattern_syntax": "java/ecmascript regex, find() on normalised name"}
                      for fid, label, pattern in CHANNEL_FAMILIES],

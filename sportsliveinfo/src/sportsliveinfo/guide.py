@@ -43,7 +43,8 @@ SERVICES = {
         "sky sports action": "gb.sky.sports.action",
         "sky sports news": "gb.sky.sports.news",
         "sky sports box office": "gb.sky.sports.box_office",
-        "sky sports +": "gb.sky.sports.plus",
+        "sky sports +": "gb.sky.sports.plus", "sky sports+": "gb.sky.sports.plus",
+        "bbc alba": "gb.bbc.alba", "bbc scotland": "gb.bbc.scotland",
         "tnt sports box office": "gb.tnt.sports.box_office",
         "tnt sports box office 2": "gb.tnt.sports.box_office.2",
         "premier sports rugby": "gb.premier.sports.rugby",
@@ -94,6 +95,53 @@ SERVICES = {
     "MY": {"astro premier league": "my.astro.premier_league"},
     "GE": {"setanta sports 1": "ge.setanta.sports.1", "setanta sports 2": "ge.setanta.sports.2"},
 }
+# Regional versions of UK network channels. The nations (Scotland, Wales,
+# Northern Ireland) regularly opt out for sport, so each is its own service with
+# a parent; the English regions carry network sport and map to the network id.
+# A provider channel is never merged with another region: an event is allocated
+# to the parent only when the guides show every observed nation carrying it
+# (see linking.broadcast_candidates).
+REGIONAL_PARENTS = {
+    "gb.bbc.one.scotland": ("gb.bbc.one", "scotland"), "gb.bbc.one.wales": ("gb.bbc.one", "wales"),
+    "gb.bbc.one.ni": ("gb.bbc.one", "ni"),
+    "gb.bbc.two.scotland": ("gb.bbc.two", "scotland"), "gb.bbc.two.wales": ("gb.bbc.two", "wales"),
+    "gb.bbc.two.ni": ("gb.bbc.two", "ni"),
+    "gb.itv.one.wales": ("gb.itv.one", "wales"), "gb.itv.one.border_scotland": ("gb.itv.one", "scotland"),
+    "gb.stv": ("gb.itv.one", "scotland"), "gb.utv": ("gb.itv.one", "ni"),
+}
+_ENGLISH_BBC_REGIONS = (r"england|london|east|east midlands|west midlands|wm|north east|ne|north west|nw|south|sth|"
+                        r"south east|se|south west|sw|west|wst|yorkshire|yorks|yorks and lincs|y and l|"
+                        r"yorkshire and lincolnshire|east yorkshire and lincolnshire|ci|channel islands|oxford|cambridge")
+_ENGLISH_ITV_REGIONS = (r"anglia|border|border england|border \(england\)|central|granada|london|meridian|tyne tees|"
+                        r"west|west country|westcountry|yorkshire|channel")
+# (pattern on the normalised name, service id); GB-market guides only. Published
+# in the channels asset so B1G applies exactly the same rules.
+REGIONAL_RULES = [
+    (r"^bbc (one|two) (scotland|scotlad|scot)$", "gb.bbc.{0}.scotland"),
+    (r"^bbc (one|two) (wales|cymru)$", "gb.bbc.{0}.wales"),
+    (r"^bbc (one|two) (ni|northern ireland)$", "gb.bbc.{0}.ni"),
+    (r"^bbc (one|two) (?:%s)$" % _ENGLISH_BBC_REGIONS, "gb.bbc.{0}"),
+    (r"^itv(?: 1)?(?: hd)? (?:wales|cymru wales)$", "gb.itv.one.wales"),
+    (r"^itv(?: 1)?(?: hd)? border scotland$", "gb.itv.one.border_scotland"),
+    (r"^(?:itv(?: 1)? )?utv$", "gb.utv"),
+    (r"^stv(?: (?:central|north|east|west|edinburgh|glasgow|dundee|aberdeen))?$", "gb.stv"),
+    (r"^itv(?: 1)?(?: hd)? (?:%s)(?: ?\(?(?:east|west|north|south|south coast|coast)\)?)*$" % _ENGLISH_ITV_REGIONS,
+     "gb.itv.one"),
+]
+_REGIONAL_RULES = [(re.compile(pattern), target) for pattern, target in REGIONAL_RULES]
+# Irish services are often listed in UK guides under their own unambiguous names.
+_IRISH_IN_GB = ("rte one", "rte 2", "tg4", "virgin media one")
+
+
+def regional_service(name):
+    """Service id for a normalised UK regional channel name, or None."""
+    for pattern, target in _REGIONAL_RULES:
+        match = pattern.match(name)
+        if match:
+            return target.format(*match.groups()) if "{0}" in target else target
+    return None
+
+
 KNOWN_SERVICES = {name: cid for table in SERVICES.values() for name, cid in table.items()}
 
 # Exact source-scoped EPG ids (strongest evidence). farleyflex ids are those the
@@ -351,7 +399,13 @@ def canonical_channel(source_id, epg_id, display_name):
         region = prefix[1].casefold()
         if region != "sports" and COUNTRY_PREFIX_ALIASES.get(region, region) != market.casefold():
             return None
-    return SERVICES.get(market, {}).get(normalized_name(display_name))
+    name = normalized_name(display_name)
+    found = SERVICES.get(market, {}).get(name)
+    if found or market != "GB":
+        return found
+    if name in _IRISH_IN_GB:
+        return SERVICES["IE"][name]
+    return regional_service(name)
 
 
 _RAW_FAMILIES = {"sky_sport_nz"}  # need the market prefix that normalized_name() strips

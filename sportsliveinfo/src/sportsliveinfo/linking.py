@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from . import dictionary as channel_dictionary, taxonomy
-from .guide import COUNTRY_BY_SOURCE, canonical_channel, channel_families, normalized_name
+from .guide import COUNTRY_BY_SOURCE, REGIONAL_PARENTS, canonical_channel, channel_families, normalized_name
 from .identity import name_signature
 from .providers import EPG_FAMILY, SPORT_FAMILY
 
@@ -27,7 +27,8 @@ FEATURED_TAGS = {"team:england", "team:england_women", "team:scotland", "team:wa
 _STOP = {"fc", "afc", "cf", "sc", "ac", "club", "the", "de", "cd", "ud", "sv", "fk", "sk", "bk", "if", "and",
          "v", "vs", "calcio", "1", "football", "rfc", "rlfc", "cc", "ccc"}
 _ABBR = {"man": "manchester", "utd": "united", "spurs": "tottenham", "wolves": "wolverhampton",
-         "nottm": "nottingham", "munchen": "munich", "w": "women", "womens": "women", "ladies": "women", "st": "saint"}
+         "nottm": "nottingham", "munchen": "munich", "w": "women", "womens": "women", "ladies": "women", "st": "saint",
+         "cymru": "wales", "lloegr": "england"}
 # Alias expansion is deliberately exact and small. Feed-provided short names are
 # also considered below; arbitrary fuzzy/substring team matching is not safe.
 _TEAM_ALIASES = {
@@ -36,6 +37,7 @@ _TEAM_ALIASES = {
     "west brom": "west bromwich albion", "wba": "west bromwich albion",
     "qpr": "queens park rangers", "nz": "new zealand", "all blacks": "new zealand",
     "springboks": "south africa", "wallabies": "australia",
+    "yr alban": "scotland", "gogledd iwerddon": "northern ireland", "iwerddon": "ireland",
 }
 _VARIANT = {"women", "u17", "u18", "u19", "u20", "u21", "u23", "ii", "b", "reserves", "xi", "a", "jong"}
 # Suffix words that may be dropped without changing a club's identity
@@ -281,26 +283,8 @@ def live_state(event, now):
     return "upcoming"
 
 
-_ITV1_REGIONS = frozenset({"anglia", "border", "central", "granada", "london", "meridian", "tyne tees",
-                           "utv", "wales", "west country", "westcountry", "yorkshire"})
-
-
-def _regional_service_id(source_id, display_name, *, market, base_name, regions, canonical_id):
-    """Collapse only explicitly known regional names to their parent service."""
-    if COUNTRY_BY_SOURCE.get(source_id) != market:
-        return None
-    name = normalized_name(display_name)
-    if name == base_name or any(name == base_name + " " + region for region in regions):
-        return canonical_id
-    return None
-
-
 def _registry_channel_id(source_id, channel_id, display_name):
-    canonical = canonical_channel(source_id, channel_id, display_name)
-    if canonical:
-        return canonical
-    return _regional_service_id(source_id, display_name, market="GB", base_name="itv 1",
-                                regions=_ITV1_REGIONS, canonical_id="gb.itv.one")
+    return canonical_channel(source_id, channel_id, display_name)
 
 
 def _identity_members(identity_document):
@@ -442,7 +426,7 @@ def _programme_index(epg_guides, window_start, window_end, *, include_non_matche
                 continue
             if excluded and not include_non_matches:
                 continue
-            parts = [] if excluded else [taxonomy.norm(_clean_listing(programme.get(field, ""))) for field in ("title", "subtitle")]
+            parts = [] if excluded else _listing_parts(programme)
             channel_name = channels.get(channel_id, channel_id)
             rows.append((start, end, [p for p in parts if p], text, bool(programme.get("is_live")), canonical,
                          channel_name, source_id, mapping_method, mapping_confidence, dictionary_categories))
@@ -456,6 +440,21 @@ _LISTING_BADGE = re.compile(r"[\u2600-\u27bf\U0001f300-\U0001faff]\ufe0f?\s*(?:\
 # Competitions whose name already means the women's game ("Live WSL: Spurs v Everton").
 _WOMENS_COMPETITION = re.compile(r"\b(wsl|wsl 2|barclays wsl|women s super league|womens super league|"
                                  r"women s championship|womens championship|lionesses|nwsl|swpl|wbbl|aflw)\b")
+
+
+def _listing_parts(programme):
+    """Title and subtitle, plus each side of a colon ("Northern Series: Wales v New Zealand")."""
+    parts = []
+    for field in ("title", "subtitle"):
+        value = _clean_listing(programme.get(field, ""))
+        pieces = value.split(":")
+        candidates = [value] + [":".join(pieces[i:]) for i in range(1, len(pieces))] + \
+                     [":".join(pieces[:i]) for i in range(1, len(pieces))]
+        for candidate in candidates:
+            normal = taxonomy.norm(candidate)
+            if normal and normal not in parts:
+                parts.append(normal)
+    return parts
 
 
 def _clean_listing(value):
@@ -640,6 +639,69 @@ def _matches(event, row):
                for part in parts for home in teams[0] for away in teams[1])
 
 
+_REGIONAL_FAMILIES = {parent for parent, _ in REGIONAL_PARENTS.values()}
+_SIMULCAST_TOLERANCE = timedelta(minutes=5)
+
+
+def _regional_family(canonical):
+    if canonical in _REGIONAL_FAMILIES:
+        return canonical
+    return REGIONAL_PARENTS.get(canonical, (None, None))[0]
+
+
+def _allocate_regions(found, matched, observed):
+    """Allocate network channels to the network id only when the nations carry the event.
+
+    ``matched``/``observed`` map a service id to (start, text, name) rows at kickoff:
+    fixture listings, and every listing of a regional-family channel. A nation whose
+    listing at the same slot is a shortened title of the fixture listing (e.g. STV's
+    "Nations Championship" for ITV1's "Wales v New Zealand: Nations Championship")
+    is a simulcast. Any other listing is evidence that the nation opts out.
+    """
+    families = defaultdict(set)
+    for canonical in found:
+        family = _regional_family(canonical)
+        if family:
+            families[family].add(canonical)
+    for parent, carriers in families.items():
+        listings = [row for canonical in carriers for row in matched.get(canonical, [])]
+
+        def simulcast(canonical):
+            for start, text, _ in observed.get(canonical, []):
+                words = set(text.split())
+                if len(words) >= 2 and any(abs(start - other) <= _SIMULCAST_TOLERANCE and words <= set(full.split())
+                                           for other, full, _ in listings):
+                    return True
+            return False
+
+        nations = {canonical for canonical in observed if REGIONAL_PARENTS.get(canonical, (None,))[0] == parent}
+        opted_out = sorted(canonical for canonical in nations - carriers if not simulcast(canonical))
+        if parent not in carriers and simulcast(parent):
+            template = found[sorted(carriers)[0]]
+            name = observed[parent][0][2]
+            found[parent] = dict(template, canonical_channel_id=parent, channel_name=name[:120],
+                                 epg_sources=list(template["epg_sources"]))
+            carriers = carriers | {parent}
+        if parent in carriers:
+            entry = found[parent]
+            names = [name for _, _, name in matched.get(parent, [])]
+            if names:                     # "BBC One" rather than an English region's name
+                entry["channel_name"] = min(names, key=lambda n: (len(normalized_name(n)), n))[:120]
+            for canonical in sorted(carriers - {parent}):
+                child = found.pop(canonical)
+                entry["epg_live_flag"] = entry["epg_live_flag"] or child["epg_live_flag"]
+                entry["epg_sources"].extend(s for s in child["epg_sources"] if s not in entry["epg_sources"])
+            entry["coverage"] = "network"
+            if opted_out:
+                entry["not_on"] = opted_out
+        else:
+            for canonical in carriers:
+                found[canonical]["coverage"] = "regional"
+                found[canonical]["parent_channel_id"] = parent
+    for entry in found.values():
+        entry.setdefault("coverage", "network")
+
+
 def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_document=None, identity_document=None):
     """Return {event_id: (status, [candidate...])} for the given events."""
     timed = []
@@ -671,6 +733,7 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
     result = {}
     for event, start in timed:
         found = {}
+        matched, observed = defaultdict(list), defaultdict(list)
         unmapped_match = False
         earliest_end = start + timedelta(minutes=30)
         latest_start = start + timedelta(minutes=20)
@@ -686,6 +749,8 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
         # Keep source order when choosing the representative channel name
         # and programme times for a service reported by multiple guides.
         for _, row in sorted(overlapping):
+            if row[5] and _regional_family(row[5]):
+                observed[row[5]].append((row[0], row[3], row[6]))
             if not _channel_sport_eligible(event.get("sport", ""), row[6], row[10]):
                 continue
             if not _matches(event, row):
@@ -704,6 +769,8 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
             entry["epg_live_flag"] = entry["epg_live_flag"] or row[4]
             if row[7] not in entry["epg_sources"]:
                 entry["epg_sources"].append(row[7])
+            matched[canonical].append((row[0], row[3], row[6]))
+        _allocate_regions(found, matched, observed)
         candidates = sorted(found.values(), key=lambda c: c["canonical_channel_id"])
         if not candidates:
             if gaps is not None:

@@ -2,6 +2,15 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.11 — Correct regional channel allocation
+
+- UK regional channels are modelled properly. BBC One/Two Scotland, Wales and Northern Ireland, ITV1 Wales, ITV Border Scotland, STV and UTV are separate services with a parent network; English regions carry network sport and resolve to the network id. A provider channel is never merged with another region.
+- Events are allocated per region: the network id only when the guides show every observed nation carrying the event (a same-slot shortened title such as STV's "Nations Championship" counts as a simulcast). Nations that showed something else are listed in `not_on`; an event shown on one nation only is allocated to that nation (`coverage: regional`). Example from the 17 November guides: Wales v Portugal on BBC One Wales only (England had The One Show) was allocated to national BBC One in 0.3.10 and is now `gb.bbc.one.wales`, with BBC Two (England, not on BBC Two Wales/NI) and S4C.
+- Registry additions: Sky Sports+ (previously unrecognised under its usual spelling), BBC Alba, BBC Scotland, and Irish channels (RTÉ One, RTÉ2, TG4, Virgin Media One) when listed in UK guides.
+- Fixtures written after a competition prefix ("Northern Series: Wales v New Zealand", "Group A4: Norway v Wales") and Welsh home-nation names ("Cymru", "Lloegr") now match.
+- The channels asset publishes the regional rules, parents and allocation rule so B1G applies the same model. Cross-language matching fixtures: "Sky Sports+" and "BBC One Scotland" now resolve to `gb.sky.sports.plus` and `gb.bbc.one.scotland`.
+- Measured on the same public UK guides: 14 of 14 known live broadcasts still matched; 24 channel suggestions (S4C added for two Wales matches), all correct on a hand check.
+
 ## 0.3.10 — Stronger event-to-channel matching
 
 - Sports fixtures are matched to guide listings with stricter team rules: distinctive team words and exact aliases are required, generic words ("North", "West") never identify a side, and women's and age-group variants must agree. A guide may add a club suffix the feed omits ("Cheltenham Town"), but never change it ("Manchester City" is not "Manchester United").

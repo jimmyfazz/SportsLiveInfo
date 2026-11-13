@@ -300,6 +300,26 @@ The same caveat applies: a guide listing is not stream verification.
 
 Validation: `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` passed 210 tests; `compileall` passed. The benchmark inputs and script stay outside the repository.
 
+### Regional channel allocation — 13 November 2026 (0.3.11)
+
+An allocation audit on the same three public UK guides found that event-to-channel candidates could name the wrong channel for some viewers:
+
+- Nations' versions of BBC One/Two (Scotland, Wales, NI) were unrecognised, so a fixture shown on one nation only could fall back to the dictionary and be allocated to national BBC One. Real case, 17 November: Wales v Portugal on BBC One Wales only (BBC One England had The One Show) was allocated to `gb.bbc.one` by 0.3.10.
+- ITV1 regions were always collapsed to `gb.itv.one`, including ITV1 Wales and UTV, and several real guide spellings were unrecognised ("ITV1 Anglia (West)", "ITV HD Yorkshire west", "BBC One Scotlad").
+- Sky Sports+ (its usual spelling), BBC Alba, STV and Irish channels in UK guides had no registry id.
+
+0.3.11 models nations as separate services with a parent and allocates each event per region (network only when every observed nation carries it or simulcasts it; opted-out nations in `not_on`; nation-only events as `coverage: regional`). Results on the same inputs:
+
+| Check | 0.3.10 | 0.3.11 |
+|---|---|---|
+| Labelled live broadcasts matched | 14/14 | 14/14 |
+| Channel candidates, hand-checked correct | 22/22 | 24/24 (S4C added for two Wales matches) |
+| Candidates with a non-registry id | 2 (Sky Sports+, BBC Alba) | 0 |
+| Wales v Portugal, 17 Nov | `gb.bbc.one` (wrong in England) | `gb.bbc.one.wales` (regional), `gb.bbc.two` (network, not on BBC Two Wales/NI), `gb.s4c` |
+| Hungary v Northern Ireland, 17 Nov | `gb.bbc.three` only | `gb.bbc.one.ni` (regional), `gb.bbc.three` |
+
+The two 17 November fixtures are not yet in the feed's event data (an event-coverage gap), so they were checked with constructed events against the real guides. Synthetic regression tests cover each allocation path and fail on 0.3.10.
+
 **Pending owner decision D8:** whether the public feed may carry these guide-listed but unverified event→channel links as canonical ids plus confidence (never programme text), or whether they must remain private on Home Assistant. No links have been published. HA backup and deployment have not been performed.
 
 ## Mobile Overview

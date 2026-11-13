@@ -103,14 +103,22 @@ class BroadcastMatcherSafetyTests(unittest.TestCase):
         self.assertEqual(result["synthetic:event:1"][1][0]["canonical_channel_id"], "gb.example.sports")
         self.assertEqual(result["synthetic:event:1"][1][0]["channel_identity_method"], "identity_registry")
 
-    def test_regional_service_helper_groups_only_explicit_regions(self):
-        regions = {"north", "west"}
-        args = {"market": "GB", "base_name": "example one", "regions": regions,
-                "canonical_id": "gb.example.one"}
-        self.assertEqual(linking._regional_service_id("farleyflex", "Example One North", **args), "gb.example.one")
-        self.assertEqual(linking._regional_service_id("farleyflex", "Example One West", **args), "gb.example.one")
-        self.assertIsNone(linking._regional_service_id("farleyflex", "Example One East", **args))
-        self.assertIsNone(linking._regional_service_id("epgshare_fr", "Example One North", **args))
+    def test_regional_names_resolve_to_their_own_service(self):
+        expected = {
+            "BBC One Scotland HD": "gb.bbc.one.scotland", "UK - BBC One Scotlad": "gb.bbc.one.scotland",
+            "BBC One London HD": "gb.bbc.one", "UK - BBC One Y&L HD": "gb.bbc.one", "BBC Two NI HD": "gb.bbc.two.ni",
+            "ITV1 Anglia (West) HD": "gb.itv.one", "UK - ITV HD Yorkshire west": "gb.itv.one",
+            "ITV1 Wales HD": "gb.itv.one.wales", "UK - ITV1 Border Scotland HD": "gb.itv.one.border_scotland",
+            "STV Central HD": "gb.stv", "UTV": "gb.utv", "ITV2 HD": "gb.itv.two",
+            "Sky Sports+ HD": "gb.sky.sports.plus", "UK - BBC ALBA HD": "gb.bbc.alba", "TG4": "ie.tg4",
+        }
+        for name, service in expected.items():
+            with self.subTest(name=name):
+                self.assertEqual(linking._registry_channel_id("farleyflex", "x", name), service)
+        for name in ("BBC One Narnia", "ITV1 Atlantis HD", "Example One North"):
+            self.assertIsNone(linking._registry_channel_id("farleyflex", "x", name))
+        # Regional rules apply to UK guides only.
+        self.assertIsNone(linking._registry_channel_id("epgshare_fr", "x", "BBC One Scotland"))
 
     def test_timeshift_channels_are_never_live_candidates(self):
         event = fixture()
@@ -181,6 +189,60 @@ class BroadcastMatcherSafetyTests(unittest.TestCase):
             [city], {"farleyflex": guide([programme("Live: Harbor United v Westshire")])}, START,
             identity_document=SPORTS_IDENTITY)
         self.assertNotIn(city["id"], result)
+
+    def _regional_guide(self, listings):
+        """listings: [(channel name, title)] all starting 10 minutes before kickoff."""
+        channels = {"c%d" % i: name for i, (name, _) in enumerate(listings)}
+        rows = [programme(title, "c%d" % i) for i, (_, title) in enumerate(listings)]
+        return {"farleyflex": guide(rows, channels)}
+
+    def test_event_on_every_nation_is_allocated_to_the_network_service(self):
+        guides = self._regional_guide([("BBC One London HD", "Live: North Harbor v Westshire"),
+                                       ("BBC One Scotland HD", "Live: North Harbor v Westshire"),
+                                       ("BBC One Wales HD", "Live: North Harbor v Westshire")])
+        rows = linking.broadcast_candidates([fixture()], guides, START)["synthetic:event:1"][1]
+        self.assertEqual([(r["canonical_channel_id"], r["coverage"]) for r in rows], [("gb.bbc.one", "network")])
+        self.assertNotIn("not_on", rows[0])
+        self.assertEqual(rows[0]["channel_name"], "BBC One London HD")
+
+    def test_event_on_one_nation_only_is_allocated_to_that_nation(self):
+        guides = self._regional_guide([("BBC One HD", "Evening Magazine"),
+                                       ("BBC One Wales HD", "Live: North Harbor v Westshire")])
+        rows = linking.broadcast_candidates([fixture()], guides, START)["synthetic:event:1"][1]
+        self.assertEqual([(r["canonical_channel_id"], r["coverage"], r["parent_channel_id"]) for r in rows],
+                         [("gb.bbc.one.wales", "regional", "gb.bbc.one")])
+
+    def test_nations_showing_something_else_are_listed_as_not_on(self):
+        guides = self._regional_guide([("BBC Two HD", "Live: North Harbor v Westshire"),
+                                       ("BBC Two Wales HD", "Soap Opera"),
+                                       ("BBC Two NI HD", "Soap Opera")])
+        rows = linking.broadcast_candidates([fixture()], guides, START)["synthetic:event:1"][1]
+        self.assertEqual(rows[0]["canonical_channel_id"], "gb.bbc.two")
+        self.assertEqual(rows[0]["coverage"], "network")
+        self.assertEqual(rows[0]["not_on"], ["gb.bbc.two.ni", "gb.bbc.two.wales"])
+
+    def test_same_slot_shortened_title_counts_as_simulcast(self):
+        guides = self._regional_guide([("ITV1 London HD", "North Harbor v Westshire: Synthetic Cup"),
+                                       ("STV Central HD", "Synthetic Cup"),
+                                       ("UTV", "Quiz Night Special")])
+        rows = linking.broadcast_candidates([fixture()], guides, START)["synthetic:event:1"][1]
+        self.assertEqual(rows[0]["canonical_channel_id"], "gb.itv.one")
+        self.assertEqual(rows[0]["not_on"], ["gb.utv"])          # STV simulcasts; UTV opted out
+
+    def test_fixture_after_a_competition_prefix_matches(self):
+        for subtitle in ("Northern Series: North Harbor v Westshire", "Synthetic Cup, Group A4: North Harbor v Westshire"):
+            with self.subTest(subtitle=subtitle):
+                result = linking.broadcast_candidates(
+                    [fixture()], {"farleyflex": guide([programme("Live: Synthetic Cup", subtitle=subtitle)])}, START,
+                    identity_document=SPORTS_IDENTITY)
+                self.assertIn("synthetic:event:1", result)
+
+    def test_welsh_home_nation_names_match(self):
+        event = fixture(title="Wales v Westshire", participants=["Wales", "Westshire"], participants_short=[])
+        result = linking.broadcast_candidates(
+            [event], {"farleyflex": guide([programme("Sgorio: Cymru v Westshire")])}, START,
+            identity_document=SPORTS_IDENTITY)
+        self.assertIn(event["id"], result)
 
 
 if __name__ == "__main__":

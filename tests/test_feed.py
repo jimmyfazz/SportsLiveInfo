@@ -74,7 +74,10 @@ class GoldenFixtureContractTests(unittest.TestCase):
     def test_matching_cases_cover_positive_and_hard_negative_identities(self):
         cases = {(c["source_id"], c["name"]): c["canonical_id"] for c in json.loads((FIXTURES / "matching-cases.json").read_text())["cases"]}
         self.assertEqual(cases[("epgshare_my", "MYS | Astro Premier League FHD")], "my.astro.premier_league")
-        for negative in [("farleyflex", "Sky Sports+"), ("farleyflex", "BBC One Scotland"), ("mjh_sky_uk", "TNT Sports 8"),
+        # Identity-bearing qualifiers resolve to their own service, never the parent or a sibling.
+        self.assertEqual(cases[("farleyflex", "Sky Sports+")], "gb.sky.sports.plus")
+        self.assertEqual(cases[("farleyflex", "BBC One Scotland")], "gb.bbc.one.scotland")
+        for negative in [("mjh_sky_uk", "TNT Sports 8"),
                          ("epgshare_uk", "Setanta Sports 1"), ("epgtalk_sports", "Sky Sports Main Event"), ("fr_xmltv", "beIN Sports 4")]:
             self.assertIsNone(cases[negative], negative)
 
