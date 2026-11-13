@@ -1,6 +1,6 @@
 # SportsLiveInfo — private installation and operation
 
-> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.1 source is present (13 Nov code audit fixes: see docs/CODE_AUDIT_AND_FIXES_2026-11-13.md). Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](../docs/CURRENT_STATUS.md).
 
 **v0.3.0 · experimental · reviewed 12 November 2026.** Read [current status and test evidence](../docs/CURRENT_STATUS.md) before deployment. Source code, a package layout and offline checks exist; actual Docker/HAOS and TV acceptance remain open.
@@ -40,7 +40,7 @@ Sports source tests make one quota-accounted request. EPG tests download and par
 
 The current `sli/1.0` output has events, taxonomy, channel/guide metadata, Today grouping and health, **no EPG programme rows**. The local suggestion evaluator in `supplement.py` does not implement a public programme supplement or a B1G Guide reader. Keep provider EPG primary and preserve local account, manual mapping and hidden choices. Provisional candidates are not verified broadcasts or playable streams.
 
-The current Python 3.12.15 suite passes all 88 tests. HTTP-handler tests use an in-memory transport in this socket-restricted runner; real loopback is not verified. No actual HAOS install, Docker build, live provider benchmark, source redistribution approval, public feed deployment or B1G one/ten-TV acceptance was established. Persistent Home Assistant notifications, monthly/provider-timezone budgets, ETag/304 and full Retry-After/backoff remain outstanding. See [current status](../docs/CURRENT_STATUS.md) for exact errors and release gates.
+The current Python 3.12.15 suite passes all 118 tests (13 Nov 2026, Python 3.12.3 and 3.13). HTTP-handler tests use an in-memory transport in this socket-restricted runner; real loopback is not verified. No actual HAOS install, Docker build, live provider benchmark, source redistribution approval, public feed deployment or B1G one/ten-TV acceptance was established. Persistent Home Assistant notifications, monthly/provider-timezone budgets, ETag/304 and full Retry-After/backoff remain outstanding. See [current status](../docs/CURRENT_STATUS.md) for exact errors and release gates.
 
 ## GitHub token: first-time setup (public read-only feed destination)
 

@@ -182,10 +182,11 @@ def build_feed(store, now=None, previous_revision=None):
         return (isinstance(origin, str) and origin in approved
                 and isinstance(contributors, list) and bool(contributors)
                 and all(isinstance(src, str) and src in approved for src in contributors))
-    events = [_event_public(e) for e in all_events if licensed(e)]
+    # Legacy/unclassified snapshot rows still need category fields the schema requires.
+    events = [_event_public(e if "category_id" in e else taxonomy.classify(e)) for e in all_events if licensed(e)]
     omitted = sorted({src for e in all_events if not licensed(e)
                       for src in (e.get("sources") or [e.get("source_id")])
-                      if isinstance(src, str)})
+                      if isinstance(src, str) and src not in approved})
     by_day = {}
     for event in events:
         day = datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date().isoformat()
@@ -226,8 +227,13 @@ def build_feed(store, now=None, previous_revision=None):
     add("today", today_doc, "sli.today/1", True, date=window[0], records=len(todays))
     add("health", health_document(store, conf), "sli.health/1", False)
 
-    revision = hashlib.sha256("".join(a["sha256"] for a in assets).encode()).hexdigest()[:20]
     schedule = sorted(conf.get("schedule", []))
+    # Revision = data assets + meaningful manifest settings. The health asset is
+    # excluded because its timestamps change on every collection and would force
+    # a new GitHub commit each refresh with no data change.
+    stable = {"assets": [a["sha256"] for a in assets if a["kind"] != "health"], "approved": sorted(approved),
+              "schedule": schedule, "version": __version__, "format": [FORMAT_MAJOR, FORMAT_MINOR]}
+    revision = hashlib.sha256(_json(stable)).hexdigest()[:20]
     interval = _interval_minutes(schedule)
     by_sport = {}
     for event in events:

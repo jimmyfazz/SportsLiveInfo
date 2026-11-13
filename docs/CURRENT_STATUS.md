@@ -15,9 +15,20 @@ Owner reconfirmed these roles during this review. GitHub's contents API returned
 
 The intended collector host is the owner's always-on home mini PC, with Home Assistant directly installed. Exact installation type, architecture, App build/install, restart and backup/restore remain unverified. The connected Home Assistant MCP exposed entity/device tools but no Supervisor or App inspection tools in this session. A name-filtered query found no exposed SportsLiveInfo entity; this does **not** prove the App is absent. The owner's existing authenticated remote administration is separate from SportsLiveInfo: the project requires no new WAN ports, public App endpoint, or TV connection to Home Assistant. Do not commit the owner's private Home Assistant URL.
 
+## 13 November 2026 code audit and fixes
+
+`claude/sportsliveinfo-b1g-android-syyo8j` merges `main` (`56ea1be`) and fixes about 50 reproduced code, GUI, publisher and matching defects, plus a new icon/logo and EPG source research: [CODE_AUDIT_AND_FIXES_2026-11-13.md](CODE_AUDIT_AND_FIXES_2026-11-13.md). Version **0.3.1**. Local receipt: `python3.12`/`python3.13 -m unittest discover -s tests` — **118 tests OK**. Highlights:
+- the Ingress server now always answers, and the Live today page recomputes live state at view time;
+- a **Publication rights register UI** now exists;
+- the feed revision is stable, and publishing checks the remote tree;
+- the scheduler survives errors and records a heartbeat;
+- `/healthz` watchdog and `init: true`.
+
+Live providers, Docker/HAOS and B1G remain NOT RUN.
+
 ## Implemented source versus remaining acceptance
 
-The package, `config.yaml` and Dockerfile build-version default all identify **0.3.0**, with `stage: experimental`. Source exists under `sportsliveinfo/src/sportsliveinfo/`; it is not an empty scaffold.
+The package, `config.yaml` and Dockerfile build-version default all identify **0.3.1**, with `stage: experimental`. Source exists under `sportsliveinfo/src/sportsliveinfo/`; it is not an empty scaffold.
 
 | Area | Source present | Remaining work / evidence |
 |---|---|---|

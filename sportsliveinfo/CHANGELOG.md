@@ -1,6 +1,6 @@
 # Changelog
 
-> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.1 source is present (13 Nov code audit fixes: see docs/CODE_AUDIT_AND_FIXES_2026-11-13.md). Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](../docs/CURRENT_STATUS.md).
 
 ## Documentation reconciliation — 12 November 2026 (no runtime version change)
@@ -16,6 +16,53 @@
 - Added a shared ingress-test transport that uses loopback where available and dispatches through the real HTTP handler/parser with in-memory streams when socket binds are denied; added forced-memory CSRF and origin tests.
 - Python 3.12.15 compileall passed and all 88 tests passed. Real loopback transport remains unverified in this socket-restricted runner; see [current status](../docs/CURRENT_STATUS.md).
 - Production runtime, schemas, golden fixtures, HA settings and repository visibility are unchanged.
+
+## 0.3.1 — 13 November 2026
+
+- Code audit fixes (details in docs/CODE_AUDIT_AND_FIXES_2026-11-13.md).
+- **Ingress UI:**
+  - always responds instead of dropping the connection;
+  - zero values render (previously blank);
+  - Live today recomputes live state at view time and flags a stale day;
+  - new Publication rights register with attestation;
+  - publish button disabled with reasons;
+  - server-side flash notices (no `?message=` spoofing), byte-safe CSRF check and a socket timeout;
+  - friendly local timestamps;
+  - Sources page summary with collapsible groups;
+  - per-source Diagnostics with scheduler heartbeat;
+  - labelled, accessible forms;
+  - aligned Today and Events tables with day headers.
+- **Engine:**
+  - daily multi-day fixture discovery actually re-runs;
+  - withdrawn fixtures are removed after two consecutive successful refreshes omit them;
+  - pacing no longer blocks other lanes;
+  - a corrupt guide no longer stops the EPG lane;
+  - the scheduler survives errors;
+  - collector and auto-publish failures are recorded;
+  - publish/preview lock.
+- **Feed and publisher:**
+  - the revision ignores health-timestamp churn but tracks approvals, schedule and version;
+  - unchanged feeds are republished only to renew expiry;
+  - the remote tree decides uploads and deletions;
+  - singular ref read and clear branch-race message;
+  - omitted-source list fixed;
+  - legacy unclassified events are exported safely.
+- **Matching:**
+  - standard XMLTV doctype accepted;
+  - null API-Sports teams handled;
+  - provider "live" flag time-bounded;
+  - AFL, women's competitions, rugby "Championship", boxing in TheSportsDB Fighting and new aliases fixed;
+  - stricter team identity (no Inter↔Inter Miami, Ireland↔Northern Ireland, Rangers↔QPR);
+  - competition-aware fusion;
+  - broadcast candidates require a "home v away" phrase (no news channels, overlong programmes or other F1 sessions);
+  - IPTV name decorations stripped;
+  - family regex fixes.
+- **EPG:**
+  - Matt Huisman NZ and Sydney guides added (disabled, verify);
+  - iptv-org pre-built guides flagged as possibly discontinued;
+  - guide horizon (hours ahead) reported.
+- **Packaging:** `init: true`, `watchdog` on new `/healthz`, robust icon route; new football icon/logo rendered from `branding/` SVG masters.
+- 118 local tests pass (30 new). Live providers, Docker/HAOS install and B1G devices NOT RUN.
 
 ## 0.3.0 — 12 November 2026
 

@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -45,6 +46,22 @@ class QuotaExhausted(RuntimeError):
     pass
 
 
+_GH_OWNER = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
+_GH_REPO = re.compile(r"[A-Za-z0-9._-]{1,100}")
+_GH_BRANCH = re.compile(r"[A-Za-z0-9._/-]{1,100}")
+
+
+def validate_github_target(owner, repository, branch):
+    """One validator for save, test and publish (GitHub owner/repo/ref naming rules)."""
+    ok = (isinstance(owner, str) and _GH_OWNER.fullmatch(owner) and not owner.endswith("-")
+          and isinstance(repository, str) and _GH_REPO.fullmatch(repository) and repository not in (".", "..")
+          and isinstance(branch, str) and _GH_BRANCH.fullmatch(branch) and ".." not in branch
+          and not branch.startswith(("-", "/", ".")) and not branch.endswith(("/", ".", ".lock")) and "//" not in branch)
+    if not ok:
+        raise ValueError("Invalid GitHub owner, repository or branch")
+    return owner, repository, branch
+
+
 class Engine:
     def __init__(self, store):
         self.store = store
@@ -52,6 +69,7 @@ class Engine:
         self._scheduler_stop = threading.Event()
         self._last_call = {}
         self._pace_lock = threading.Lock()
+        self._publish_lock = threading.Lock()
 
     def collect(self):
         if not self._busy.acquire(blocking=False):
@@ -62,6 +80,14 @@ class Engine:
             self._busy.release()
 
     def _collect_locked(self):
+        try:
+            return self._collect_run()
+        except Exception as exc:  # never leave the last collector job reading "started"
+            LOGGER.exception("Collection failed")
+            self.store.job("collector", "failed", "Unexpected %s; last-good retained" % type(exc).__name__)
+            return False
+
+    def _collect_run(self):
         conf = self.store.config()
         if not conf["setup_complete"]:
             self.store.job("collector", "skipped", "Setup not completed")
@@ -102,15 +128,22 @@ class Engine:
                 self.publish()
             except (ValueError, RuntimeError, OSError) as exc:
                 self.store.job("publisher", "failed", str(exc)[:140])
+            except Exception as exc:
+                LOGGER.exception("Auto-publish failed")
+                self.store.job("publisher", "failed", "Unexpected %s during auto-publish" % type(exc).__name__)
         return bool(successes)
 
     # ---- request planning -------------------------------------------------
     def _days(self, name, previous, today):
+        # Full multi-day discovery once per London day (and at most every 20 h);
+        # other runs refresh today only. Timed from the last FULL discovery, not
+        # from the last snapshot write, which every today-only run also updates.
         try:
-            recent = previous is not None and datetime.now(timezone.utc) - datetime.fromisoformat(previous["updated_at"]) < timedelta(hours=12)
+            last = datetime.fromisoformat(previous["data"]["full_discovery_at"])
+            recent = (datetime.now(timezone.utc) - last < timedelta(hours=20)
+                      and last.astimezone(LONDON).date() == today)
         except (ValueError, TypeError, KeyError):
             recent = False
-        # Full multi-day discovery at most twice a day; otherwise today only.
         return [today] if recent else [today + timedelta(days=i) for i in range(DAY_HORIZON.get(name, 1))]
 
     def _plan(self, name, conf, today, previous=None):
@@ -170,13 +203,13 @@ class Engine:
         # Protect rate pacing across parallel provider lanes, including those
         # using the same API-Sports key under different product endpoints.
         family = providers.SPORT_FAMILY.get(name, name)
-        gap = PACING.get(name)
-        with self._pace_lock:
-            if gap:
-                wait = self._last_call.get(family, 0) + gap - time.monotonic()
-                if wait > 0:
-                    time.sleep(wait)
-            self._last_call[family] = time.monotonic()
+        gap = PACING.get(name) or 0
+        with self._pace_lock:  # reserve a slot, then sleep without blocking other lanes
+            now = time.monotonic()
+            slot = max(now, self._last_call.get(family, 0) + gap)
+            self._last_call[family] = slot
+        if slot > now:
+            time.sleep(slot - now)
 
     def _request(self, name, item, limit):
         try:
@@ -273,15 +306,28 @@ class Engine:
                 by_id[event["id"]] = event
             except (KeyError, ValueError, TypeError):
                 continue
+        fresh_ids = {event["id"] for scope in succeeded for event in scopes[scope]}
+        for event_id, event in list(by_id.items()):
+            # Missing from two consecutive successful refreshes of its own scope:
+            # treat as withdrawn (cancelled, re-dated or re-identified upstream).
+            if event.get("fetch_scope") in succeeded and event_id not in fresh_ids:
+                misses = int(event.get("missed_refreshes") or 0) + 1
+                if misses >= 2:
+                    del by_id[event_id]
+                else:
+                    by_id[event_id] = dict(event, missed_refreshes=misses)
         for scope in succeeded:
             for event in scopes[scope]:
                 by_id[event["id"]] = event
         events = list(by_id.values())
+        full_horizon = len({i["scope"].split("|")[0] for i in plan}) > 1 or not name.startswith(("api_sports", "thesportsdb"))
+        previous_full = (previous or {}).get("data", {}).get("full_discovery_at")
         # A successful zero-result response might be valid offseason or the
         # limits of free coverage. Never declare zero sport everywhere.
         self.store.save_snapshot("sports:" + name, {"events": events, "source_id": name, "complete": "unknown",
                                                     "observed_at": utcnow(), "scopes_ok": sorted(succeeded),
-                                                    "scopes_failed": sorted(failed)})
+                                                    "scopes_failed": sorted(failed),
+                                                    "full_discovery_at": utcnow() if full_horizon and not failed else previous_full})
         state = "partial" if failed else ("ok" if events else "no_events_reported")
         self.store.job(name, state, "%d event records; %d/%d request scopes refreshed (provider coverage not guaranteed)" % (
             len(events), len(succeeded), len(succeeded) + len(failed)))
@@ -337,7 +383,7 @@ class Engine:
                 len(parsed["channels"]), len(parsed["programmes"]), parsed["invalid_programmes"],
                 quality["full_coverage_channels"]["24h"], len(quality["matched_canonical_channels"])))
             return True
-        except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, json.JSONDecodeError, ET.ParseError) as exc:
+        except Exception as exc:  # incl. zlib/gzip/MemoryError: one bad guide must not stop the lane
             self.store.job(name, "failed", type(exc).__name__ + ": source unavailable or invalid")
             LOGGER.warning("EPG source %s failed (%s)", name, type(exc).__name__)
             return False
@@ -444,20 +490,45 @@ class Engine:
 
     def run_scheduler(self):
         """Run from a daemon thread. DST-aware and no catch-up request storm."""
+        failures = 0
         while not self._scheduler_stop.wait(10):
-            conf = self.store.config()
-            if not conf["setup_complete"]:
-                continue
-            local = datetime.now(LONDON)
-            key = local.strftime("%Y-%m-%d %H:%M")
-            if local.strftime("%H:%M") in conf.get("schedule", []):
-                if self.store.claim_scheduler_slot(key):
-                    if not self.start_collection():
-                        # Worker already running: allow a retry within this minute.
-                        self.store.release_scheduler_slot(key)
+            try:
+                self._scheduler_tick()
+                failures = 0
+            except Exception as exc:  # a locked/full database must not kill scheduling for good
+                failures += 1
+                LOGGER.exception("Scheduler tick failed")
+                if failures in (1, 10, 100):
+                    try:
+                        self.store.job("scheduler", "error", "%s (repeat %d); scheduler still running" % (type(exc).__name__, failures))
+                    except Exception:
+                        pass
+
+    def _scheduler_tick(self):
+        self.store._put("scheduler_heartbeat", utcnow())
+        conf = self.store.config()
+        if not conf["setup_complete"]:
+            return
+        local = datetime.now(LONDON)
+        key = local.strftime("%Y-%m-%d %H:%M")
+        if local.strftime("%H:%M") in conf.get("schedule", []):
+            if self.store.claim_scheduler_slot(key):
+                if not self.start_collection():
+                    # Worker already running: allow a retry within this minute.
+                    self.store.release_scheduler_slot(key)
 
     def preview_feed(self, out_dir=None):
         """Build the full sli/1 feed locally (no upload) for inspection and B1G testing."""
+        if not self._publish_lock.acquire(timeout=60):
+            raise RuntimeError("A feed preview or publication is already running")
+        try:
+            return self._preview_feed(out_dir)
+        except OSError as exc:
+            raise RuntimeError("Could not write the feed preview (%s)" % type(exc).__name__) from None
+        finally:
+            self._publish_lock.release()
+
+    def _preview_feed(self, out_dir=None):
         state = self.store._get("feed_state") or {}
         manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"))
         out = Path(out_dir or os.environ.get("SLI_DATA_DIR", "/data")) / "feed-preview"
@@ -487,10 +558,10 @@ class Engine:
                                             ("owner", "repository", "branch", "token"))
         if not token:
             raise ValueError("Save your GitHub token first, then run Test Connection")
-        if not all(isinstance(s, str) and s and len(s) <= 80
-                   and all(ch.isalnum() or ch in "._-" for ch in s)
-                   for s in (owner, repository, branch)):
-            raise ValueError("Save a valid GitHub owner, repository and branch first")
+        try:
+            validate_github_target(owner, repository, branch)
+        except ValueError:
+            raise ValueError("Save a valid GitHub owner, repository and branch first") from None
         url = "https://api.github.com/repos/%s/%s" % (owner, repository)
         headers = {"Authorization": "Bearer " + token,
                    "Accept": "application/vnd.github+json",
@@ -534,6 +605,14 @@ class Engine:
         Disabled by default. Events appear only for sources whose public
         redistribution licence has been explicitly approved.
         """
+        if not self._publish_lock.acquire(timeout=120):
+            raise RuntimeError("Another feed publication is already running")
+        try:
+            return self._publish()
+        finally:
+            self._publish_lock.release()
+
+    def _publish(self):
         conf = self.store.config()
         target = conf["github"]
         if not conf["setup_complete"] or not target.get("enabled"):
@@ -546,14 +625,20 @@ class Engine:
         owner, repository, branch, token = (target.get(n, "") for n in ("owner", "repository", "branch", "token"))
         if not owner or not repository or not branch or not token:
             raise ValueError("GitHub destination/token incomplete")
-        if not all(v.replace("-", "").replace("_", "").replace(".", "").isalnum() for v in [owner, repository, branch]):
-            raise ValueError("Invalid GitHub repository address")
+        validate_github_target(owner, repository, branch)
         state = self.store._get("feed_state") or {"revisions": []}
         manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"))
         revision = manifest["revision"]
-        if revision == state.get("last_revision"):
+        try:
+            age = datetime.now(timezone.utc) - datetime.fromisoformat(state.get("published_at") or "")
+        except (TypeError, ValueError):
+            age = timedelta(days=999)
+        # Republish an unchanged revision only to renew the manifest's expiry
+        # (48 h) before TVs would wrongly treat a static-but-healthy feed as stale.
+        if revision == state.get("last_revision") and age < timedelta(hours=24):
             self.store.job("publisher", "unchanged", "Feed revision %s already published" % revision)
             return revision
+        state["revisions"] = [h for h in state["revisions"] if h["revision"] != revision]
         live_before = {p for h in state["revisions"] for p in h["assets"]}
         uploads = {p: d for p, d in files.items() if p not in live_before}
         manifest_bytes = feed._json(manifest)
@@ -563,17 +648,24 @@ class Engine:
         keep, drop = history[-FEED_RETAIN:], history[:-FEED_RETAIN]
         live_after = {p for h in keep for p in h["assets"]}
         deletions = sorted({p for h in drop for p in h["assets"]} - live_after)
-        deletions += ["%s/manifests/%s.json" % (feed.ROOT, h["revision"]) for h in drop]
+        kept_ids = {h["revision"] for h in keep}
+        deletions += ["%s/manifests/%s.json" % (feed.ROOT, h["revision"]) for h in drop if h["revision"] not in kept_ids]
         self._github_commit(owner, repository, branch, token, uploads, deletions,
-                            "SportsLiveInfo feed %s (%d events)" % (revision, manifest["coverage"]["events"]))
+                            "SportsLiveInfo feed %s (%d events)" % (revision, manifest["coverage"]["events"]),
+                            required=files)
         self.store._put("feed_state", {"last_revision": revision, "revisions": keep, "published_at": utcnow()})
         self.store.job("publisher", "submitted", "Feed %s committed atomically (%d new files, %d removed); verify the static endpoint" % (
             revision, len(uploads), len(deletions)))
         return revision
 
     @staticmethod
-    def _github_commit(owner, repository, branch, token, uploads, deletions, message):
-        """Single commit via the Git Data API: readers never see a manifest without its assets."""
+    def _github_commit(owner, repository, branch, token, uploads, deletions, message, required=None):
+        """Single commit via the Git Data API: readers never see a manifest without its assets.
+
+        The remote tree is the source of truth: any referenced asset missing
+        remotely (reset repo, restored HA backup) is uploaded, and only paths that
+        actually exist are deleted, so a stale local ledger cannot break publishing.
+        """
         base = "https://api.github.com/repos/%s/%s" % (owner, repository)
 
         def api(method, path, body=None):
@@ -582,18 +674,33 @@ class Engine:
                                                   "User-Agent": "SportsLiveInfo/0.3", "Content-Type": "application/json"})
             try:
                 with _github_open(req, timeout=30) as res:
-                    return json.loads(res.read(2_000_000))
+                    return json.loads(res.read(20_000_000))
             except urllib.error.HTTPError as exc:
+                if method == "PATCH" and exc.code in (409, 422):
+                    raise RuntimeError("Feed branch changed during publication; it will be retried next run") from None
                 raise RuntimeError("GitHub API rejected %s request (%d)" % (method, exc.code)) from None
+            except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                raise RuntimeError("Could not reach GitHub (%s); publication will be retried" % type(exc).__name__) from None
 
-        ref = "/git/refs/heads/" + urllib.parse.quote(branch)
-        head = api("GET", ref)["object"]["sha"]
-        base_tree = api("GET", "/git/commits/" + head)["tree"]["sha"]
+        quoted = urllib.parse.quote(branch, safe="")
+        try:
+            head = api("GET", "/git/ref/heads/" + quoted)["object"]["sha"]
+            base_tree = api("GET", "/git/commits/" + head)["tree"]["sha"]
+            remote = api("GET", "/git/trees/%s?recursive=1" % base_tree)
+            existing = None if remote.get("truncated") else {e["path"] for e in remote.get("tree", []) if e.get("type") == "blob"}
+        except (KeyError, TypeError) as exc:
+            raise RuntimeError("GitHub returned an unexpected repository response") from None
+        uploads = dict(uploads)
+        if existing is not None:
+            for path, data in (required or {}).items():
+                if path not in existing:
+                    uploads.setdefault(path, data)
+            deletions = [path for path in deletions if path in existing and path not in uploads]
         tree = [{"path": path, "mode": "100644", "type": "blob",
                  "sha": api("POST", "/git/blobs", {"content": base64.b64encode(data).decode(), "encoding": "base64"})["sha"]}
                 for path, data in sorted(uploads.items())]
         tree += [{"path": path, "mode": "100644", "type": "blob", "sha": None} for path in deletions]
         new_tree = api("POST", "/git/trees", {"base_tree": base_tree, "tree": tree})["sha"]
         commit = api("POST", "/git/commits", {"message": message, "tree": new_tree, "parents": [head]})["sha"]
-        api("PATCH", ref, {"sha": commit, "force": False})
+        api("PATCH", "/git/refs/heads/" + quoted, {"sha": commit, "force": False})
         return commit

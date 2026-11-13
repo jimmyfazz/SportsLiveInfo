@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <title>SportsLiveInfo</title>
+  <defs>
+    <linearGradient id="sli-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14456a"/>
+      <stop offset="1" stop-color="#081224"/>
+    </linearGradient>
+    <linearGradient id="sli-live" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#05c6cc"/>
+      <stop offset="1" stop-color="#a2ef59"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#sli-bg)"/>
+  <rect x="4.75" y="4.75" width="118.5" height="118.5" rx="27.25" fill="none" stroke="#3fb8ba" stroke-opacity=".35" stroke-width="1.5"/>
+  <rect x="14" y="22" width="80" height="58" rx="11" fill="#0b2238" stroke="#eaf6ff" stroke-width="5"/>
+  <path d="M54 80v10M40 92h28" stroke="#eaf6ff" stroke-width="5" stroke-linecap="round"/>
+  <rect x="24" y="33" width="40" height="9" rx="4.5" fill="url(#sli-live)"/>
+  <rect x="24" y="48" width="50" height="7" rx="3.5" fill="#5d86a8"/>
+  <rect x="24" y="61" width="30" height="7" rx="3.5" fill="#5d86a8"/>
+  <circle cx="78" cy="37.5" r="5" fill="#a2ef59"/>
+  <path d="M85.5 31.5a8 8 0 0 1 0 12M90.5 27a14.5 14.5 0 0 1 0 21" fill="none" stroke="#a2ef59" stroke-width="3.5" stroke-linecap="round"/>
+  <defs>
+    <radialGradient id="sli-ball-shade" cx="0.34" cy="0.3" r="0.78">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.62" stop-color="#7a93ab" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#0b2238" stop-opacity="0.32"/>
+    </radialGradient>
+    <clipPath id="sli-ball-clip"><circle cx="91" cy="89" r="27"/></clipPath>
+  </defs>
+  <circle cx="91" cy="89" r="30.2" fill="#081224"/>
+  <g clip-path="url(#sli-ball-clip)">
+    <circle cx="91" cy="89" r="27" fill="#ffffff"/>
+    <path d="M107.06 69.75L97.54 67.34L93.38 73.98L98.74 83.02L108.26 85.43L112.42 78.79ZM76.22 71.87L82.72 76.25L93.38 73.98L97.54 67.34L91.04 62.97L80.38 65.23ZM110.45 95.69L108.26 85.43L98.74 83.02L91.40 90.88L93.58 101.14L103.10 103.54ZM93.58 101.14L91.40 90.88L81.50 86.69L73.78 92.76L75.96 103.02L85.86 107.21ZM67.28 88.39L73.78 92.76L81.50 86.69L82.72 76.25L76.22 71.87L68.50 77.94ZM111.20 73.01L106.44 66.86L107.06 69.75L112.42 78.79L117.17 84.95L116.56 82.06ZM106.77 110.80L114.12 102.95L115.95 95.39L110.45 95.69L103.10 103.54L101.27 111.10ZM90.96 115.03L101.62 112.77L106.77 110.80L101.27 111.10L90.61 113.36L85.46 115.33ZM90.61 113.36L85.86 107.21L75.96 103.02L70.80 104.99L75.56 111.14L85.46 115.33ZM64.83 93.05L65.44 95.94L67.28 88.39L68.50 77.94L67.88 75.05L66.05 82.61Z" fill="#ffffff" stroke="#14283c" stroke-width="1.49" stroke-linejoin="round"/>
+    <path d="M91.40 90.88L98.74 83.02L93.38 73.98L82.72 76.25L81.50 86.69ZM96.54 62.67L91.04 62.97L97.54 67.34L107.06 69.75L106.44 66.86ZM117.17 84.95L112.42 78.79L108.26 85.43L110.45 95.69L115.95 95.39ZM70.80 104.99L75.96 103.02L73.78 92.76L67.28 88.39L65.44 95.94ZM101.27 111.10L103.10 103.54L93.58 101.14L85.86 107.21L90.61 113.36ZM67.88 75.05L68.50 77.94L76.22 71.87L80.38 65.23L75.23 67.20Z" fill="#0b1726" stroke="#0b1726" stroke-width="1.49" stroke-linejoin="round"/>
+    <circle cx="91" cy="89" r="27" fill="url(#sli-ball-shade)"/>
+    <ellipse cx="80.74" cy="77.66" rx="5.40" ry="3.24" fill="#ffffff" fill-opacity="0.55" transform="rotate(-35 80.74 77.66)"/>
+  </g>
+  <circle cx="91" cy="89" r="27" fill="none" stroke="#081224" stroke-width="1.89"/>
+</svg>

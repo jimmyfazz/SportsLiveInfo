@@ -353,7 +353,12 @@ class EngineExpansionTests(unittest.TestCase):
         self.store.save_snapshot("sports", {"events": [ev(id="openligadb:1", source_id="openligadb", broadcast_status="single_guide_match",
                                                           broadcast_candidates=[{"channel_name": "Private"}], fetch_scope="league:bl1")]})
         commits = []
-        with patch.object(Engine, "_github_commit", side_effect=lambda *a: commits.append(a)):
+        class FixedClock(datetime):  # the fixture event is dated 14 Nov 2026; keep it inside the 8-day window
+            @classmethod
+            def now(cls, tz=None):
+                return NOW if tz is None else NOW.astimezone(tz)
+        with patch.object(Engine, "_github_commit", side_effect=lambda *a, **k: commits.append(a)), \
+             patch("sportsliveinfo.feed.datetime", FixedClock):
             Engine(self.store).publish()
         uploads = commits[0][4]
         payload = b"".join(d for p, d in uploads.items() if "/assets/events/" in p).decode()
@@ -401,11 +406,20 @@ class IngressExpansionTests(unittest.TestCase):
                   taxonomy.classify(ev(id="p1", competition="Premier League", competition_code="fd:PL", participants=["Arsenal", "Chelsea"]))]
         self.store.save_snapshot("today", linking.build_today(events, NOW))
         self.store.save_snapshot("sports", {"events": events})
-        page = self.get("?page=today")
+        class FixedClock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return NOW if tz is None else NOW.astimezone(tz)
+        with patch("sportsliveinfo.server.datetime", FixedClock):
+            page = self.get("?page=today")
+            filtered = self.get("?page=events&sport=football&category=football.premier_league")
         self.assertIn("Featured: England", page)
         self.assertIn("England (men) internationals", page)
-        filtered = self.get("?page=events&sport=football&category=football.premier_league")
         self.assertIn("1 of 2 events", filtered)
+        stale = self.get("?page=today")  # real clock: 13+ Nov is not the snapshot's day
+        if datetime.now(timezone.utc).date().isoformat() != "2026-11-14":
+            self.assertIn("not today", stale)
+            self.assertNotIn("Featured: England", stale)
 
 
 if __name__ == "__main__":

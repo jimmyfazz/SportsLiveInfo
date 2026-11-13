@@ -1,11 +1,31 @@
 # SportsLiveInfo — implementation progress and agent handover
 
-> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.0 source is present. Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.1 source is present (13 Nov code audit fixes: see docs/CODE_AUDIT_AND_FIXES_2026-11-13.md). Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is PRIVATE source/installation and stays private; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Updated:** 12 November 2026  
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
+
+## Code audit and fixes — 13 November 2026 (v0.3.1)
+
+**Branch:** `claude/sportsliveinfo-b1g-android-syyo8j` (merged `main` `56ea1be`). **Status:** SOURCE IMPLEMENTED + LOCAL TESTED, **118/118** tests (Python 3.12.3 and 3.13). Report: [CODE_AUDIT_AND_FIXES_2026-11-13.md](CODE_AUDIT_AND_FIXES_2026-11-13.md).
+
+**Fixed:**
+- server/GUI S1–S9 and GUI-1 to GUI-9;
+- engine E-01 to E-05, E-08 and E-10;
+- feed/publisher FA-01 to FA-08 and FEED-1;
+- matching D1–D14;
+- new icon/logo.
+
+**Open:**
+- E-06/TF-14: EPG storage memory and lock contention;
+- a self-hosted guide (local-source) exception;
+- background jobs for long UI actions;
+- packaging hardening (pinned base image, CI docker build, secret scan);
+- post-publish anonymous verification.
+
+**Ownership note:** Codex-owned engine/feed/adapter files were edited at the owner's direct request; Codex cross-review requested before merge. **NOT RUN:** live provider requests, Docker build, HAOS Supervisor/Ingress, B1G devices.
 
 ## Current documentation reconciliation — 12 November 2026
 
@@ -39,21 +59,6 @@ The following sections preserve what their original revisions reported. Statemen
 **B1G feed (sli/1):** implemented and fixture-tested (`feed.py`, `schemas/`, `docs/FEED_CONTRACT_SLI_V1.md`); atomic Git Data API publisher, retention 10, preview, optional auto-publish. **Public repository `jimmyfazz/LiveSports-EPG` exists but no feed JSON has been published** (no configured publishing token or approved sources). B1G reader design: B1 repo `docs/SPORTSLIVEINFO_FEED_READER_IMPLEMENTATION_2026-11-12.md` (not implemented). Local tests: 55/55.
 
 **API keys needed:** three, all free and optional — API-Sports (shared by the 10 API-Sports adapter entries in the reviewed source), football-data.org, CricketData.org. Jolpica, OpenF1, OpenLigaDB, TheSportsDB (public key) and all EPG feeds need none. A GitHub token is only for optional publishing.
-
-## Source expansion and sports sub-categories — v0.3.0, 12 November 2026
-
-**Branch:** `claude/sportsliveinfo-b1g-android-syyo8j`. **Status:** SOURCE IMPLEMENTED + LOCAL TESTED (43/43). Live provider calls, Docker build and HAOS install **NOT RUN** (provider hosts unreachable from the build environment). Full detail: [SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md](SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md).
-
-| Workstream | New runnable work | Remaining gate |
-|---|---|---|
-| Sports | 16 sources, 24 sports, 127 competition rows (England internationals, PL, UCL, UEL, UECL, FA Cup, EFL Cup…), fusion/corroboration, Live today page | Per-source Test connection on HAOS; verify API-Sports league ids; recall benchmark |
-| EPG | 27 private feeds across 15 markets, richer XMLTV fields, 8-market service tables, farleyflex tvg-id crosswalk, 41 lineup families | Fetch the "verify" feeds; memory test on UK1/US1; streamed programme table |
-| Linking | Unverified EPG broadcast candidates with hard negatives; never sets `broadcast_verified` | Owner sign-off on the verification rule (LINK-002) |
-| Ownership note | Sports adapters/engine are Codex-owned in the collaboration plan; changed at the owner's direct request with no concurrent Codex branch present | Codex cross-review before merge |
-
-**B1G feed (sli/1):** implemented and fixture-tested (`feed.py`, `schemas/`, `docs/FEED_CONTRACT_SLI_V1.md`); atomic Git Data API publisher, retention 10, preview, optional auto-publish. NOT published (no feed repository/token; no approved sources). B1G reader design: B1 repo `docs/SPORTSLIVEINFO_FEED_READER_IMPLEMENTATION_2026-11-12.md` (not implemented). Local tests: 55/55.
-
-**API keys needed:** three, all free and optional — API-Sports (covers all 11 API-Sports adapters), football-data.org, CricketData.org. Jolpica, OpenF1, OpenLigaDB, TheSportsDB (public key) and all EPG feeds need none. A GitHub token is only for optional publishing.
 
 ## New functional implementation — v0.2.0, 12 November 2026
 
