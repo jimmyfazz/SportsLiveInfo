@@ -81,10 +81,68 @@ class ServerAndGuiTests(StoreCase):
 
     def test_unexpected_action_error_still_redirects_with_notice(self):
         self.store.configure({"setup_complete": True})
-        with self.client() as client, patch.object(Engine, "publish", side_effect=KeyError("boom")):
-            page = self.post(client, {"action": "publish", "csrf": "csrf-test"})
+        with self.client() as client, patch.object(Engine, "preview_feed", side_effect=KeyError("boom")):
+            page = self.post(client, {"action": "preview_feed", "csrf": "csrf-test"})
         self.assertIn("Unexpected error (KeyError)", page)
         self.assertTrue(any(j["provider"] == "ui" and j["state"] == "error" for j in self.store.recent_jobs()))
+
+    def test_publish_runs_in_background_and_records_every_failure(self):
+        # Field report 13 Nov: the button "did nothing" because publication ran
+        # inside the request and its failure reason was never stored.
+        self.store.configure({"setup_complete": True})
+        release = threading.Event()
+        def slow_failure(_self):
+            release.wait(5)
+            raise RuntimeError("GitHub HTTP 403 while uploading feed files: the token cannot write here")
+        with self.client() as client, patch.object(Engine, "publish", slow_failure):
+            started = time.monotonic()
+            page = self.post(client, {"action": "publish", "csrf": "csrf-test"})
+            self.assertLess(time.monotonic() - started, 3)
+            self.assertIn("Publishing started", page)
+            self.assertIn('http-equiv="refresh"', page)
+            self.assertIn("Publishing…</button>", page)
+            self.assertIn("already running", self.post(client, {"action": "publish", "csrf": "csrf-test"}))
+            release.set()
+            client.server.engine._publish_thread.join(5)
+            page = self.get(client, "?page=publishing")
+        self.assertNotIn('http-equiv="refresh"', page)
+        self.assertIn("Last publication attempt failed", page)
+        self.assertIn("token cannot write here", page)
+        self.assertEqual(self.store._get("publish_status")["state"], "failed")
+        self.assertTrue(any(j["provider"] == "publisher" and j["state"] == "failed"
+                            and "cannot write" in j["details"] for j in self.store.recent_jobs()))
+
+    def test_publish_success_and_restart_interrupt_are_reported(self):
+        engine = Engine(self.store)
+        with patch.object(Engine, "_publish", lambda _self: setattr(_self, "_publish_outcome", "committed") or "rev123"):
+            self.assertEqual(engine._publish_job("manual"), "rev123")
+        self.assertEqual(self.store._get("publish_status")["state"], "succeeded")
+        self.assertIn("rev123 committed", self.store._get("publish_status")["message"])
+        engine._set_publish_status("running", "Publication in progress", "manual")
+        Engine(self.store)  # app restart
+        self.assertIn("Interrupted", self.store._get("publish_status")["message"])
+
+    def test_github_commit_errors_name_the_step_and_fix(self):
+        err = urllib.error.HTTPError("https://api.github.com/x", 403, "Forbidden", {},
+                                     io.BytesIO(b'{"message":"Resource not accessible by personal access token"}'))
+        responses = [{"object": {"sha": "h"}}, {"tree": {"sha": "t"}}, {"tree": [], "truncated": False}]
+        def fake_open(request, timeout=30):
+            if request.get_method() == "POST":
+                raise err
+            payload = responses.pop(0)
+            class R:
+                def __enter__(s): return s
+                def __exit__(s, *a): return False
+                def read(s, n=-1): return json.dumps(payload).encode()
+            return R()
+        with patch("sportsliveinfo.engine._github_open", side_effect=fake_open):
+            with self.assertRaises(RuntimeError) as issue:
+                Engine._github_commit("o", "r", "main", "dummy-secret", {"v1/a.json": b"{}"}, [], "m")
+        message = str(issue.exception)
+        self.assertIn("HTTP 403 while uploading feed files", message)
+        self.assertIn("Contents: Read and write", message)
+        self.assertIn("Resource not accessible by personal access token", message)
+        self.assertNotIn("dummy-secret", message)
 
     def test_rights_register_requires_attestation_and_records_changes(self):
         with self.client() as client:
@@ -100,7 +158,8 @@ class ServerAndGuiTests(StoreCase):
     def test_publish_button_disabled_with_reasons(self):
         with self.client() as client:
             page = self.get(client, "?page=publishing")
-        self.assertIn("Publishing is unavailable because publishing is not enabled", page)
+        self.assertIn("Publishing is unavailable because first-run setup is not finished", page)
+        self.assertIn("publishing is not enabled", page)
         self.assertIn('<button type="submit" disabled>Publish feed now</button>', page)
         self.assertIn("Publication rights register", page)
 

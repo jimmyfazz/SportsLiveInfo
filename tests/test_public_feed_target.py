@@ -23,7 +23,7 @@ class PublicDestinationTests(unittest.TestCase):
         self.assertFalse(target["auto_publish"])
         self.assertEqual(target["token"], "")
         self.assertEqual(self.store.config()["publication_approvals"], [])
-        with self.assertRaisesRegex(ValueError, "disabled"):
+        with self.assertRaisesRegex(ValueError, "first-run setup"):
             Engine(self.store).publish()
 
     def test_legacy_empty_placeholder_migrates_without_changing_other_fields(self):

@@ -189,6 +189,10 @@ class UI(BaseHTTPRequestHandler):
     def engine(self):
         return self.server.engine
 
+    def _publishing_active(self):
+        engine = getattr(self.server, "engine", None)
+        return bool(engine is not None and engine.publishing_active())
+
     def do_GET(self):
         try:
             self._get()
@@ -366,8 +370,11 @@ class UI(BaseHTTPRequestHandler):
             started = self.engine.start_collection(value("scope") or "both")
             return "dashboard", "Refresh started. Check source history shortly" if started else "A refresh is already running"
         if action == "publish":
-            revision = self.engine.publish()
-            return "publishing", "Feed %s committed atomically; public endpoint verification remains necessary" % revision
+            # Background job: the page reports progress and the final result
+            # (also recorded in Diagnostics and the App log).
+            if self.engine.start_publish():
+                return "publishing", "Publishing started. This page updates itself; the result appears below in under a minute"
+            return "publishing", "A publication is already running; its result will appear below"
         if action == "preview_feed":
             manifest = self.engine.preview_feed()
             return "publishing", "Feed preview %s built locally (%d assets); nothing uploaded" % (manifest["revision"], len(manifest["assets"]))
@@ -381,7 +388,11 @@ class UI(BaseHTTPRequestHandler):
         tabs = [("dashboard", "Overview"), ("today", "Live today"), ("sources", "Sources & API keys"), ("events", "Sports events"), ("guide", "EPG coverage"), ("scheduler", "Scheduler"), ("publishing", "Publishing"), ("health", "Diagnostics")]
         if page not in {key for key, _ in tabs}:
             page = "dashboard" if config["setup_complete"] else "sources"
-        head = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SportsLiveInfo</title><style>%s</style></head><body><main>' % CSS
+        # While a publication runs, the Publishing page refreshes itself so the
+        # outcome is shown without another click.
+        refresh = ('<meta http-equiv="refresh" content="4;url=?page=publishing">'
+                   if page == "publishing" and self._publishing_active() else "")
+        head = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">%s<title>SportsLiveInfo</title><style>%s</style></head><body><main>' % (refresh, CSS)
         head += '<header><img src="icon.png" alt="" width="64" height="64"><div><h1>SportsLiveInfo</h1><div class="sub">International EPG intelligence · Live sporting fixtures</div></div></header>'
         if not config["setup_complete"]:
             head += '<div class="alert">First-run setup: configure providers, review refresh times and optionally set a publishing destination. Credentials are stored privately in the Home Assistant App data volume.</div>'
@@ -898,16 +909,15 @@ class UI(BaseHTTPRequestHandler):
             'Set an expiry (for example 90 days); make a note to renew it before it expires.</li>'
             '<li>Choose <strong>Resource owner: jimmyfazz</strong>. Under Repository access choose '
             '<strong>Only select repositories</strong> and select <strong>LiveSports-EPG</strong> only. '
-            'Do not choose All repositories or the private SportsLiveInfo source repository.</li>'
+            'Do not choose All repositories or the SportsLiveInfo app source repository.</li>'
             '<li>Under Repository permissions, set <strong>Contents: Read and write</strong>. '
             'Leave other permissions at their defaults, then click <strong>Generate token</strong>.</li>'
             '<li>Copy the token from GitHub into the masked field below. '
             'Keep owner <strong>jimmyfazz</strong>, repository <strong>LiveSports-EPG</strong> '
             'and branch <strong>main</strong>. Click <strong>Save GitHub settings</strong>.</li>'
             '<li>Click <strong>Test saved GitHub connection</strong>. This checks authentication, '
-            'public repository access and branch existence without creating or publishing any files. '
-            'A read-only test cannot fully establish write access; this is confirmed only by a '
-            'rights-approved actual publication.</li>'
+            'public repository access, branch existence and write access. It creates no commit '
+            'and no file, and never publishes anything.</li>'
             '<li>Keep <strong>Enable publishing</strong> and <strong>Publish automatically</strong> '
             'unticked until programme/event redistribution permissions have been reviewed. '
             'Later, preview the feed before enabling publishing. '
@@ -918,7 +928,7 @@ class UI(BaseHTTPRequestHandler):
             'after saving. Any Home Assistant backup containing tokens is sensitive.</p></section>'
         )
         body += '<section class="card" style="margin-top:16px">' + self._form("github", form) + '<div class="divider"></div><p class="help">Saved token: %s.</p>' % ("yes" if github.get("token") else "no") + '</section>'
-        body += '<section class="card" style="margin-top:16px"><h3>Connection check (no upload)</h3><p>Save the token and destination first. Testing never enables publication or changes GitHub contents.</p>' + self._form("test_github", '<button class="secondary" type="submit">Test saved GitHub connection</button>') + '</section>'
+        body += '<section class="card" style="margin-top:16px"><h3>Connection check (no upload)</h3><p>Save the token and destination first. Testing confirms the token can write, but never enables publication, commits or changes any file.</p>' + self._form("test_github", '<button class="secondary" type="submit">Test saved GitHub connection</button>') + '</section>'
         # Rights register: the only place event publication can be authorised.
         rights = '<p>Tick only sources whose terms you have reviewed and that permit public redistribution of fixture facts (teams, times, competition). A fused event is published only when <em>every</em> contributing source is approved. EPG programme text is never published.</p><div class="grid">'
         for name, (label, _, _, _) in providers.SPORTS.items():
@@ -931,6 +941,8 @@ class UI(BaseHTTPRequestHandler):
         body += '<section class="card" style="margin-top:16px"><h2>Publication rights register</h2><p class="sub">Approved now: %s. %s</p>%s</section>' % (
             e(", ".join(approvals) or "none"), last, self._form("approvals", rights))
         blockers = []
+        if not config.get("setup_complete"):
+            blockers.append("first-run setup is not finished (Sources page)")
         if not github.get("enabled"):
             blockers.append("publishing is not enabled")
         if not github.get("token"):
@@ -946,9 +958,18 @@ class UI(BaseHTTPRequestHandler):
         for note in preview.get("notices", []):
             body += '<p class="warn help">%s</p>' % e(note)
         body += self._form("preview_feed", '<button class="secondary" type="submit">Build feed preview (no upload)</button>')
+        running = self._publishing_active()
+        status = self.store._get("publish_status") or {}
+        if running:
+            body += '<p class="help"><strong>Publishing now…</strong> This page refreshes automatically until GitHub confirms the commit.</p>'
+        elif status.get("state") in ("succeeded", "failed"):
+            body += '<div class="alert%s"><strong>Last publication attempt %s (%s, %s):</strong> %s</div>' % (
+                " error" if status["state"] == "failed" else "", e(status["state"]), e(status.get("trigger", "")),
+                e(when(status.get("at"))), e(status.get("message", "")))
         if blockers:
             body += '<p class="warn help">Publishing is unavailable because %s.</p>' % e("; ".join(blockers))
-        body += self._form("publish", '<button type="submit"%s>Publish feed now</button>' % (" disabled" if blockers else "")) + '</section>'
+        body += self._form("publish", '<button type="submit"%s>%s</button>' % (
+            " disabled" if blockers or running else "", "Publishing…" if running else "Publish feed now")) + '</section>'
         return body
 
     def health(self, config=None):

@@ -45,6 +45,23 @@ def _github_open(request, timeout=30):
     return urllib.request.build_opener(_NoGitHubRedirect()).open(request, timeout=timeout)
 
 
+def _github_failure(step, exc):
+    """Actionable, credential-free description of a GitHub API rejection."""
+    detail = ""
+    try:
+        payload = json.loads(exc.read(4000) or b"{}")
+        detail = re.sub(r"[^\w .,:;'()/-]", "", str(payload.get("message", "")))[:120].strip()
+    except Exception:
+        pass
+    hint = {
+        401: "the token was rejected; check or regenerate it",
+        403: "the token cannot write here; edit it to grant Contents: Read and write on the feed repository",
+        404: "the token cannot see or write the feed repository; check its repository selection and Contents: Read and write",
+        422: "GitHub refused the change",
+    }.get(exc.code, "unexpected GitHub response")
+    return "GitHub HTTP %d while %s: %s%s" % (exc.code, step, hint, (" (GitHub: %s)" % detail) if detail else "")
+
+
 class QuotaExhausted(RuntimeError):
     pass
 
@@ -118,6 +135,13 @@ class Engine:
         self._last_call = {}
         self._pace_lock = threading.Lock()
         self._publish_lock = threading.Lock()
+        self._publish_start = threading.Lock()
+        self._publish_thread = None
+        self._publish_outcome = None
+        # A publication cannot survive an app restart; never leave "running" shown forever.
+        status = store._get("publish_status")
+        if isinstance(status, dict) and status.get("state") == "running":
+            store._put("publish_status", dict(status, state="failed", message="Interrupted by an app restart; publish again"))
 
     def collect(self):
         if not self._busy.acquire(blocking=False):
@@ -187,13 +211,7 @@ class Engine:
         github = conf["github"]
         if (scope == "both" and github.get("enabled") and github.get("auto_publish")
                 and conf.get("publication_approvals")):
-            try:
-                self.publish()
-            except (ValueError, RuntimeError, OSError) as exc:
-                self.store.job("publisher", "failed", str(exc)[:140])
-            except Exception as exc:
-                LOGGER.exception("Auto-publish failed")
-                self.store.job("publisher", "failed", "Unexpected %s during auto-publish" % type(exc).__name__)
+            self._publish_job("automatic")
         return bool(successes)
 
     # ---- request planning -------------------------------------------------
@@ -881,8 +899,88 @@ class Engine:
             raise ValueError("Could not reach GitHub; check internet access and try again") from None
         except (TypeError, KeyError, AttributeError, json.JSONDecodeError):
             raise ValueError("GitHub returned an unexpected response") from None
-        return ("GitHub token authenticated and public feed branch readable. "
-                "Read-only check passed; Contents:write is proven only by an authorised publication.")
+        # Write probe: an unreferenced blob proves Contents:write without adding
+        # a commit or a file to any branch (GitHub garbage-collects it). Read-only
+        # tokens previously passed this test and then failed only at publication.
+        try:
+            probe = urllib.request.Request(
+                url + "/git/blobs", method="POST",
+                data=json.dumps({"content": "SportsLiveInfo write-access check", "encoding": "utf-8"}).encode(),
+                headers=dict(headers, **{"Content-Type": "application/json"}))
+            with _github_open(probe, timeout=12) as response:
+                if not json.loads(response.read(64_000)).get("sha"):
+                    raise ValueError("GitHub returned an unexpected response to the write check")
+        except urllib.error.HTTPError as exc:
+            if exc.code in (403, 404):
+                raise ValueError("The token can read %s/%s but cannot write to it (HTTP %d). On GitHub edit the token: "
+                                 "Repository access must include %s, and Repository permissions > Contents must be "
+                                 "Read and write. Then save the new token here." % (owner, repository, exc.code, repository)) from None
+            if exc.code == 401:
+                raise ValueError("GitHub rejected the saved token (401); check or regenerate it") from None
+            raise ValueError("GitHub write check returned HTTP %d" % exc.code) from None
+        except (TimeoutError, urllib.error.URLError, OSError):
+            raise ValueError("Could not reach GitHub for the write check; try again") from None
+        except (TypeError, AttributeError, json.JSONDecodeError):
+            raise ValueError("GitHub returned an unexpected response to the write check") from None
+        return ("GitHub token authenticated, public feed branch readable and write access confirmed "
+                "(no commit or file was created). Publishing still requires approved sources.")
+
+    def start_publish(self):
+        """Start a manual publication in the background; False if one is already running.
+
+        Publishing takes tens of seconds (feed build plus a dozen GitHub API
+        calls). Running it inside the Ingress request left the browser waiting
+        with no feedback, invited repeated clicks, and lost the failure reason
+        when the browser gave up before the redirect.
+        """
+        with self._publish_start:
+            if self._publish_thread is not None and self._publish_thread.is_alive():
+                return False
+            self._set_publish_status("running", "Publication in progress", "manual")
+            thread = threading.Thread(target=self._publish_job, args=("manual",),
+                                      name="sportsliveinfo-publish", daemon=True)
+            self._publish_thread = thread
+            try:
+                thread.start()
+            except RuntimeError:
+                self._publish_thread = None
+                self._set_publish_status("failed", "Could not start the publisher thread", "manual")
+                raise
+        return True
+
+    def publishing_active(self):
+        thread = self._publish_thread
+        return thread is not None and thread.is_alive()
+
+    def _set_publish_status(self, state, message, trigger):
+        self.store._put("publish_status", {"state": state, "message": str(message)[:300],
+                                           "trigger": trigger, "at": utcnow()})
+
+    def _publish_job(self, trigger):
+        """Run one publication and always record its outcome (Diagnostics, Publishing page, App log)."""
+        LOGGER.info("Feed publication started (%s)", trigger)
+        self._set_publish_status("running", "Publication in progress", trigger)
+        try:
+            revision = self.publish()
+        except (ValueError, RuntimeError, OSError) as exc:
+            message = str(exc)[:300]
+            LOGGER.warning("Feed publication failed (%s): %s", trigger, message)
+            self.store.job("publisher", "failed", message)
+            self._set_publish_status("failed", message, trigger)
+            return None
+        except Exception as exc:
+            LOGGER.exception("Feed publication failed (%s)", trigger)
+            message = "Unexpected %s; see the App log" % type(exc).__name__
+            self.store.job("publisher", "failed", message)
+            self._set_publish_status("failed", message, trigger)
+            return None
+        if self._publish_outcome == "unchanged":
+            message = "Feed %s is already live and unchanged; nothing to commit" % revision
+        else:
+            message = "Feed %s committed to GitHub" % revision
+        LOGGER.info("Feed publication finished (%s): %s", trigger, message)
+        self._set_publish_status("succeeded", message, trigger)
+        return revision
 
     def publish(self):
         """Publish the sli/1 feed in ONE atomic commit; EPG programme text is never copied.
@@ -900,8 +998,11 @@ class Engine:
     def _publish(self):
         conf = self.store.config()
         target = conf["github"]
-        if not conf["setup_complete"] or not target.get("enabled"):
-            raise ValueError("Public publishing is disabled")
+        self._publish_outcome = None
+        if not conf["setup_complete"]:
+            raise ValueError("Finish first-run setup (Sources page) before publishing")
+        if not target.get("enabled"):
+            raise ValueError("Tick Enable publishing and save the GitHub settings first")
         # No approval is supplied by default; the app cannot invent redistribution rights.
         if not conf.get("publication_approvals"):
             raise ValueError("No sport source has an approved public redistribution licence")
@@ -922,6 +1023,7 @@ class Engine:
         # (48 h) before TVs would wrongly treat a static-but-healthy feed as stale.
         if revision == state.get("last_revision") and age < timedelta(hours=24):
             self.store.job("publisher", "unchanged", "Feed revision %s already published" % revision)
+            self._publish_outcome = "unchanged"
             return revision
         state["revisions"] = [h for h in state["revisions"] if h["revision"] != revision]
         live_before = {p for h in state["revisions"] for p in h["assets"]}
@@ -941,6 +1043,7 @@ class Engine:
         self.store._put("feed_state", {"last_revision": revision, "revisions": keep, "published_at": utcnow()})
         self.store.job("publisher", "submitted", "Feed %s committed atomically (%d new files, %d removed); verify the static endpoint" % (
             revision, len(uploads), len(deletions)))
+        self._publish_outcome = "committed"
         return revision
 
     @staticmethod
@@ -953,7 +1056,7 @@ class Engine:
         """
         base = "https://api.github.com/repos/%s/%s" % (owner, repository)
 
-        def api(method, path, body=None):
+        def api(method, path, body=None, step="request"):
             req = urllib.request.Request(base + path, method=method, data=json.dumps(body).encode() if body is not None else None,
                                          headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
                                                   "User-Agent": "SportsLiveInfo/0.3", "Content-Type": "application/json"})
@@ -962,16 +1065,16 @@ class Engine:
                     return json.loads(res.read(20_000_000))
             except urllib.error.HTTPError as exc:
                 if method == "PATCH" and exc.code in (409, 422):
-                    raise RuntimeError("Feed branch changed during publication; it will be retried next run") from None
-                raise RuntimeError("GitHub API rejected %s request (%d)" % (method, exc.code)) from None
+                    raise RuntimeError("Feed branch changed during publication; publish again") from None
+                raise RuntimeError(_github_failure(step, exc)) from None
             except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-                raise RuntimeError("Could not reach GitHub (%s); publication will be retried" % type(exc).__name__) from None
+                raise RuntimeError("Could not reach GitHub while %s (%s); publish again" % (step, type(exc).__name__)) from None
 
         quoted = urllib.parse.quote(branch, safe="")
         try:
-            head = api("GET", "/git/ref/heads/" + quoted)["object"]["sha"]
-            base_tree = api("GET", "/git/commits/" + head)["tree"]["sha"]
-            remote = api("GET", "/git/trees/%s?recursive=1" % base_tree)
+            head = api("GET", "/git/ref/heads/" + quoted, step="reading the feed branch")["object"]["sha"]
+            base_tree = api("GET", "/git/commits/" + head, step="reading the latest commit")["tree"]["sha"]
+            remote = api("GET", "/git/trees/%s?recursive=1" % base_tree, step="reading the repository files")
             existing = None if remote.get("truncated") else {e["path"] for e in remote.get("tree", []) if e.get("type") == "blob"}
         except (KeyError, TypeError) as exc:
             raise RuntimeError("GitHub returned an unexpected repository response") from None
@@ -982,10 +1085,12 @@ class Engine:
                     uploads.setdefault(path, data)
             deletions = [path for path in deletions if path in existing and path not in uploads]
         tree = [{"path": path, "mode": "100644", "type": "blob",
-                 "sha": api("POST", "/git/blobs", {"content": base64.b64encode(data).decode(), "encoding": "base64"})["sha"]}
+                 "sha": api("POST", "/git/blobs", {"content": base64.b64encode(data).decode(), "encoding": "base64"},
+                            step="uploading feed files")["sha"]}
                 for path, data in sorted(uploads.items())]
         tree += [{"path": path, "mode": "100644", "type": "blob", "sha": None} for path in deletions]
-        new_tree = api("POST", "/git/trees", {"base_tree": base_tree, "tree": tree})["sha"]
-        commit = api("POST", "/git/commits", {"message": message, "tree": new_tree, "parents": [head]})["sha"]
-        api("PATCH", "/git/refs/heads/" + quoted, {"sha": commit, "force": False})
+        new_tree = api("POST", "/git/trees", {"base_tree": base_tree, "tree": tree}, step="building the commit tree")["sha"]
+        commit = api("POST", "/git/commits", {"message": message, "tree": new_tree, "parents": [head]},
+                     step="creating the commit")["sha"]
+        api("PATCH", "/git/refs/heads/" + quoted, {"sha": commit, "force": False}, step="moving the feed branch")
         return commit

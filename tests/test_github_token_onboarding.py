@@ -40,23 +40,40 @@ class GitHubOnboardingTests(unittest.TestCase):
             request.assert_not_called()
         self.assertFalse(self.store.config()["github"]["enabled"])
 
-    def test_token_read_check_does_not_write_or_enable_publication(self):
+    def test_token_check_proves_write_without_committing_or_enabling_publication(self):
         self.store.configure({"github": {"token": "dummy-secret"}})
         payloads = [
             _Response({"full_name": "jimmyfazz/LiveSports-EPG",
                        "private": False, "permissions": {"push": True}}),
             _Response({"ref": "refs/heads/main"}),
+            _Response({"sha": "0123abcd"}),
         ]
         with patch("sportsliveinfo.engine._github_open", side_effect=payloads) as urlopen:
             result = self.engine.test_github_destination()
-        self.assertIn("Read-only check passed", result)
-        self.assertEqual(urlopen.call_count, 2)
+        self.assertIn("write access confirmed", result)
+        self.assertIn("no commit or file was created", result)
+        methods = [call.args[0].get_method() for call in urlopen.call_args_list]
+        self.assertEqual(methods, ["GET", "GET", "POST"])
+        # The only write is an unreferenced blob: never a tree, commit or ref update.
+        self.assertTrue(urlopen.call_args_list[2].args[0].full_url.endswith("/git/blobs"))
         for call in urlopen.call_args_list:
-            request = call.args[0]
-            self.assertEqual(request.get_method(), "GET")
-            self.assertNotIn("dummy-secret", request.full_url)
+            self.assertNotIn("dummy-secret", call.args[0].full_url)
         self.assertFalse(self.store.config()["github"]["enabled"])
         self.assertFalse(self.store.config()["github"]["auto_publish"])
+
+    def test_read_only_token_is_reported_before_publication(self):
+        self.store.configure({"github": {"token": "dummy-secret"}})
+        denied = urllib.error.HTTPError("https://api.github.com/redacted", 403, "denied", {}, io.BytesIO())
+        payloads = [
+            _Response({"full_name": "jimmyfazz/LiveSports-EPG", "private": False}),
+            _Response({"ref": "refs/heads/main"}),
+            denied,
+        ]
+        with patch("sportsliveinfo.engine._github_open", side_effect=payloads):
+            with self.assertRaisesRegex(ValueError, "cannot write") as issue:
+                self.engine.test_github_destination()
+        self.assertIn("Contents must be Read and write", str(issue.exception))
+        self.assertNotIn("dummy-secret", str(issue.exception))
 
     def test_wrong_repository_permissions_and_private_destination_are_denied(self):
         self.store.configure({"github": {"token": "dummy-secret"}})

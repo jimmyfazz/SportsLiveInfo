@@ -2,6 +2,14 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.6 — Reliable publishing feedback
+
+- Publish feed now runs in the background. The Publishing page shows progress, refreshes itself and reports the result. Previously the request blocked for 15–25 s with no feedback, repeated clicks queued, and a failure reason was lost when the browser stopped waiting.
+- Every manual or automatic publication attempt now records its outcome in Diagnostics, on the Publishing page and in the App log.
+- GitHub failures name the step that failed (reading the branch, uploading files, creating the commit, moving the branch), give the fix, and include GitHub's own short message.
+- Test saved GitHub connection now proves write access with an unreferenced blob. No commit or file is created. A read-only token is reported before you try to publish.
+- The Publish button explains, and is disabled, when first-run setup is not finished.
+
 ## 0.3.5 — Source connections and refresh budgets
 
 - Reserve EPG requests for scheduled refreshes and distinguish deferred work from provider failures. Reuse unchanged guide downloads when validators are available.
