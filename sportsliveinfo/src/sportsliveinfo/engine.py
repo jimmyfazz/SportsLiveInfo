@@ -107,6 +107,9 @@ def _guide_failure(exc):
                   "XMLTV channel count exceeded safety limit", "XMLTV programme count exceeded safety limit"):
         return "Guide exceeded an import size or record limit"
     specific = {
+        "Cross-origin provider redirect blocked": "Cross-origin provider redirect blocked",
+        "Source URL is not on the approved HTTPS provider list":
+            "Source URL is not on the approved HTTPS provider list",
         "XMLTV declarations and entities are not allowed":
             "Guide contains a DTD declaration or entity that the importer blocks for safety",
         "Not an XMLTV programme guide": "Download is not an XMLTV guide (wrong root element)",

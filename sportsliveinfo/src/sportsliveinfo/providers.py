@@ -23,7 +23,6 @@ EPG = {
     "epgshare_fr": ("France broad · EPG Share FR1 (verify)", "https://epgshare01.online/epgshare01/epg_ripper_FR1.xml.gz"),
     "fr_xmltv": ("France · XMLTV France (racacax/XML-TV-Fr)", "https://xmltvfr.fr/xmltv/xmltv_fr.xml.gz"),
     # Feeds already offered by the B1G Android backup-guide list (SkyGuideScene.backupFeeds).
-    "mjh_sky_uk": ("UK Sky · Matt Huisman (B1G backup feed)", "https://i.mjh.nz/SkyUK/epg.xml.gz"),
     "epgtalk_uk": ("UK national · EPGTalk (B1G suggested feed)", "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/UK_guide.xml.gz"),
     "epgtalk_sports": ("Sports · EPGTalk (B1G suggested feed)", "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz"),
     "iptv_epg_fr": ("France · IPTV-EPG.org (B1G; terms not explicit)", "https://iptv-epg.org/files/epg-fr.xml.gz"),
@@ -42,8 +41,8 @@ EPG = {
     "iptv_epg_ge": ("Georgia · IPTV-EPG.org — Setanta (verify)", "https://iptv-epg.org/files/epg-ge.xml.gz"),
     "epgshare_my": ("Malaysia · EPG Share MY1 — Astro (verify)", "https://epgshare01.online/epgshare01/epg_ripper_MY1.xml.gz"),
     # Matt Huisman regional guides (path pattern reported in community forums).
-    "mjh_nz": ("New Zealand free-to-air · Matt Huisman (verify)", "https://i.mjh.nz/nz/epg.xml.gz"),
-    "mjh_au_sydney": ("Australia free-to-air (Sydney) · Matt Huisman (verify)", "https://i.mjh.nz/au/Sydney/epg.xml.gz"),
+    "mjh_nz": ("New Zealand free-to-air · Matt Huisman", "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/nz/epg.xml.gz"),
+    "mjh_au_sydney": ("Australia free-to-air (Sydney) · Matt Huisman", "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/au/Sydney/epg.xml.gz"),
 }
 # Further markets present in the owner's provider categories (CA, AU, NZ, PT,
 # PL, GR, SG, IN). Canada uses the publisher's CA2 feed.
@@ -77,7 +76,11 @@ EPG_LIMITS = {
     "epgshare_uk": (60_000_000, 300_000), "epgshare_fr": (40_000_000, 250_000),
     "epgshare_ie": (30_000_000, 200_000), "epgshare_us": (60_000_000, 300_000),
     "epgshare_hk": (30_000_000, 200_000), "epgshare_my": (30_000_000, 200_000),
-    "fr_xmltv": (30_000_000, 250_000), "mjh_sky_uk": (40_000_000, 250_000),
+    "fr_xmltv": (30_000_000, 250_000),
+    # Current public guide samples are 1.24 MB / 9.8k rows (NZ) and
+    # 0.73 MB / 13.8k rows (Sydney); these caps allow growth without using
+    # the much larger broad-feed defaults.
+    "mjh_nz": (5_000_000, 50_000), "mjh_au_sydney": (5_000_000, 50_000),
 }
 EPG_LIMITS.update({"epgshare_" + cc.lower(): (40_000_000, 250_000) for cc in EPGSHARE_MARKETS})
 EPG_DAILY_REQUEST_LIMIT = 4
@@ -86,6 +89,7 @@ DEFAULT_EPG_LIMIT = (14_000_000, 100_000)
 EPG_EXPANDED_LIMITS = {
     "fr_xmltv": 85_000_000, "epgshare_ca": 85_000_000, "epgshare_us": 95_000_000,
     "iptv_epg_gb": 95_000_000, "iptv_epg_ca": 95_000_000, "epgtalk_uk": 115_000_000,
+    "mjh_nz": 25_000_000, "mjh_au_sydney": 15_000_000,
 }
 # The standard XMLTV prologue names an *external* DTD that the parser never fetches.
 # Remove only that exact marker at the start of the file, for every source; an

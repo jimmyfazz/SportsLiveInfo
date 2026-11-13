@@ -305,3 +305,42 @@ Validation: `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests
 ## Mobile Overview
 
 The Overview now puts refresh status and controls ahead of four linked metrics, separates provider-reported and estimated live counts, and uses readable source rows with the latest collection outcome and saved import time. The mobile navigation has three main tabs and a More menu. Desktop retains the full navigation. API usage remains in Diagnostics.
+
+## Matt Huisman XMLTV source repair — 13 November 2026
+
+Branch `fix/mjh-guide-source-urls` starts at main `c71b9549bb6eee2d1f1067bd6635c8aa7a94c1b7`.
+
+**Diagnosis:** all three configured `https://i.mjh.nz/...` URLs return HTTP 302 to `raw.githubusercontent.com`; the collector correctly blocks cross-origin redirects. The configured UK path then returns 404 at its redirect target. The current publisher root listing has no `SkyUK/` folder. Its `SkyGo/` guide is explicitly the New Zealand Sky Go service, so it is not a UK replacement ([Matt Huisman Sky Go NZ description](https://www.matthuisman.nz/2021/05/sky-go-nz-kodi-add-on.html)). The UK-specific source is retired from the selectable EPG catalogue and size overrides; `COUNTRY_BY_SOURCE["mjh_sky_uk"]` and source identity rules remain for existing snapshots and historical mappings.
+
+**Current source paths:**
+
+| Source | Direct URL status | Current compressed size | Parsed channels | Parsed programmes | Furthest programme end from check time |
+| --- | --- | ---: | ---: | ---: | ---: |
+| NZ | 200 | 1,237,696 bytes | 44 | 9,756 | 691.2 h |
+| AU Sydney | 200 | 729,267 bytes | 174 | 13,788 | 386.2 h |
+| UK Sky | retired | former path's final target is 404 | — | — | — |
+
+The New Zealand and Sydney raw GitHub files decompress to 12,434,405 and 7,221,703 bytes. Both fit the existing defaults (14,000,000 compressed bytes, 100,000 programme rows, 65,000,000 expanded bytes). The unrelated `SkyGo/` candidate is a NZ source; it is 6,857,631 compressed / 69,519,612 expanded bytes and exceeds the default expanded limit, so it is not added or used as UK coverage.
+
+The collector now points NZ and Sydney directly at their final raw GitHub URLs. This avoids redirects without weakening `RedirectGuard`. Known cross-origin redirect and unapproved HTTPS source failures now have explicit messages. The per-source limits are now 5 MB compressed / 50,000 programmes / 25 MB expanded for NZ and 5 MB / 50,000 / 15 MB for Sydney. The golden `sli/1` fixtures were regenerated after removing the retired guide from the catalogue.
+
+Validation commands/results:
+
+```text
+curl -sSIL --max-time 30 https://i.mjh.nz/SkyUK/epg.xml.gz
+HTTP/2 302
+location: https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/SkyUK/epg.xml.gz
+HTTP/2 404
+
+curl -sSIL --max-time 30 https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/nz/epg.xml.gz
+HTTP/2 200
+content-length: 1237696
+
+curl -sSIL --max-time 30 https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/au/Sydney/epg.xml.gz
+HTTP/2 200
+content-length: 729267
+```
+
+App-parser checks used `providers.decode_xmltv(..., max_programmes=400000)` and confirmed the counts/horizons in the table. Three new synthetic tests cover direct source URLs, retirement/market retention, redirect rejection and diagnostic text. Golden fixtures were regenerated with `PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py` (14 assets). `PYTHONPATH=sportsliveinfo/src python3 -m compileall -q sportsliveinfo/src tests` and `git diff --check` passed. `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests -v` completed with **202 tests, OK**.
+
+**Home Assistant acceptance:** NOT RUN at this documentation point. Before merging, create the required Home Assistant backup. After merge, verify version 0.3.9 is offered/installed, run “Collect now,” then check the app Diagnostics/logs for nonzero NZ and Sydney imports and the retired UK source no longer being selected. Do not claim live HA verification until those steps complete.

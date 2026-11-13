@@ -2,6 +2,13 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.9 — Repair Matt Huisman guide sources
+
+- Point the New Zealand and Sydney XMLTV sources directly at their final raw GitHub URLs, avoiding the cross-origin redirects from `i.mjh.nz` that the collector correctly blocks.
+- Retire the UK Sky source: `SkyUK/` is absent from the publisher's current root listing and returns 404. The available `SkyGo/` feed is New Zealand Sky Go, not a UK guide.
+- Report blocked cross-origin redirects and unapproved HTTPS source URLs with explicit diagnostics.
+- Validated the current New Zealand and Sydney files with the app's XMLTV parser: both contain programmes beyond 24 hours. Their current sizes remain within the default byte, expanded-byte and programme limits.
+
 ## 0.3.8 — UK and Europe channel identification
 
 - New optional **channel identity dictionary** for UK and Europe, built from the public-domain iptv-org database. It is off until you enable it under Sources. When on, it downloads about 3 MB at most once a day, using conditional requests and keeping the last good copy.
