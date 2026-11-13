@@ -151,6 +151,36 @@ class GuideListedPrivacyTests(unittest.TestCase):
         self.assertNotIn("guide_listing", manifest["rights"]["events"]["omitted_unapproved_sources"])
         self.assertFalse(any(b"North Harbor" in data for data in files.values()))
 
+    def test_private_feed_includes_guide_listed_events_with_channel_detail(self):
+        self.store.configure({"setup_complete": True, "sports": {}, "epg": {"farleyflex": True}})
+        self.store.save_snapshot("epg:farleyflex", guide("farleyflex", {"ss": "Sky Sports Football"},
+                                                         [listing("ss", "Live: Synthetic Cup", "North Harbor v Westshire")]))
+        Engine(self.store)._materialize(now=NOW)
+        manifest, files = feed.build_feed(self.store, now=NOW, private=True)
+        self.assertEqual(manifest["visibility"], "private")
+        self.assertEqual(manifest["rights"]["guide_listed_events"], "included_private")
+        self.assertIn("guide_listed_events", manifest["capabilities"])
+        events = [e for path, data in files.items() if "/events/" in path for e in json.loads(data)["events"]]
+        self.assertEqual(len(events), 1)
+        event = events[0]
+        self.assertEqual((event["title"], event["origin"], event["broadcast_verified"]),
+                         ("North Harbor v Westshire", "guide_listing", False))
+        link = event["broadcast_links"][0]
+        self.assertEqual((link["canonical_channel_id"], link["channel_name"]), ("gb.sky.sports.football", "Sky Sports Football"))
+        self.assertIn("programme_start_utc", link)
+        # The public build of the same store still publishes nothing from the guide.
+        public, public_files = feed.build_feed(self.store, now=NOW)
+        self.assertNotIn("visibility", public)
+        self.assertFalse(any(b"North Harbor" in data for data in public_files.values()))
+
+    def test_private_target_must_differ_from_the_public_repository(self):
+        self.store.configure({"github": {"owner": "example", "repository": "public-feed", "token": "t"},
+                              "private_feed": {"owner": "example", "repository": "Public-Feed", "enabled": True}})
+        with self.assertRaises(ValueError):
+            Engine(self.store)._private_target()
+        self.store.configure({"private_feed": {"repository": "private-feed"}})
+        self.assertEqual(Engine(self.store)._private_target(), ("example", "private-feed", "main", "t"))
+
 
 if __name__ == "__main__":
     unittest.main()

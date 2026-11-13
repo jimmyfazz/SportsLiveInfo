@@ -53,7 +53,11 @@
             "properties": {"canonical_channel_id": {"type": "string"}, "status": {"const": "guide_listed_unverified"},
               "coverage": {"enum": ["network", "regional"]}, "confidence": {"enum": ["high", "medium"]},
               "guides": {"type": "integer", "minimum": 0}, "parent_channel_id": {"type": "string"},
-              "not_on": {"type": "array", "items": {"type": "string"}}}}},
+              "not_on": {"type": "array", "items": {"type": "string"}},
+              "channel_name": {"type": "string", "description": "Private feed only"},
+              "programme_start_utc": {"type": "string", "description": "Private feed only"},
+              "programme_end_utc": {"type": "string", "description": "Private feed only"}}}},
+        "origin": {"const": "guide_listing", "description": "Private feed only: live sport listed in the guides with no event-source fixture"},
         "b1g_priority_group": {"type": "string"}
       }
     }

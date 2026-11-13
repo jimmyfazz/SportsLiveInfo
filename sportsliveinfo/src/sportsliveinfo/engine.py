@@ -915,15 +915,29 @@ class Engine:
         self.store.job("publisher", "preview", "Feed %s built locally: %d assets" % (manifest["revision"], len(manifest["assets"])))
         return manifest
 
-    def test_github_destination(self):
+    def _private_target(self, conf=None):
+        """(owner, repository, branch, token) of the private feed; the token is the saved GitHub token."""
+        conf = conf or self.store.config()
+        target, public = conf.get("private_feed") or {}, conf["github"]
+        owner, repository, branch = (target.get(k, "") for k in ("owner", "repository", "branch"))
+        if (owner.casefold(), repository.casefold()) == (public.get("owner", "").casefold(),
+                                                         public.get("repository", "").casefold()):
+            raise ValueError("The private feed needs its own repository, not the public feed repository")
+        return owner, repository, branch, public.get("token", "")
+
+    def test_github_destination(self, private=False):
         """Read-only check that the saved fine-grained token reaches its target.
 
         A GET does not prove Contents:write. This intentionally never commits,
         modifies repository settings, or attempts to publish unlicensed data.
+        The private feed target must be a private repository; the public one public.
         """
-        target = self.store.config()["github"]
-        owner, repository, branch, token = (target.get(k, "") for k in
-                                            ("owner", "repository", "branch", "token"))
+        if private:
+            owner, repository, branch, token = self._private_target()
+        else:
+            target = self.store.config()["github"]
+            owner, repository, branch, token = (target.get(k, "") for k in
+                                                ("owner", "repository", "branch", "token"))
         if not token:
             raise ValueError("Save your GitHub token first, then run Test Connection")
         try:
@@ -940,7 +954,9 @@ class Engine:
                 info = json.loads(response.read(64_000))
             if info.get("full_name", "").casefold() != (owner + "/" + repository).casefold():
                 raise ValueError("GitHub returned a different repository")
-            if info.get("private") is not False:
+            if private and info.get("private") is not True:
+                raise ValueError("The private feed destination must be a PRIVATE repository; make it private on GitHub first")
+            if not private and info.get("private") is not False:
                 raise ValueError("The feed destination must be a public repository")
             perms = info.get("permissions")
             if isinstance(perms, dict) and perms.get("push") is False:
@@ -987,6 +1003,9 @@ class Engine:
             raise ValueError("Could not reach GitHub for the write check; try again") from None
         except (TypeError, AttributeError, json.JSONDecodeError):
             raise ValueError("GitHub returned an unexpected response to the write check") from None
+        if private:
+            return ("GitHub token authenticated, private feed repository confirmed private, branch readable and "
+                    "write access confirmed (no commit or file was created).")
         return ("GitHub token authenticated, public feed branch readable and write access confirmed "
                 "(no commit or file was created). Publishing still requires approved sources.")
 
@@ -1025,13 +1044,30 @@ class Engine:
         """Run one publication and always record its outcome (Diagnostics, Publishing page, App log)."""
         LOGGER.info("Feed publication started (%s)", trigger)
         self._set_publish_status("running", "Publication in progress", trigger)
+        conf = self.store.config()
+        private_note = ""
+        if (conf.get("private_feed") or {}).get("enabled"):
+            # The private feed never blocks or changes the public one, and vice versa.
+            try:
+                private_revision = self.publish_private()
+                private_note = "; private feed %s %s" % (
+                    private_revision, "unchanged" if self._private_outcome == "unchanged" else "committed")
+                LOGGER.info("Private feed publication finished (%s): %s", trigger, private_revision)
+            except (ValueError, RuntimeError, OSError) as exc:
+                private_note = "; private feed failed: %s" % str(exc)[:200]
+                LOGGER.warning("Private feed publication failed (%s): %s", trigger, str(exc)[:300])
+                self.store.job("private_publisher", "failed", str(exc)[:300])
+            if not conf["github"].get("enabled"):
+                state = "failed" if "failed" in private_note else "succeeded"
+                self._set_publish_status(state, private_note.lstrip("; ").capitalize(), trigger)
+                return None
         try:
             revision = self.publish()
         except (ValueError, RuntimeError, OSError) as exc:
             message = str(exc)[:300]
             LOGGER.warning("Feed publication failed (%s): %s", trigger, message)
             self.store.job("publisher", "failed", message)
-            self._set_publish_status("failed", message, trigger)
+            self._set_publish_status("failed", message + private_note, trigger)
             return None
         except Exception as exc:
             LOGGER.exception("Feed publication failed (%s)", trigger)
@@ -1044,7 +1080,7 @@ class Engine:
         else:
             message = "Feed %s committed to GitHub" % revision
         LOGGER.info("Feed publication finished (%s): %s", trigger, message)
-        self._set_publish_status("succeeded", message, trigger)
+        self._set_publish_status("failed" if "failed" in private_note else "succeeded", message + private_note, trigger)
         return revision
 
     def publish(self):
@@ -1059,6 +1095,35 @@ class Engine:
             return self._publish()
         finally:
             self._publish_lock.release()
+
+    def publish_private(self):
+        """Publish the owner's private personal-use feed (all events + guide-listed live sport)."""
+        if not self._publish_lock.acquire(timeout=120):
+            raise RuntimeError("Another feed publication is already running")
+        try:
+            return self._publish_private()
+        finally:
+            self._publish_lock.release()
+
+    def _publish_private(self):
+        conf = self.store.config()
+        self._private_outcome = None
+        if not conf["setup_complete"]:
+            raise ValueError("Finish first-run setup (Sources page) before publishing")
+        if not (conf.get("private_feed") or {}).get("enabled"):
+            raise ValueError("Tick Enable private feed and save its settings first")
+        if not self.store.snapshot("sports"):
+            raise ValueError("No valid sports snapshot yet")
+        owner, repository, branch, token = self._private_target(conf)
+        if not owner or not repository or not branch or not token:
+            raise ValueError("Private feed repository or GitHub token incomplete")
+        validate_github_target(owner, repository, branch)
+        state = self.store._get("private_feed_state") or {"revisions": []}
+        manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"), private=True)
+        outcome, revision = self._commit_feed(owner, repository, branch, token, manifest, files, state,
+                                              "private_feed_state", "private_publisher", "SportsLiveInfo private feed")
+        self._private_outcome = outcome
+        return revision
 
     def _publish(self):
         conf = self.store.config()
@@ -1079,6 +1144,13 @@ class Engine:
         validate_github_target(owner, repository, branch)
         state = self.store._get("feed_state") or {"revisions": []}
         manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"))
+        outcome, revision = self._commit_feed(owner, repository, branch, token, manifest, files, state,
+                                              "feed_state", "publisher", "SportsLiveInfo feed")
+        self._publish_outcome = outcome
+        return revision
+
+    def _commit_feed(self, owner, repository, branch, token, manifest, files, state, state_key, job, label):
+        """One atomic commit with revision retention; returns (outcome, revision)."""
         revision = manifest["revision"]
         try:
             age = datetime.now(timezone.utc) - datetime.fromisoformat(state.get("published_at") or "")
@@ -1087,9 +1159,8 @@ class Engine:
         # Republish an unchanged revision only to renew the manifest's expiry
         # (48 h) before TVs would wrongly treat a static-but-healthy feed as stale.
         if revision == state.get("last_revision") and age < timedelta(hours=24):
-            self.store.job("publisher", "unchanged", "Feed revision %s already published" % revision)
-            self._publish_outcome = "unchanged"
-            return revision
+            self.store.job(job, "unchanged", "Feed revision %s already published" % revision)
+            return "unchanged", revision
         state["revisions"] = [h for h in state["revisions"] if h["revision"] != revision]
         live_before = {p for h in state["revisions"] for p in h["assets"]}
         uploads = {p: d for p, d in files.items() if p not in live_before}
@@ -1103,13 +1174,12 @@ class Engine:
         kept_ids = {h["revision"] for h in keep}
         deletions += ["%s/manifests/%s.json" % (feed.ROOT, h["revision"]) for h in drop if h["revision"] not in kept_ids]
         self._github_commit(owner, repository, branch, token, uploads, deletions,
-                            "SportsLiveInfo feed %s (%d events)" % (revision, manifest["coverage"]["events"]),
+                            "%s %s (%d events)" % (label, revision, manifest["coverage"]["events"]),
                             required=files)
-        self.store._put("feed_state", {"last_revision": revision, "revisions": keep, "published_at": utcnow()})
-        self.store.job("publisher", "submitted", "Feed %s committed atomically (%d new files, %d removed); verify the static endpoint" % (
+        self.store._put(state_key, {"last_revision": revision, "revisions": keep, "published_at": utcnow()})
+        self.store.job(job, "submitted", "Feed %s committed atomically (%d new files, %d removed); verify the static endpoint" % (
             revision, len(uploads), len(deletions)))
-        self._publish_outcome = "committed"
-        return revision
+        return "committed", revision
 
     @staticmethod
     def _github_commit(owner, repository, branch, token, uploads, deletions, message, required=None):
