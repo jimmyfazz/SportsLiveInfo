@@ -107,6 +107,9 @@ def _guide_failure(exc):
                   "XMLTV channel count exceeded safety limit", "XMLTV programme count exceeded safety limit"):
         return "Guide exceeded an import size or record limit"
     specific = {
+        "Cross-origin provider redirect blocked": "Cross-origin provider redirect blocked",
+        "Source URL is not on the approved HTTPS provider list":
+            "Source URL is not on the approved HTTPS provider list",
         "XMLTV declarations and entities are not allowed":
             "Guide contains a DTD declaration or entity that the importer blocks for safety",
         "Not an XMLTV programme guide": "Download is not an XMLTV guide (wrong root element)",
@@ -705,7 +708,13 @@ class Engine:
             for _ in guide_sources:
                 pass
         gaps = {}
-        links = linking.broadcast_candidates(eligible, guide_sources, now, gaps=gaps)
+        dictionary_snapshot = self.store.snapshot("channel-dictionary") or {}
+        identity_snapshot = self.store.snapshot("channel-identity") or {}
+        dictionary_document = (dictionary_snapshot.get("data") or {}).get("document")
+        identity_document = (identity_snapshot.get("data") or {}).get("document")
+        links = linking.broadcast_candidates(eligible, guide_sources, now, gaps=gaps,
+                                             dictionary_document=dictionary_document,
+                                             identity_document=identity_document)
         for event in eligible:
             status, candidates = links.get(event["id"], ("none", []))
             event["broadcast_status"] = status

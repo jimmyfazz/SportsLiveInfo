@@ -104,7 +104,8 @@ class CandidateIndexTests(unittest.TestCase):
             ({"farleyflex": guide([dict(row, start_utc=(BASE - timedelta(days=2)).isoformat(),
                                       end_utc=(BASE - timedelta(days=2) + timedelta(hours=2)).isoformat())])},
              "outside_guide_dates"),
-            ({"farleyflex": guide([unknown])}, "matching_channel_unmapped"),
+            ({"farleyflex": dict(guide([unknown]), channels={"unknown-channel": "Sample Sports Network"})},
+             "matching_channel_unmapped"),
             ({"farleyflex": guide([dict(unknown, is_repeat=True)])}, "no_recognised_guide_slot"),
             ({"farleyflex": guide([dict(row, title="Live: Leeds v Hull")])}, "fixture_title_unmatched"),
         ]

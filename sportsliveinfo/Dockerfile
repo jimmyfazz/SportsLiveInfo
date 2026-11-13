@@ -3,7 +3,7 @@ FROM python:3.12-alpine
 # Supervisor passes these build arguments when building a custom Home Assistant
 # App from a Dockerfile. Defaults also make an independent local docker build
 # carry valid metadata for amd64 development.
-ARG BUILD_VERSION=0.3.8
+ARG BUILD_VERSION=0.3.10
 ARG BUILD_ARCH=amd64
 LABEL io.hass.version="${BUILD_VERSION}" \
       io.hass.type="app" \
