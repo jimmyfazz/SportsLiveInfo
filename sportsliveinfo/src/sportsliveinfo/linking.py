@@ -206,15 +206,58 @@ def _matches(event, row):
 
 
 def broadcast_candidates(events, epg_guides, now):
-    """Return {event_id: (status, [candidate...])} for the given events."""
+    """Return per-event unverified programme candidates using a bounded hour index.
+
+    A programme matches an event at time t only when:
+        programme_start <= t + 20 min
+        programme_end >= t + 30 min
+
+    Index the exact possible t range rather than testing every event against
+    every programme. Long (e.g. cricket) programmes are kept separately to
+    avoid expanding many days into thousands of index references. The final
+    _matches() hard-negative and team/session checks are unchanged.
+    """
     if not events or not epg_guides:
         return {}
-    starts = [_dt(e["start_utc"]) for e in events]
-    index = _programme_index(epg_guides, min(starts) - timedelta(hours=1), max(starts) + timedelta(hours=1))
-    result = {}
+    timed = []
     for event in events:
+        try:
+            timed.append((event, _dt(event["start_utc"])))
+        except (KeyError, TypeError, ValueError, OverflowError):
+            # A corrupt upstream time must not break every other valid event.
+            continue
+    if not timed:
+        return {}
+    starts = [stamp for _, stamp in timed]
+    earliest, latest = min(starts), max(starts)
+    rows = _programme_index(epg_guides, earliest - timedelta(hours=1), latest + timedelta(hours=1))
+
+    first_hour = int(earliest.timestamp() // 3600)
+    last_hour = int(latest.timestamp() // 3600)
+    hourly = defaultdict(list)
+    long_programmes = []
+    for position, row in enumerate(rows):
+        # Bounds are intentionally inclusive, including exact 20/30-minute edges.
+        lower = max(first_hour, int((row[0] - timedelta(minutes=20)).timestamp() // 3600))
+        upper = min(last_hour, int((row[1] - timedelta(minutes=30)).timestamp() // 3600))
+        if lower > upper:
+            continue
+        item = (position, row)
+        if upper - lower + 1 > 12:
+            long_programmes.append(item)
+        else:
+            for hour in range(lower, upper + 1):
+                hourly[hour].append(item)
+
+    result = {}
+    for event, stamp in timed:
         found = {}
-        for row in index:
+        event_hour = int(stamp.timestamp() // 3600)
+        # Both lists follow the original programme order. Sorting their short
+        # merged set preserves historical per-channel source ordering.
+        candidates_at_time = sorted(
+            hourly.get(event_hour, []) + long_programmes, key=lambda item: item[0])
+        for _, row in candidates_at_time:
             if not _matches(event, row):
                 continue
             canonical = row[5]
