@@ -269,6 +269,62 @@
    "families": [
     "uk_ie_fta"
    ]
+  },
+  {
+   "source_id": "fr_mena_grab",
+   "epg_id": "beINSports1.qa@MENA",
+   "name": "beIN SPORTS 1",
+   "normalised": "bein sports 1",
+   "canonical_id": null,
+   "families": [
+    "bein"
+   ]
+  },
+  {
+   "source_id": "fr_mena_grab",
+   "epg_id": "beINSPORTS1.fr",
+   "name": "FR - beIN SPORTS 1",
+   "normalised": "bein sports 1",
+   "canonical_id": "fr.bein.sports.1",
+   "families": [
+    "bein"
+   ]
+  },
+  {
+   "source_id": "iptv_epg_gb",
+   "epg_id": "RTEOne.ie",
+   "name": "RTE One",
+   "normalised": "rte one",
+   "canonical_id": "ie.rte.one",
+   "families": [
+    "uk_ie_fta"
+   ]
+  },
+  {
+   "source_id": "mjh_skysportnow_nz",
+   "epg_id": "341",
+   "name": "Sky Sport 1",
+   "normalised": "sky sport 1",
+   "canonical_id": "nz.sky.sport.1",
+   "families": []
+  },
+  {
+   "source_id": "iptv_epg_de",
+   "epg_id": "",
+   "name": "Sky Sport 1",
+   "normalised": "sky sport 1",
+   "canonical_id": null,
+   "families": []
+  },
+  {
+   "source_id": "mjh_kayo_au",
+   "epg_id": "53211",
+   "name": "Fox Sports 503",
+   "normalised": "fox sports 503",
+   "canonical_id": "au.fox.sports.503",
+   "families": [
+    "fox_sports"
+   ]
   }
  ]
 }

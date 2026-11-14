@@ -21,8 +21,9 @@ from zoneinfo import ZoneInfo
 from . import __version__, providers, taxonomy
 from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, REGIONAL_PARENTS, REGIONAL_RULES, SERVICES, SOURCE_ID_CROSSWALK
 
-FORMAT_MAJOR, FORMAT_MINOR = 1, 3  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset;
-# 1.3: optional event `broadcast_links` (owner decision D8)
+FORMAT_MAJOR, FORMAT_MINOR = 1, 4  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset;
+# 1.3: optional event `broadcast_links` (owner decision D8); 1.4: dictionary `regions`, `group_markets`,
+# `country_tags` and the 0.3.18 lookup rules (country tag, callsign, transliteration, successor, own-market suffix)
 ROOT = "v1"
 LONDON = ZoneInfo("Europe/London")
 

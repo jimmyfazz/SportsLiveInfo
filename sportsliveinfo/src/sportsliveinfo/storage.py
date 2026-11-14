@@ -28,7 +28,9 @@ DEFAULT = {
     # guide-listed live sport. Uses the GitHub token above; must be a private repository.
     "private_feed": {"owner": "jimmyfazz", "repository": "", "branch": "main", "enabled": False},
     # Optional public-domain channel identity dictionary (iptv-org database); off until the owner enables it.
-    "dictionary": {"iptvorg": False},
+    # Extra regions (dictionary.REGIONS) are also off by default: each makes the published dictionary larger.
+    "dictionary": {"iptvorg": False, "north_america": False, "latin_america_caribbean": False,
+                   "middle_east_north_africa": False, "south_asia": False, "africa": False, "asia_pacific": False},
 }
 
 

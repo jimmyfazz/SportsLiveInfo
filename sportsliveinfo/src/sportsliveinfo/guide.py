@@ -17,9 +17,20 @@ COUNTRY_BY_SOURCE = {
     "fr_programmetv": "FR", "fr_telerama": "FR", "fr_xmltv": "FR", "epgshare_fr": "FR", "iptv_epg_fr": "FR",
     "epgshare_us": "US", "epgshare_us_sports": "US", "iptvorg_foxtel_au": "AU", "iptv_epg_au": "AU",
     "epgshare_hk": "HK", "iptv_epg_hk": "HK", "iptv_epg_ge": "GE", "epgshare_my": "MY",
-    "mjh_nz": "NZ", "mjh_au_sydney": "AU",
+    "mjh_nz": "NZ", "mjh_au_sydney": "AU", "mjh_skysportnow_nz": "NZ", "mjh_kayo_au": "AU",
     "epgshare_ca": "CA", "epgshare_au": "AU", "epgshare_nz": "NZ", "epgshare_pt": "PT",
     "epgshare_pl": "PL", "epgshare_gr": "GR", "epgshare_sg": "SG", "epgshare_in": "IN",
+    **{f"epgshare_{market.lower()}": market for market in ("DE", "ES", "IT", "NL", "CH", "SE", "NO", "DK", "FI", "TR",
+                                                           "RO", "BG", "HU", "CZ", "SK", "HR", "BA", "AL", "SA", "EG")},
+    **{f"iptv_epg_{market.lower()}": market for market in ("SE", "NO", "DK", "TR", "PT", "PL", "RU", "AL", "BG", "CZ",
+                                                           "HU", "RO")},
+    "mjh_plex_gb": "GB", "mjh_samsung_gb": "GB", "mjh_pluto_gb": "GB",
+    "es_doblem": "ES", "fr_mena_grab": "FR", "pt_m3upt": "PT",
+    # Multi-country Sky file: GB names only; its DE/IT channels carry .de/.at/.it ids, which the foreign-id
+    # guard keeps out of GB services.
+    "m3upt_sky": "GB", "m3upt_sky_it": "IT", "m3upt_freeview_uk": "GB",
+    "epgtalk_us": "US", "epgtalk_us_local": "US", "epgtalk_latino": "US", "mjh_roku_us": "US", "mjh_plex_us": "US",
+    "mjh_au_all": "AU", "mjh_skygo_nz": "NZ", "mjh_samsung_in": "IN", "mjh_dstv_za": "ZA",
 }
 
 # An intentionally small *verified-name* registry, per market. Exact catalogue
@@ -82,7 +93,13 @@ SERVICES = {
         **{f"sportsnet {region.lower()}": f"ca.sportsnet.{region.lower()}"
            for region in ("East", "Ontario", "West", "One", "360", "World", "Pacific")},
     },
-    "AU": {"fox footy": "au.fox.footy", "fox cricket": "au.fox.cricket", "fox league": "au.fox.league"},
+    "AU": {"fox footy": "au.fox.footy", "fox cricket": "au.fox.cricket", "fox league": "au.fox.league",
+           **{f"fox sports {number}": f"au.fox.sports.{number}" for number in (503, 505, 506, 507)},
+           "fox sports more": "au.fox.sports.more", "fox sports news": "au.fox.sports.news"},
+    # Sky Sport NZ (Sky Sport Now lineup, Nov 2026). "Sky Sport 1" alone is NZ only in an NZ guide.
+    "NZ": {**{f"sky sport {number}": f"nz.sky.sport.{number}" for number in range(1, 10)},
+           "sky sport premier league": "nz.sky.sport.premier_league", "sky sport select": "nz.sky.sport.select",
+           "sky sport 1 uhd": "nz.sky.sport.1", "sky sport 4k uhd": "nz.sky.sport.4k"},
     "HK": {
         # Hong Kong Communications Authority, Now TV lineup as of December 2025.
         "now sports premier league": "hk.now.sports.premier_league",
@@ -268,7 +285,24 @@ BARE_MARKET_CODES = {"GB": {"UK", "GB"}, "IE": {"IE"}, "FR": {"FR", "BE", "CH"},
                      "ES": {"ES"}, "IT": {"IT"}, "PT": {"PT"}, "NL": {"NL", "BE"}, "PL": {"PL"},
                      "SE": {"SE", "SW"}, "NO": {"NO"}, "DK": {"DK"}, "FI": {"FI"}, "TR": {"TR", "TRK"},
                      "GR": {"GR"}, "RO": {"RO"}, "BG": {"BG"}, "HU": {"HU"}, "CZ": {"CZ"}, "SK": {"SK"},
-                     "AL": {"AL"}, "RU": {"RU"}, "UA": {"UKR", "UA"}}
+                     "AL": {"AL"}, "RU": {"RU"}, "UA": {"UKR", "UA"},
+                     # Optional world regions (dictionary regions off by default).
+                     "US": {"US", "USA"}, "CA": {"CA", "CAN"}, "AU": {"AU", "AUS"}, "NZ": {"NZ"}, "IN": {"IN", "IND"},
+                     "PK": {"PK"}, "NP": {"NP", "NPL"}, "BD": {"BD"}, "IR": {"IR"}, "KU": {"KU"}, "VN": {"VN"},
+                     "PH": {"PH"}, "MENA": {"AR", "ARA", "MENA"}, "AFRICA": {"AF", "AFR"}, "CARIB": {"CARIB"},
+                     "LATAM": {"LATIN", "LAT", "LATAM"}}
+# Lineup-only provider grammar (market_key, never guide names): leading market/platform tags
+# such as "|SENEGAL| ", "IN-TM | ", "BH | ", "EG: ", "JOYN DE: ", "DE ||VIP| ", "Shahid | ",
+# "(MX) (IZ) ", "Carib (FLOW) ", and trailing platform marks "(FL)", "(C)", "|TN|".
+_LINEUP_LEAD = re.compile(
+    r"^\s*(?:\|[A-Za-z][A-Za-z .&'-]{1,20}\|\s*"
+    r"|[A-Z]{2,5}(?:-[A-Z]{1,5})?\s*\|\|?\s*(?:VIP\s*\|\s*)?"
+    r"|[A-Z][a-z]{2,5}\s*\|\s*"
+    r"|(?:[A-Z]{2,5}\s+)?[A-Z]{2,3}\s*:\s*|[A-Z][a-z]\s*:\s*)")
+_LINEUP_TAGS = re.compile(r"^\s*\((?:[A-Za-z]{2,8}|[A-Za-z]\+[A-Za-z]{2})\)\s+(?=\S)")
+_LINEUP_TRAIL = re.compile(r"\s*(?:\((?:fl|c|tg|vt)\)|\|[A-Za-z ]{2,20}\|)\s*$", re.I)
+_LINEUP_WORD_CODES = {"Carib": "CARIB", "Latin": "LATIN"}
+_PLATFORM = {"LATAM": re.compile(r"^claro\s+", re.I)}
 
 
 def repair_text(text):
@@ -315,6 +349,7 @@ def normalized_name(name):
     value = BRACKET_COUNTRY.sub("", value)
     value = COUNTRY_PREFIX.sub("", value)
     value = SPACES.sub(" ", value)
+    value = re.sub(r"(?<=\d)(?:hd|fhd|uhd)$", "", value)     # "dazn 1hd" = "dazn 1"
     while True:
         new = re.sub(r"\s*[-|:]$", "", TRAILING_JUNK.sub("", QUALITY_SUFFIX.sub("", value))).strip()
         if new == value:
@@ -380,12 +415,54 @@ def display_labels(names):
 
 
 def market_key(name, market):
-    """normalized_name after removing a bare upper-case code that equals the channel's market."""
+    """normalized_name of a provider lineup name in its market.
+
+    Removes a bare code equal to the channel's market ("IT Rai Movie", "US Baby First",
+    "Carib (FLOW) CNC3"), provider market/platform tags in front of the name and trailing
+    platform marks. Bare codes of *other* markets are kept: "AL" is Albania only in an
+    Albanian list, so "Al Jazeera" survives everywhere.
+    """
+    market = str(market or "").upper()
+    codes = BARE_MARKET_CODES.get(market, ())
     value = repair_text(html.unescape(str(name)))
-    match = re.match(r"^\s*([A-Z]{2,3})\s+(?=\S)", value)
-    if match and match.group(1) in BARE_MARKET_CODES.get(str(market or "").upper(), ()):
-        value = re.sub(r"^\s*[|:\-]+\s*", "", value[match.end():])
-    return normalized_name(value)
+    for attempt in range(4):
+        before = value
+        match = re.match(r"^\s*([A-Z]{2,5}|Carib|Latin)\s+(?=\S)", value) if attempt == 0 else None
+        if match and _LINEUP_WORD_CODES.get(match.group(1), match.group(1)) in codes:   # once: "US USA Network"
+            value = re.sub(r"^\s*[|:\-]+\s*", "", value[match.end():])
+        value = _LINEUP_LEAD.sub("", value, count=1)
+        if codes and value != before or market in _WORLD_TAG_MARKETS:
+            value = _LINEUP_TAGS.sub("", value, count=1)
+        if market in _PLATFORM:
+            value = _PLATFORM[market].sub("", value)
+        if value == before:
+            break
+    value = _LINEUP_TRAIL.sub("", value)
+    return normalized_name(value) or normalized_name(name)
+
+
+_WORLD_TAG_MARKETS = {"US", "CA", "MENA", "AFRICA", "CARIB", "LATAM", "IN", "PK", "VN", "PH", "IR", "KU", "NP", "BD"}
+
+
+_LOCAL_NETWORKS = r"(abc|cbs|nbc|fox|pbs|cw|mytv|univision|telemundo|unimas|ion|ctv|global|citytv|cbc|tva)"
+_LOCAL_LINEUP = re.compile(_LOCAL_NETWORKS + r"\s*\d*\s*\(\s*[KWC][A-Z]{2,3}[^)]*\)\s*-?\s*([A-Za-z .'-]+?)"
+                           r"(?:,\s*[A-Z]{2})?\s*(?:\(|$|\bHD\b|\bFHD\b)", re.I)
+_LOCAL_GUIDE = re.compile(r"^(?:\d+(?:\.\d+)?\s+)?(?:(?:US|CA)\s*-\s*)?" + _LOCAL_NETWORKS + r"\s+(?!news\b)([A-Za-z .'-]+?)\.?$",
+                          re.I)
+
+
+def local_station_key(name, *, guide=False):
+    """("nbc", "seattle") for a US/Canadian local station, else None.
+
+    Lineup names carry a callsign ("US NBC 5 (KING) Seattle"); guide names are "NBC Seattle" or
+    "US - NBC Seattle" (EPGTalk). A "News" stream ("US - ABC News Sacramento") is a different channel
+    and never matches. Used only as a guide-name fallback for stations without an id match.
+    """
+    match = (_LOCAL_GUIDE.match(str(name).strip()) if guide else _LOCAL_LINEUP.search(str(name)))
+    if not match:
+        return None
+    city = re.sub(r"[^a-z]", "", match.group(2).lower())
+    return (match.group(1).lower(), city) if len(city) >= 3 else None
 
 
 def canonical_channel(source_id, epg_id, display_name):
@@ -400,6 +477,11 @@ def canonical_channel(source_id, epg_id, display_name):
     market = COUNTRY_BY_SOURCE.get(source_id)
     if not market:
         return None
+    # The guide's own id names another country ("beINSports1.qa@MENA" in a French guide): never this
+    # market's service, whatever the display name says.
+    id_country = _ID_COUNTRY.match(str(epg_id or ""))
+    if id_country and id_country.group(1).lower() not in _ID_COUNTRIES_FOR.get(market, {market.lower()}):
+        return None
     prefix = COUNTRY_PREFIX.match(str(display_name).strip())
     if prefix:
         region = prefix[1].casefold()
@@ -412,6 +494,12 @@ def canonical_channel(source_id, epg_id, display_name):
     if name in _IRISH_IN_GB:
         return SERVICES["IE"][name]
     return regional_service(name)
+
+
+_ID_COUNTRY = re.compile(r"^[A-Za-z0-9+&!'_-]+(?:\.[A-Za-z0-9+&!'_-]+)*\.([A-Za-z]{2})(?:@[^@]+)?$")
+# iptv-org style id suffixes accepted per market ("uk" is the database's code for GB; Irish
+# channels appear in UK guides).
+_ID_COUNTRIES_FOR = {"GB": {"uk", "gb", "ie"}, "IE": {"ie", "uk", "gb"}}
 
 
 _RAW_FAMILIES = {"sky_sport_nz"}  # need the market prefix that normalized_name() strips

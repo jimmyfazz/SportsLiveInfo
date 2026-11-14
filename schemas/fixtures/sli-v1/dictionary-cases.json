@@ -1,0 +1,259 @@
+{
+ "schema": "sli.dictionary-cases/1",
+ "note": "B1G's dictionary resolver must return exactly these results for this synthetic database (channels/feeds CSV in tools/generate_feed_fixtures.py, all optional regions on)",
+ "cases": [
+  {
+   "name": "US Example Net HD",
+   "market": "US",
+   "market_key": "example net",
+   "ids": [
+    [
+     "ExampleNet.us",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
+  },
+  {
+   "name": "US USA Example Net",
+   "market": "US",
+   "market_key": "usa example net",
+   "ids": [],
+   "method": null,
+   "confidence": null
+  },
+  {
+   "name": "IN-TM | Sun Example FHD",
+   "market": "IN",
+   "market_key": "sun example",
+   "ids": [
+    [
+     "SunExample.in",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
+  },
+  {
+   "name": "(MX) (IZ) Azte Example",
+   "market": "LATAM",
+   "market_key": "azte example",
+   "ids": [
+    [
+     "AzteExample.mx",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
+  },
+  {
+   "name": "Claro Azte Example",
+   "market": "LATAM",
+   "market_key": "azte example",
+   "ids": [
+    [
+     "AzteExample.mx",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
+  },
+  {
+   "name": "Carib (FLOW) Carib News",
+   "market": "CARIB",
+   "market_key": "carib news",
+   "ids": [
+    [
+     "CaribNews.tt",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
+  },
+  {
+   "name": "US Example Net 5 (KXMP) Springfield",
+   "market": "US",
+   "market_key": "example net 5 (kxmp) springfield",
+   "ids": [
+    [
+     "ExampleNet.us",
+     "KXMP"
+    ]
+   ],
+   "method": "callsign",
+   "confidence": "high"
+  },
+  {
+   "name": "US Example Kids (KXMP)",
+   "market": "US",
+   "market_key": "example kids (kxmp)",
+   "ids": [
+    [
+     "ExampleKids.us",
+     "KXMP"
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
+  },
+  {
+   "name": "US Other 7 (KXMP) Town",
+   "market": "US",
+   "market_key": "other 7 (kxmp) town",
+   "ids": [
+    [
+     "ExampleKids.us",
+     "KXMP"
+    ],
+    [
+     "ExampleNet.us",
+     "KXMP"
+    ]
+   ],
+   "method": "callsign",
+   "confidence": "ambiguous"
+  },
+  {
+   "name": "US Example 9 (WXMQ-TV) Town",
+   "market": "US",
+   "market_key": "example 9 (wxmq-tv) town",
+   "ids": [
+    [
+     "ExampleNet.us",
+     "WXMQ"
+    ]
+   ],
+   "method": "callsign",
+   "confidence": "high"
+  },
+  {
+   "name": "|NIGERIA| PNT",
+   "market": "AFRICA",
+   "market_key": "pnt",
+   "ids": [
+    [
+     "PeakNational.ng",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
+  },
+  {
+   "name": "IRQ: Desert One HD",
+   "market": "MENA",
+   "market_key": "desert one",
+   "ids": [
+    [
+     "DesertOne.iq",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
+  },
+  {
+   "name": "Desert One",
+   "market": "MENA",
+   "market_key": "desert one",
+   "ids": [
+    [
+     "DesertOne.iq",
+     null
+    ],
+    [
+     "DesertOne.sa",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "ambiguous"
+  },
+  {
+   "name": "RU | RODINA 1 HD",
+   "market": "RU",
+   "market_key": "rodina 1",
+   "ids": [
+    [
+     "Rodina1.ru",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
+  },
+  {
+   "name": "GR | ELT 1",
+   "market": "GR",
+   "market_key": "elt 1",
+   "ids": [
+    [
+     "Ellas1.gr",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
+  },
+  {
+   "name": "TR | Old Brand HD",
+   "market": "TR",
+   "market_key": "old brand",
+   "ids": [
+    [
+     "NewBrand.tr",
+     null
+    ]
+   ],
+   "method": "replaced_by",
+   "confidence": "high"
+  },
+  {
+   "name": "TR | Gone",
+   "market": "TR",
+   "market_key": "gone",
+   "ids": [],
+   "method": null,
+   "confidence": null
+  },
+  {
+   "name": "DE ||VIP| Example TV HD DE",
+   "market": "DE",
+   "market_key": "example tv hd de",
+   "ids": [
+    [
+     "ExampleTV.de",
+     null
+    ]
+   ],
+   "method": "market_suffix:exact",
+   "confidence": "high"
+  },
+  {
+   "name": "Al Example",
+   "market": "AL",
+   "market_key": "al example",
+   "ids": [],
+   "method": null,
+   "confidence": null
+  },
+  {
+   "name": "(MX) (IZ) Azte Example HD",
+   "market": "US",
+   "market_key": "azte example",
+   "ids": [
+    [
+     "AzteExample.mx",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
+  }
+ ]
+}

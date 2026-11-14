@@ -62,22 +62,79 @@ JSON is UTF-8, compact, keys sorted. The SHA-256 in the manifest covers the exac
 
 SportsLiveInfo **must not** make a breaking change inside `v1/`. A future `v2/` lives beside `v1/` until all TVs are updated.
 
-| `dictionary` (since 1.2, capability `channel_dictionary`) | `sli.dictionary/1` | no | **UK and Europe channel dictionary** from the public-domain iptv-org database (when the owner enables it): channel id, name, alternative names, country, network, owners, categories, website, launched, closed/replaced_by, and feeds (regional/HD/+1) with broadcast-area countries. Includes `market_countries`, `bare_market_codes` and lookup `rules` |
+| `dictionary` (since 1.2, capability `channel_dictionary`) | `sli.dictionary/1` | no | **UK and Europe channel dictionary** from the public-domain iptv-org database (when the owner enables it), plus any **optional world regions** the owner switched on (`regions`, since 0.3.18): channel id, name, alternative names, country, network, owners, categories, website, launched, closed/replaced_by, and feeds (regional/HD/+1) with broadcast-area countries. Includes `market_countries`, `bare_market_codes`, `group_markets`, `country_tags`, `aliases`, `language_variants` and lookup `rules` |
 
 ### 4.0 Using the dictionary (B1G reader)
 
-1. Determine the channel's market from the provider category (e.g. "UK |" → GB, "INT \| France" → FR) or from its name prefix ("|NO|" → NO).
-2. Compute `market_key(name, market)`: the published normalisation, after removing a bare upper-case code equal to the market.
-3. Look up, in order:
+1. Determine the channel's market from the provider category (e.g. "UK |" → GB, "INT \| France" → FR) or from its name prefix ("|NO|" → NO). World markets (only present when the owner enabled the region): US, CA, AU, NZ, IN, PK, BD, NP, IR, VN, PH, and the multi-country **group markets** MENA, AFRICA, CARIB, LATAM, KU (Kurdish) for provider sections that mix countries.
+2. Compute `market_key(name, market)`: the published normalisation after removing, once, a bare code equal to the market ("US Example", "Carib (FLOW) Example"), leading provider market/platform tags ("|SENEGAL| ", "IN-TM | ", "EG: ", "JOYN DE: ", "DE ||VIP| ", "Shahid | "), leading bracket tags in world markets ("(MX) (IZ) "), the LATAM platform word "Claro " and trailing platform marks ("(FL)", "(C)", "|TN|"). Bare codes of *other* markets are never removed ("Al Jazeera" in an Albanian list).
+3. **Group markets:** a leading tag naming a country (`country_tags`, or a two-letter code in `market_countries[market]`) restricts every step to that country ("|NIGERIA| AIT" is Nigeria's AIT). Without a tag, each lookup method pools all the market's countries, so a name found in two countries is ambiguous.
+4. Look up, in order:
    - exact normalised name, alternative name, or "base + feed" name of a channel in `market_countries[market]`, in list order (own country first), allowing a no-spaces fallback;
    - then decoration-only equality;
    - then channels whose feeds broadcast into those countries.
-4. One channel id is **high** confidence. Several ids are **ambiguous**: never apply them automatically.
-5. Precedence: below user manual mappings, provider tvg-id exact and `channels.source_crosswalk`.
-6. A resolved id may select a guide whose channel id equals it (many guides use these ids), or link through `identity` members.
-7. **Closed channels** never supply a guide; they only explain a name via `replaced_by`.
-8. For channels without any guide, `name`, `network`, `categories` and `website` may be shown as an information card.
-9. Attribution "Channel dictionary from the iptv-org database" (Unlicense) is listed in `rights.attribution`.
+   Cyrillic and Greek names and alternative names are also indexed in Latin script (published transliteration: Cyrillic per-letter with ya/ia, yu/iu, kh/h variants; Greek both look-alike letters "EPT" and sound "ERT").
+5. Only when nothing is found, the fallbacks in `rules.fallbacks`, in order:
+   - aliases;
+   - singular/plural;
+   - the sport word in its other spellings (sport/sports/spor);
+   - language variant;
+   - the market's own numbered channel ("beIN Sports 1" → "beIN Sports 1 Turk" in TR). This is also preferred whenever a numbered name is otherwise found only as a foreign channel broadcasting into the market;
+   - a closed channel's live successor (below);
+   - a trailing code of the channel's own market ("ZDF HD DE");
+   - an implied first number ("Diema Sport 1" = "Diema Sport" when "Diema Sport 2" exists).
+
+   When candidates differ only by a 4K/UHD version and the provider name has no 4K/UHD marker, the plain channel is chosen. In US/CA/CARIB a **station callsign** in brackets ("NBC 5 (KXXX) City") matches feeds named after it; when several networks share the callsign, the one named in the provider name wins (`rules.callsign`).
+6. One channel id is **high** confidence. Several ids are **ambiguous**: never apply them automatically.
+7. Precedence: below user manual mappings, provider tvg-id exact and `channels.source_crosswalk`.
+8. A resolved id may select a guide whose channel id equals it (many guides use these ids), or link through `identity` members.
+9. **Closed channels** never supply their own guide. Since 0.3.18 a name whose closed channel(s) all name the same live successor (`replaced_by`, followed up to three times) resolves to that successor with method `replaced_by` ("FOX" in a Turkish list → NOW; "C More Hits" → TV4 Hits): the provider stream now carries it. Closures without a live successor are only explained.
+10. For channels without any guide, `name`, `network`, `categories` and `website` may be shown as an information card.
+11. Attribution "Channel dictionary from the iptv-org database" (Unlicense) is listed in `rights.attribution`.
+
+### 4.0a US/Canadian local stations (B1G guide-name fallback)
+
+A local station with no id match uses `guide.local_station_key`:
+- the lineup name ("US NBC 5 (KXYZ) City") gives (network, city);
+- it matches a guide channel named "NETWORK City" or "US - NETWORK City" (EPGTalk US local and US guides).
+
+"News" streams ("US - ABC News City") are different channels and never match. Only one guide channel per (network, city) counts. Measured: about 380 of the owner's 1,847 otherwise guideless local stations.
+
+### 4.0b Event-slot channels (B1G, on the TV only)
+
+Numbered event channels whose name announces the programme are matched on the TV; their names are local lineup data and are never uploaded. Examples: "EPL 05 | Home vs Away (Sat 17:30 UK)", "DAZN 52: League| Home vs. Away| Sat 18 Oct 12:30 PM", "NFL 01: 8:15PM Away @ Home".
+
+The reference is `sportsliveinfo/src/sportsliveinfo/event_slots.py`. B1G must reproduce `schemas/fixtures/sli-v1/slot-cases.json` exactly.
+
+1. **`parse_slot(name, now, default_tz)`** reads, in order:
+   - the slot label, leading ("EPL 05 |") or trailing (":NBA  04");
+   - the start time;
+   - the fixture ("vs", "v", "@", lower-case "x");
+   - the competition text.
+
+   Time formats, in order:
+   - ISO, including `start:`… which is UTC;
+   - day + date + month;
+   - month + day;
+   - numeric date (UK "21/07" is understood);
+   - weekday + time;
+   - time alone.
+
+   Time zones:
+   - A zone word sets the zone (UK, GMT, ET, CET…), including "// UK Sat …" before a second "// ET …" copy, which is ignored.
+   - Otherwise the section's default applies: US/CA sections America/New_York, all others Europe/London.
+
+   Names that are channels, not fixtures, give no result: "V Sport 1", "X Premium", "CA V Montreal".
+2. **`match_slot(parsed, events, now)`** links the slot to exactly one SportsLiveInfo event:
+   - Both sides must match (either order), ignoring bracketed country codes.
+   - With a full date and time, the start must be within 3 hours.
+   - With a clock time alone, it must be the same time of day (±30 min) between 4 hours ago and 36 hours ahead. Two meetings of the same teams then stay unresolved.
+   - Without a time, the event must fall in that window.
+   - Otherwise, no link.
+3. **What the TV shows for a slot channel:**
+   - With a link: one guide entry, the event's title and time, plus its sport and competition from the feed.
+   - Without a link: the parsed fixture and time, marked "from the channel name".
+   - Never a "Live" state from the name alone.
 
 ### 4.1 Using the identity graph (B1G reader)
 

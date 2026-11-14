@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import __version__, linking, providers, taxonomy
+from . import __version__, dictionary, linking, providers, taxonomy
 from .storage import utcnow
 
 LOGGER = logging.getLogger(__name__)
@@ -318,7 +318,8 @@ class UI(BaseHTTPRequestHandler):
             self.store.configure({"epg": {name: value("enabled") == "on"}})
             return "sources", message
         if action == "dictionary":
-            self.store.configure({"dictionary": {"iptvorg": value("iptvorg") == "on"}})
+            self.store.configure({"dictionary": dict({"iptvorg": value("iptvorg") == "on"},
+                                                     **{key: value(key) == "on" for key in dictionary.REGIONS})})
             return "sources", ("Channel dictionary enabled; it downloads with the next EPG refresh"
                                if value("iptvorg") == "on" else "Channel dictionary disabled")
         if action == "test_source":
@@ -830,13 +831,22 @@ class UI(BaseHTTPRequestHandler):
         enabled = bool(config.get("dictionary", {}).get("iptvorg"))
         snapshot = self.store.snapshot("channel-dictionary")
         meta = (snapshot or {}).get("data", {}).get("meta", {}) if snapshot else {}
-        status = ("Last checked %s · %s channels and %s feeds for UK and Europe" % (
-            e(when(meta.get("checked_at"))), e(meta.get("channels", "?")), e(meta.get("feeds", "?")))
+        scope = " + ".join(["UK and Europe"] + [dictionary.REGIONS[k][0] for k in meta.get("regions", [])
+                                                 if k in dictionary.REGIONS])
+        status = ("Last checked %s · %s channels and %s feeds for %s" % (
+            e(when(meta.get("checked_at"))), e(meta.get("channels", "?")), e(meta.get("feeds", "?")), e(scope))
                   if meta.get("checked_at") else "Not downloaded yet; it is fetched with the next EPG refresh after enabling.")
         form = ('<label><input type="checkbox" name="iptvorg" value="on" %s> Use the iptv-org channel database '
                 '(public domain; about 3 MB once a day from raw.githubusercontent.com)</label>'
-                '<button type="submit">Save channel dictionary</button>') % ("checked" if enabled else "")
-        return ('</div><section class="card" style="margin-top:16px"><h3>Channel identity dictionary (UK and Europe)</h3>'
+                '<p class="help">Extra regions, only for channels you actually have from those regions. Each one makes '
+                'the published dictionary larger for every TV (all six together take it from about 3 MB to about '
+                '9 MB). They take effect at the next EPG refresh.</p>%s'
+                '<button type="submit">Save channel dictionary</button>') % (
+            "checked" if enabled else "",
+            "".join('<label><input type="checkbox" name="%s" value="on" %s> %s</label>' % (
+                key, "checked" if config.get("dictionary", {}).get(key) else "", e(label))
+                for key, (label, _countries) in dictionary.REGIONS.items()))
+        return ('</div><section class="card" style="margin-top:16px"><h3>Channel identity dictionary</h3>'
                 '<p>Matches channel names, alternative names, regional/HD/+1 feeds, rebrands and closures to standard '
                 'channel ids used by many guides, within each channel\'s country. B1G uses it to find the right guide for '
                 'channels without a matching guide id, and to describe channels that no guide carries. Ambiguous names '

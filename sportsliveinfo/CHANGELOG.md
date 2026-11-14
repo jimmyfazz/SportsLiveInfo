@@ -2,6 +2,51 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.18 — Channel identification worldwide; renames; new sport and FAST guides
+
+Results of a broad research pass over the owner's channel list (private, never committed), the public-domain iptv-org database and EPG site lists, and free guide sources. Full report: [channel identification and EPG source research](../docs/RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md).
+
+- **Provider name grammar for every market** (`market_key`): leading market and platform tags such as "|SENEGAL| ", "IN-TM | ", "EG: ", "JOYN DE: ", "DE ||VIP| ", "Shahid | ", "(MX) (IZ) ", "Carib (FLOW) ", "Claro ", trailing "(FL)"/"(C)"/"|TN|", and quality glued to a number ("DAZN 1HD"). The market's own code is removed only once ("US USA Network" keeps "USA"), and other markets' codes never ("Al Jazeera").
+- **Renames followed:** a closed channel whose database entry names a live successor now resolves to it ("FOX" in a Turkish list → NOW, "C More Hits" → TV4 Hits, "Viasat Sport" → V Sport, "C More Sport" (FI) → MTV Urheilu, L'Équipe 21 → L'Équipe). Closures with no successor (C8, Game One) are still only explained. Russian Viasat channels → viju (alias). Premier Sports 1/2 (listed as Irish in the database) now resolve in UK lists.
+- **Own-market suffix:** "ZDF HD DE" in a German list resolves as ZDF.
+- **Cyrillic and Greek** names in the database also match Latin spellings ("Rossiya 1", "EPT 1").
+- **Optional world regions for the channel dictionary** (Sources page, all off by default): North America; Latin America and the Caribbean; Middle East and North Africa; South Asia; Sub-Saharan Africa; Asia-Pacific. With them: US/Canadian **station callsigns** ("NBC 5 (KFYR) Minot" → NBC's KFYR feed), and **country tags** in multi-country sections ("|NIGERIA| AIT" is Nigeria's AIT, never Ghana's). An untagged name found in two countries of such a section is ambiguous, never guessed.
+- **New guides, all off by default, private use only:**
+  - New Zealand sport · Sky Sport Now (Sky Sport 1–9, Premier League, Select, ESPN), Australia sport · Kayo (Fox Sports 503–506, Fox Cricket/League/Footy);
+  - UK free streaming channels · Plex, Samsung TV Plus, Pluto TV (Stingray, Qwest TV, Vevo, Rakuten TV, Sky Sports Stories/Classics);
+  - Spain including Movistar Plus+ (M+ LaLiga, Liga de Campeones, Vamos) and DAZN · EPG dobleM; France + beIN Sports MENA/FR/EN, OSN and MBC · Fazzani/grab; Portugal (Sport TV 1–7, DAZN PT) · M3UPT;
+  - to verify with *Test EPG*: EPG Share DE, ES, IT, NL, CH, SE, NO, DK, FI, TR, RO, BG, HU, CZ, SK, HR, BA, AL, SA, EG and beIN MENA; IPTV-EPG.org SE, NO, DK, TR, PT, PL, RU, AL, BG, CZ, HU, RO.
+- **Channel registry:** Sky Sport NZ 1–9/Premier League/Select and Fox Sports AU 503–507/More/News.
+- **Hard negative:** a guide channel whose own id names another country ("beINSports1.qa@MENA" in the France + MENA guide) never becomes this market's service (beIN Sports 1 France).
+- Feed format 1.4: the dictionary asset adds `regions`, `group_markets`, `country_tags` and the rules above; new cross-language fixture `schemas/fixtures/sli-v1/dictionary-cases.json` for B1G.
+- **Second pass: per-channel guide reconciliation.** Every channel in the owner's list was matched against 49 downloadable guide files, by dictionary id (regional feed included: BBC One Wales gets the Wales guide, never East) and by name within its market. Results:
+  - **Resolver additions:**
+    - "Sport"/"Sports"/"Spor" spellings anywhere (Sky Sport Uno, Novasports, Tivibu Spor);
+    - an implied "1" ("Diema Sport 1" = Diema Sport, only when a "2" exists);
+    - the market's own numbered channel ("beIN Sports 1" in a Turkish list is beIN Sports 1 Turk), which is also preferred over a foreign channel that merely broadcasts into the market;
+    - the plain channel over its 4K sister;
+    - "beINSport" and "Xtra" spellings.
+  - **Correction:** Turkish beIN Sports 1–4 previously resolved to the Middle East channels and Polish Eurosport 1/2 to the pan-European feed; both now resolve to their own national channels.
+  - **XMLTV `.xz` files** are read, with the same size bounds as gzip.
+  - **13 more guides**, off by default, each downloaded and parsed:
+    - Sky UK + Germany/Austria + Italy (1,243 channels including every BBC/ITV region) and Sky Italia, both from M3UPT;
+    - Freeview UK (M3UPT);
+    - EPGTalk US (738 channels including regional sports networks), US local stations, Latin America (595) and free streaming channels (1,173);
+    - Roku and Plex US, DStv South Africa (SuperSport), Samsung TV Plus India, Australia all cities, Sky Go NZ (100 channels, 3 months).
+  - EPGTalk's existing sports guide carries per-team channels for the NFL, NBA, NHL, MLB, MLS, WNBA and European leagues; 365 of the owner's team channels match it.
+- **Event-slot channels** (new `event_slots.py`, reference for B1G; the channel names stay on the TV):
+  - The parser reads slot label, competition, fixture and start time from names such as "EPL 05 | A vs B (Sat 17:30 UK)", "DAZN 52: League| A vs. B| Sat 18 Oct 12:30 PM", "PL+ 017| A v B (2026-08-29 16:20:00)", "NFL 01: 8:15PM A @ B" and "… @ Nov 9 7:00 PM :NBA 04". It understands time zones and day/month or month/day dates.
+  - A slot links to exactly one SportsLiveInfo event: both sides must match and the start must be within 3 hours. A clock time alone never picks between two meetings of the same teams.
+  - Round-trip test on this week's real feed: 1,483 of 1,500 slot names built in five provider formats link to the right event; 17 stay unlinked, none wrong.
+  - New fixture `slot-cases.json`; feed contract §4.0b.
+- **US/Canadian local stations** without an id match: network + city ("NBC 5 (KXXX) City" → guide "NBC City"), never a "News" stream. This covers about 380 of the owner's otherwise guideless stations (`guide.local_station_key`, contract §4.0a).
+- **Latin American country tags:** "(MX)", "(PY)", "(AR)" … at the start of a name in US, CA, LATAM or CARIB lists search that country first, then Latin America, with Brazil (Portuguese) last. Latin America identification rises from 59.1 % to 69.1 %, US from 40.3 % to 41.4 %, and Mexican channels get their Mexican feeds (FX, National Geographic, History, TUDN).
+- **Measured on the owner's 21,250 linear channels:**
+  - Identification: UK/Europe 61.5 % (55.4 % before), UK/Europe sport channels 71.2 % (57.8 %), whole list with all world regions 50.1 % (20.0 %).
+  - Guide found, including local stations and event slots: US 30.3 %, Canada 38.0 %.
+  - Downloadable guide from the GitHub-hosted files: France 75.4 %, Spain 72.8 %, Italy 72.7 %, UK 69.8 %, Portugal 62.7 %, Germany 56.8 %; sport channels 47.8 %.
+  - Scandinavia, Poland, Turkey, Russia, the Balkans, Greece, MENA and India depend on the EPG Share / IPTV-EPG.org files, which can be tested only on Home Assistant. Ambiguous results are never applied. Two hand-checked samples (70 and 85 new matches) found the errors described in the report. The country errors were fixed before release; one short-brand mismatch remains.
+
 ## 0.3.17 — Connection tests run in the background
 
 - *Test saved GitHub connection* and *Test private feed connection* now start the test in the background and return at once; refresh the Publishing page to see "Last test: Passed/Failed" with the reason. Running up to three GitHub requests inside the page request let Home Assistant remote access drop the connection before the answer arrived ("unexpectedly closed the connection"), so the result was never shown.

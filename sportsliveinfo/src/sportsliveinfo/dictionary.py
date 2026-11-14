@@ -46,13 +46,70 @@ EUROPE = frozenset("""UK IE FR BE CH LU MC DE AT LI ES AD IT SM VA MT PT NL PL S
     SI HR BA RS ME MK AL XK RU UA BY LT LV EE GG JE IM GI""".split())
 # Feed market (as used by B1G and the published guide catalogue) -> iptv-org countries to search.
 MARKET_COUNTRIES = {
-    "GB": ["UK", "GG", "JE", "IM"], "IE": ["IE", "UK"], "FR": ["FR", "BE", "CH", "LU", "MC"], "DE": ["DE", "AT", "CH", "LI"],
+    "GB": ["UK", "GG", "JE", "IM", "IE"], "IE": ["IE", "UK"], "FR": ["FR", "BE", "CH", "LU", "MC"], "DE": ["DE", "AT", "CH", "LI"],
     "AT": ["AT", "DE"], "CH": ["CH", "DE", "FR", "IT"], "BE": ["BE", "FR", "NL"], "ES": ["ES", "AD"],
     "IT": ["IT", "SM", "VA", "CH"], "PT": ["PT"], "NL": ["NL", "BE"], "PL": ["PL"], "SE": ["SE", "NO", "DK", "FI"], "NO": ["NO", "SE", "DK", "FI"],
     "DK": ["DK", "SE", "NO", "FI"], "FI": ["FI", "SE", "NO", "DK"], "IS": ["IS"], "TR": ["TR", "CY"], "GR": ["GR", "CY"], "CY": ["CY", "GR"],
     "RO": ["RO", "MD"], "BG": ["BG"], "HU": ["HU"], "CZ": ["CZ", "SK"], "SK": ["SK", "CZ"], "SI": ["SI"],
     "HR": ["HR"], "RS": ["RS"], "BA": ["BA"], "ME": ["ME"], "MK": ["MK"], "AL": ["AL", "XK", "MK"], "RU": ["RU", "BY"],
     "UA": ["UA"], "LT": ["LT"], "LV": ["LV"], "EE": ["EE"], "MT": ["MT"],
+    # Optional world regions (owner opt-in, see REGIONS); multi-country provider sections use a group market.
+    "US": ["US"], "CA": ["CA", "US"], "AU": ["AU"], "NZ": ["NZ"], "IN": ["IN"], "PK": ["PK"], "BD": ["BD"],
+    "NP": ["NP"], "IR": ["IR"], "KU": ["IQ", "TR", "IR", "SY"], "VN": ["VN"], "PH": ["PH"],
+    "MENA": "QA SA AE EG KW BH OM LB JO IQ SY MA DZ TN LY PS YE SD MR".split(),
+    "AFRICA": "NG ZA KE GH ET TZ UG CM CI SN CD AO MZ ZM ZW RW SO ML BF GA CG BJ TG MG GN NE".split(),
+    "CARIB": "JM TT BB DO PR HT BS GY SR LC GD VC AG DM KN CW AW".split(),
+    # Spanish-speaking countries first; the US (where many Latin American feeds are registered) next;
+    # Brazil (Portuguese-language feeds) last.
+    "LATAM": "MX AR CO CL PE VE EC UY PY BO CR GT HN SV NI PA US BR".split(),
+}
+# Multi-country provider sections ("AR | Food Music & West Asia", "AFRICA") tag each channel with its
+# country or platform: "|NIGERIA| AIT", "IRQ: Al Iraqia", "DSTV | M-Net". In those markets the tag
+# narrows the lookup to that country only, so "AIT" is Nigeria's AIT, never Ghana's AIT TV.
+GROUP_MARKETS = {"MENA", "AFRICA", "CARIB", "LATAM", "KU"}
+COUNTRY_TAGS = {
+    "IRQ": "IQ", "ALG": "DZ", "MOR": "MA", "SAU": "SA", "KSA": "SA", "SUD": "SD", "PAL": "PS", "YEMEN": "YE",
+    "LIBYA": "LY", "EM": "AE", "UAE": "AE", "DSTV": "ZA", "JAWWY": "SA", "SHAHID": "SA", "NIGERIA": "NG",
+    "GHANA": "GH", "SENEGAL": "SN", "SOMALIA": "SO", "CAMAROON": "CM", "CAMEROON": "CM", "GUINEE": "GN",
+    "GUINEA": "GN", "BENIN": "BJ", "MALI": "ML", "BURKINAFASO": "BF", "KENYA": "KE", "UGANDA": "UG",
+    "TANZANIA": "TZ", "ETHIOPIA": "ET", "ZAMBIA": "ZM", "ZIMBABWE": "ZW", "RWANDA": "RW", "CONGO": "CD",
+    "ANGOLA": "AO", "GABON": "GA", "TOGO": "TG", "NIGER": "NE", "JAMAICA": "JM", "TRINIDAD": "TT",
+}
+_COUNTRY_TAG = re.compile(r"^\s*(?:\|\s*([A-Za-z ]{2,20}?)\s*\||([A-Za-z]{2,6})\s*[|:])")
+
+
+# Latin American country codes in brackets at the start of a name in US/Canadian/Latin sections:
+# "(MX) (IZ) Azteca Uno (Cancun)", "(PY) Claro SNT". Never "(FR)"/"(EN)"/"(ES)", which are languages there.
+_LATAM_BRACKET = re.compile(r"^\s*\((MX|AR|CO|CL|PE|VE|BR|EC|UY|PY|BO|CR|GT|HN|SV|NI|PA|DO|PR|CU)\)\s", re.I)
+_LATAM_BRACKET_MARKETS = {"US", "CA", "LATAM", "CARIB"}
+
+
+def country_tag(name, market):
+    """ISO country named by a section tag ("|NIGERIA| ...", "IQ: ...", "DSTV | ...", "(MX) ..."), else None."""
+    bracket = _LATAM_BRACKET.match(str(name))
+    if bracket and str(market or "").upper() in _LATAM_BRACKET_MARKETS:
+        return bracket.group(1).upper()
+    if str(market or "").upper() not in GROUP_MARKETS:
+        return None
+    match = _COUNTRY_TAG.match(str(name))
+    if not match:
+        return None
+    token = (match.group(1) or match.group(2)).replace(" ", "").upper()
+    if token in COUNTRY_TAGS:
+        return COUNTRY_TAGS[token]
+    return token if len(token) == 2 and token in MARKET_COUNTRIES.get(str(market).upper(), ()) else None
+
+
+# Owner opt-in regions beyond UK/Europe (all off by default: each adds megabytes to the
+# published dictionary that every TV downloads). Keys are config switches under "dictionary".
+REGIONS = {
+    "north_america": ("North America", "US CA MX PR"),
+    "latin_america_caribbean": ("Latin America and the Caribbean",
+                                "AR CO CL PE VE BR EC UY PY BO CR GT HN SV NI PA DO HT JM TT BB BS GY SR LC GD VC AG DM KN CW AW"),
+    "middle_east_north_africa": ("Middle East and North Africa", "QA SA AE EG KW BH OM LB JO IQ SY MA DZ TN LY PS YE SD IR IL"),
+    "south_asia": ("South Asia", "IN PK BD LK NP AF MV BT"),
+    "africa": ("Sub-Saharan Africa", "NG ZA KE GH ET TZ UG CM CI SN CD AO MZ ZM ZW RW SO ML BF GA CG BJ TG MG NA BW MW"),
+    "asia_pacific": ("Asia-Pacific", "AU NZ SG MY HK PH VN ID TH JP KR CN TW FJ PG"),
 }
 
 
@@ -64,6 +121,7 @@ ALIASES = {
         (r"^nat geo\b", "national geographic"), (r"^national geo channel$", "national geographic"),
         (r"^nick (?:jr|junior)$", "nickelodeon junior"), (r"^rmc sports\b", "rmc sport"),
         (r"^discovery inves$", "discovery investigation"), (r"^euro sport\b", "eurosport"),
+        (r"^beinsports?\b", "bein sports"), (r"\bxtra$", "extra"),
     ],
     "FR": [
         (r"^hd1$", "tf1 series films"), (r"^automoto(?: tv)?$", "automoto la chaine"),
@@ -73,6 +131,8 @@ ALIASES = {
         (r"^canal\+ cinema$", "canal+ cinemas"),
     ],
     "DE": [(r"^pro ?7\b", "prosieben"), (r"^kabel ?1\b", "kabel eins")],
+    # Rebrands the database lists only under the new name (viju: 1 Mar 2023).
+    "RU": [(r"^viasat (explore|history|nature)$", r"viju \1"), (r"^viasat sport$", "viju+ sport")],
 }
 _ALIASES = {market: [(re.compile(pattern), target) for pattern, target in rules] for market, rules in ALIASES.items()}
 # Language/territory variants: "i24NEWS" in a French list is the database's "i24NEWS French".
@@ -102,8 +162,17 @@ def _areas(value, regions):
     return out
 
 
-def build_document(channels_csv, feeds_csv, regions_csv=""):
-    """Filter the database to UK/Europe channels and to feeds broadcasting there."""
+def scope_countries(regions=()):
+    """UK/Europe plus the owner's opted-in REGIONS."""
+    countries = set(EUROPE)
+    for key in regions or ():
+        countries.update(REGIONS[key][1].split())
+    return frozenset(countries)
+
+
+def build_document(channels_csv, feeds_csv, regions_csv="", extra_regions=()):
+    """Filter the database to UK/Europe (plus opted-in REGIONS) and to feeds broadcasting there."""
+    scope = scope_countries(extra_regions)
     csv.field_size_limit(10_000_000)
     regions = {row["code"]: _split(row.get("countries")) for row in csv.DictReader(io.StringIO(regions_csv or ""))
                if row.get("code")}
@@ -128,9 +197,9 @@ def build_document(channels_csv, feeds_csv, regions_csv=""):
             continue
         feeds = feeds_by_channel.get(row["id"], [])
         home = row.get("country", "")
-        if home not in EUROPE:
-            # Pan-regional channel (e.g. beIN, DAZN): keep only feeds broadcasting into Europe.
-            feeds = [f for f in feeds if EUROPE.intersection(f.get("areas", ()))]
+        if home not in scope:
+            # Pan-regional channel (e.g. beIN, DAZN): keep only feeds broadcasting into the scope.
+            feeds = [f for f in feeds if scope.intersection(f.get("areas", ()))]
             if not feeds:
                 continue
         entry = {"id": row["id"], "name": row.get("name", ""), "country": home}
@@ -147,9 +216,13 @@ def build_document(channels_csv, feeds_csv, regions_csv=""):
     return {
         "schema": "sli.dictionary/1",
         "source": SOURCE,
-        "scope": "UK and Europe channels, plus feeds of other channels that broadcast into Europe",
+        "scope": ("UK and Europe" + "".join(" + " + REGIONS[k][0] for k in sorted(extra_regions or ()))
+                  + " channels, plus feeds of other channels that broadcast there"),
+        "regions": sorted(extra_regions or ()),
         "market_countries": MARKET_COUNTRIES,
         "bare_market_codes": {k: sorted(v) for k, v in BARE_MARKET_CODES.items()},
+        "group_markets": sorted(GROUP_MARKETS),
+        "country_tags": COUNTRY_TAGS,
         "aliases": {market: [{"pattern": pattern, "replacement": target} for pattern, target in rules]
                     for market, rules in ALIASES.items()},
         "language_variants": LANGUAGE_VARIANTS,
@@ -161,11 +234,34 @@ def build_document(channels_csv, feeds_csv, regions_csv=""):
                          "replace the first matching pattern and repeat the lookup; (2) singular/plural of the last "
                          "word (>= 4 letters); (3) language_variants[market]: '<name> <variant>' in any country, only when "
                          "the name ends in a market code (dropped first, e.g. 'CGTN FR'), or the plain name has at least 6 "
-                         "letters/digits and is not itself a channel; a result counts only when it is one channel",
+                         "letters/digits and is not itself a channel; a result counts only when it is one channel; "
+                         "(4) a trailing code of the channel's own market (bare_market_codes[market]) is dropped, with a "
+                         "quality word before it ('ZDF HD DE' -> 'zdf'), and the lookup repeated; (2b, after (2)) the "
+                         "sport word in its other spellings sport/sports/spor; (3b, after (3)) a name ending in a number "
+                         "plus language_variants[market] looked up in the market's own countries only ('beIN Sports 1' "
+                         "-> 'beIN Sports 1 Turk' in TR; also preferred whenever a numbered name is otherwise found only by "
+                         "broadcast_area, i.e. as a foreign channel broadcasting into the market); (6, last) '<name> 1' as '<name>' when '<name> 2' exists in the "
+                         "market. Any step: when candidates differ only by a 4K/UHD version and the provider name has "
+                         "no 4K/UHD marker, the plain channel is chosen (method suffix ':plain_not_4k')",
+            "country_tag": "a leading '(MX)'-style bracket with a Latin American country code in US, CA, LATAM or "
+                           "CARIB lists puts that country first, then market_countries['LATAM'] (LATAM rules); and in "
+                           "group_markets: a leading section tag naming a country ('|NIGERIA| ', 'IQ: ', "
+                           "'DSTV | ') replaces market_countries[market] with that one country for every step; the tag "
+                           "is country_tags[TAG] or a two-letter code listed in market_countries[market]. Without a tag, "
+                           "each lookup method pools all market_countries (not first country wins), so a name found in "
+                           "two countries is ambiguous",
+            "callsign": "US/CA/Caribbean only, when the lookup finds nothing: a station callsign in brackets "
+                        "('NBC 5 (KFYR) Minot') matches feeds named after that callsign ('KFYR', 'KFYR-TV'); when "
+                        "several channels share it, the one whose name or network appears in the provider name wins",
+            "transliteration": "Cyrillic and Greek names and alternative names are also indexed in Latin script "
+                               "(transliterate()), so 'Rossiya 1' and 'EPT 1' match",
             "explain_closed": "a name matching only a closed channel is reported as closed (with replaced_by), "
                               "never as a guide match",
             "confidence": "one channel id = high; several ids = ambiguous (owner review, never applied automatically)",
-            "closed": "a closed channel only explains a name (e.g. a rebrand via replaced_by); it never supplies a guide",
+            "closed": "a closed channel never supplies its own guide. Fallback (5): when every closed channel a name "
+                      "matches names a live successor (replaced_by, followed up to 3 times) and that is one channel, "
+                      "the name resolves to the successor with method 'replaced_by' (the stream now carries it: "
+                      "'FOX' in a Turkish list -> NOW). Otherwise explain_closed only explains the name",
             "precedence": "below user manual mappings, provider tvg-id exact and published crosswalks",
         },
         "channels": channels,
@@ -182,6 +278,7 @@ class Resolver:
         self.area = defaultdict(set)
         self.anywhere = defaultdict(set)      # compact key -> ids in any country (language variants)
         self.closed = defaultdict(set)        # (country, compact key) -> closed channel ids
+        self.callsign = defaultdict(set)      # US/CA station callsign -> (channel id, feed id)
         self.channels = {c["id"]: c for c in document.get("channels", [])}
         self.main_feed = {c["id"]: next((f.get("id") for f in c.get("feeds", []) if f.get("main")), None)
                           for c in self.channels.values()}
@@ -192,12 +289,17 @@ class Resolver:
                 for base in bases:
                     self.closed[(home, _compact(normalized_name(base)))].add(channel["id"])
                 continue
+            bases = bases + [t for base in bases for t in transliterate(base)]
             for base in bases:
                 self.anywhere[_compact(normalized_name(base))].add((channel["id"], None))
             for base in bases:
                 self._add(home, normalized_name(base), (channel["id"], None))
             for feed in channel.get("feeds", []):
                 names = [feed.get("name", "")] + list(feed.get("alt_names", []))
+                for name in names:
+                    call = _CALLSIGN_FEED.match(name.strip())
+                    if call:
+                        self.callsign[call.group(1)].add((channel["id"], feed.get("id")))
                 for base in bases:
                     for name in names:
                         if feed.get("main") and name in ("SD", "HD"):
@@ -221,21 +323,58 @@ class Resolver:
         key = market_key(name, market)
         if not key or not countries:
             return None
-        found = self._lookup(key, countries)
+        tagged = country_tag(name, market)
+        if tagged and _LATAM_BRACKET.match(str(name)):
+            # "(MX) …": that country first, then the rest of Latin America (pan-regional channels such as
+            # AMC or Cartoon Network Latin America are registered under the US or Brazil).
+            market = "LATAM"
+            key = market_key(name, market) or key
+            countries = [tagged] + [c for c in MARKET_COUNTRIES["LATAM"] if c != tagged]
+        elif tagged:
+            countries = [tagged]
+        pooled = market in GROUP_MARKETS and not tagged      # untagged in a multi-country section
+
+        def own_numbered(stem_key):
+            """'<name> N' + language variant in the market's own countries ('beIN Sports 1 Turk' in TR)."""
+            if not re.search(r"\d$", stem_key):
+                return None
+            for stem in [stem_key] + _sport_spellings(stem_key):
+                for variant in LANGUAGE_VARIANTS.get(market, []):
+                    hit = self._prefer_plain(self._lookup(stem + " " + variant, countries, pooled), name)
+                    if hit and hit["confidence"] == "high" and hit["method"] != "broadcast_area":
+                        return dict(hit, method="numbered_variant:" + hit["method"])
+            return None
+
+        def look(candidate):
+            hit = self._lookup(candidate, countries, pooled)
+            if hit and hit["method"] == "broadcast_area":
+                # A numbered channel found only as a foreign channel broadcasting here (beIN Sports 1 of Qatar
+                # in a Turkish list): the market's own numbered version wins when the database has one.
+                return own_numbered(candidate) or hit
+            return hit
+        found = self._prefer_plain(look(key), name)
         if found:
             return found
+        if market in _CALLSIGN_MARKETS:
+            found = self._callsign(name, key)
+            if found:
+                return found
         for rule_market in (market, "*"):                     # (1) known alternative spellings
             for pattern, target in _ALIASES.get(rule_market, []):
                 if pattern.search(key):
-                    found = self._lookup(pattern.sub(target, key, count=1), countries)
+                    found = look(pattern.sub(target, key, count=1))
                     if found:
                         return dict(found, method="alias:" + found["method"])
         words = key.split()                                   # (2) singular/plural of the last word
         if words and len(words[-1]) >= 4 and words[-1].isalpha():
             last = words[-1][:-1] if words[-1].endswith("s") else words[-1] + "s"
-            found = self._lookup(" ".join(words[:-1] + [last]), countries)
+            found = look(" ".join(words[:-1] + [last]))
             if found:
                 return dict(found, method="plural:" + found["method"])
+        for variant in _sport_spellings(key):                 # (2b) "Sport"/"Sports"/"Spor" anywhere
+            found = self._prefer_plain(look(variant), name)
+            if found:
+                return dict(found, method="sport_word:" + found["method"])
         # (3) language/territory variant in any country. Only when the name says so ("CGTN FR") or the
         # plain name is distinctive and not itself a channel ("i24NEWS"): "CNN" stays unmatched, never
         # CNN Portugal, because a short global brand in a local list is often the international feed.
@@ -246,19 +385,90 @@ class Resolver:
                 ids = self.anywhere.get(_compact(base + " " + variant))
                 if ids and len({i[0] for i in ids}) == 1:
                     return {"ids": sorted(ids), "method": "language_variant", "confidence": "high"}
+        # (3b) a numbered channel's own-country version ("beIN Sports 1" in a Turkish list is
+        # "beIN Sports 1 Turk"): only a channel of the market's own countries, never a foreign variant.
+        found = own_numbered(base)
+        if found:
+            return found
+        found = self._successor(key, countries)                # (5) rebrand: closed name -> its successor
+        if found:
+            return found
+        if coded and coded.group(2).upper() in BARE_MARKET_CODES.get(market, ()):
+            # (4) a trailing code of the channel's own market ("ZDF HD DE" in a German list): drop it.
+            stripped = re.sub(r"\s+(?:hd|fhd|uhd|4k)$", "", base)
+            found = look(stripped)
+            if found:
+                return dict(found, method="market_suffix:" + found["method"])
+        # (6) a first channel listed with "1" that the database names without a number ("Diema Sport 1" =
+        # "Diema Sport"), only when the same market also has "<name> 2" (so the numbering is a series).
+        numbered = re.match(r"^(.+?)\s+1$", key)
+        if numbered:
+            for stem in [numbered.group(1)] + _sport_spellings(numbered.group(1)):
+                if look(stem + " 2"):
+                    found = self._prefer_plain(look(stem), name)
+                    if found and found["confidence"] == "high":
+                        return dict(found, method="implicit_1:" + found["method"])
         return None
 
-    def _lookup(self, key, countries):
+    def _prefer_plain(self, found, name):
+        """Several channels that differ only by a 4K/UHD version: a name without 4K/UHD is the plain channel."""
+        if not found or found["confidence"] != "ambiguous" or _UHD.search(str(name)):
+            return found
+        plain = {cid for cid, _feed in found["ids"] if not _UHD.search(self.channels.get(cid, {}).get("name", ""))}
+        if len(plain) == 1:
+            return dict(found, ids=[i for i in found["ids"] if i[0] in plain], confidence="high",
+                        method=found["method"] + ":plain_not_4k")
+        return found
+
+    def _lookup(self, key, countries, pooled=False):
+        """First method that finds anything; within it the first country in order, or (pooled: an untagged
+        name in a multi-country section) every country together, so a name found in two countries is ambiguous."""
         for method, lookup in (("exact", lambda c: self.exact.get((c, key)) or self.compact.get((c, _compact(key)))),
                                ("decoration", lambda c: self.signature.get((c,) + _sig(key))),
                                ("broadcast_area", lambda c: self.area.get((c, key)) or self.area.get((c, _compact(key))))):
-            for country in countries:
-                hit = lookup(country)
+            hits = [lookup(country) or set() for country in countries]
+            if pooled:
+                hits = [set().union(*hits)]
+            for hit in hits:
                 if hit:
                     ids = sorted(hit, key=lambda x: (x[0], x[1] not in (None, self.main_feed.get(x[0])), x[1] or ""))
                     return {"ids": ids, "method": method,
                             "confidence": "high" if len({i[0] for i in ids}) == 1 else "ambiguous"}
         return None
+
+    def _successor(self, key, countries):
+        """A closed channel that names its replacement ("FOX" -> NOW, "C More Hits" -> TV4 Hits): the provider
+        stream now carries the successor, so its guide is the successor's. Closures without a successor never
+        resolve (explain_closed says why)."""
+        closed = {cid for country in countries for cid in self.closed.get((country, _compact(key)), ())}
+        targets = set()
+        def live(cid):
+            return cid in self.channels and not self.channels[cid].get("closed")
+        for cid in closed:
+            target, hops = self.channels[cid].get("replaced_by"), 0
+            while target and target in self.channels and not live(target) and hops < 3:   # rebranded again later
+                target, hops = self.channels[target].get("replaced_by"), hops + 1
+            if not target or not live(target):
+                return None                       # one of the matches has no live successor: do not guess
+            targets.add(target)
+        if len(targets) != 1:
+            return None
+        return {"ids": [(next(iter(targets)), None)], "method": "replaced_by", "confidence": "high"}
+
+    def _callsign(self, name, key):
+        call = _CALLSIGN_NAME.search(str(name))
+        ids = self.callsign.get(call.group(1)) if call else None
+        if not ids:
+            return None
+        channels = {i[0] for i in ids}
+        if len(channels) > 1:                 # PBS and PBS Kids on WNIT: the provider name decides
+            named = {cid for cid in channels if any(
+                _compact(normalized_name(n)) and _compact(normalized_name(n)) in _compact(key)
+                for n in [self.channels[cid].get("name", ""), self.channels[cid].get("network", "")]
+                + list(self.channels[cid].get("alt_names", [])))}
+            channels = named or channels
+        hits = sorted(i for i in ids if i[0] in channels)
+        return {"ids": hits, "method": "callsign", "confidence": "high" if len(channels) == 1 else "ambiguous"}
 
     def explain_closed(self, name, market):
         """Closed channels a name matches (e.g. "C8", closed 2025): why no guide carries it. None otherwise."""
@@ -279,6 +489,44 @@ class Resolver:
                                          "closed", "replaced_by") if channel.get(k)}
 
 
+_UHD = re.compile(r"\b(?:4k|uhd|2160p|ultra hd)\b", re.I)
+_SPORT_WORD = re.compile(r"\b(sports?|spor)\b")
+
+
+def _sport_spellings(key):
+    """The other spellings of the sport word in a name: sport/sports/spor (each occurrence alike)."""
+    if not _SPORT_WORD.search(key):
+        return []
+    return [v for v in (_SPORT_WORD.sub(word, key) for word in ("sport", "sports", "spor")) if v != key]
+
+
+_CALLSIGN_MARKETS = {"US", "CA", "CARIB"}
+_CALLSIGN_FEED = re.compile(r"^([KWC][A-Z]{2,3})(?:-?(?:TV|DT|CD|LD|CA|HD))?$")
+_CALLSIGN_NAME = re.compile(r"\(([KWC][A-Z]{2,3})(?:[- ]?(?:TV|DT|CD|LD|CA))?\)")
+_CYRILLIC = dict(zip("абвгдезийклмнопрстуфцъыьэ", ["a", "b", "v", "g", "d", "e", "z", "i", "y", "k", "l", "m", "n",
+                                                   "o", "p", "r", "s", "t", "u", "f", "ts", "", "y", "", "e"]))
+_CYRILLIC.update({"ё": "e", "ж": "zh", "х": "kh", "ч": "ch", "ш": "sh", "щ": "shch", "ю": "yu", "я": "ya",
+                  "і": "i", "ї": "yi", "є": "ye", "ґ": "g"})
+# Greek: providers either spell the letters that look Latin ("EPT" for ΕΡΤ) or transliterate ("ERT").
+_GREEK_LOOK = dict(zip("ΑΒΕΖΗΙΚΜΝΟΡΤΥΧ", "ABEZHIKMNOPTYX"))
+_GREEK_SOUND = dict(zip("ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ", ["A", "V", "G", "D", "E", "Z", "I", "TH", "I", "K", "L", "M", "N",
+                                                    "X", "O", "P", "R", "S", "T", "Y", "F", "CH", "PS", "O"]))
+
+
+def transliterate(name):
+    """Latin spellings of a Cyrillic or Greek name (empty for Latin names)."""
+    text = str(name)
+    out = set()
+    if re.search("[\u0400-\u04ff]", text):
+        latin = "".join(_CYRILLIC.get(ch, ch) for ch in text.lower())
+        out |= {latin, latin.replace("kh", "h").replace("ya", "ia").replace("yu", "iu")}
+    if re.search("[\u0370-\u03ff]", text):
+        upper = text.upper()
+        for table in (_GREEK_LOOK, _GREEK_SOUND):
+            out.add("".join(table.get(ch, ch) for ch in upper))
+    return sorted(out)
+
+
 def _compact(key):
     return re.sub(r"[^a-z0-9+]", "", key)
 
@@ -288,12 +536,16 @@ def _sig(key):
     return identity, tokens
 
 
-def refresh(store, *, now=None, fetch=None):
+def refresh(store, *, now=None, fetch=None, regions=()):
     """Fetch (conditionally, at most daily) and rebuild the dictionary snapshot. Returns a status string."""
+    regions = sorted(regions or ())
     fetch = fetch or providers.fetch
     now = now or datetime.now(timezone.utc)
     previous = store.snapshot("channel-dictionary")
     meta = (previous or {}).get("data", {}).get("meta", {}) if previous else {}
+    kept = previous                           # last good document, kept whenever a rebuild fails
+    if previous and meta.get("regions", []) != regions:
+        previous, meta = None, {}             # scope changed: rebuild from full downloads now
     if previous and meta.get("checked_at"):
         try:
             if now - datetime.fromisoformat(meta["checked_at"]) < REFRESH_EVERY:
@@ -318,15 +570,17 @@ def refresh(store, *, now=None, fetch=None):
         return "unchanged"
     if len(bodies) < 3:
         # Some files changed and others were 304: fetch all unconditionally next time.
-        store.save_snapshot("channel-dictionary", dict((previous or {}).get("data", {}),
-                                                       meta=dict(meta, checked_at=stamp, validators={})))
+        store.save_snapshot("channel-dictionary", dict((kept or {}).get("data", {}),
+                                                       meta=dict(meta, checked_at=stamp, validators={},
+                                                                 regions=((kept or {}).get("data", {}).get("meta", {})
+                                                                          .get("regions", [])))))
         return "partial"
-    document = build_document(bodies["channels"], bodies["feeds"], bodies["regions"])
+    document = build_document(bodies["channels"], bodies["feeds"], bodies["regions"], regions)
     if len(document["channels"]) < 1000:
         raise ValueError("Channel dictionary unexpectedly small; previous version kept")
     store.save_snapshot("channel-dictionary", {
         "document": document,
-        "meta": {"checked_at": stamp, "updated_at": stamp, "validators": new_validators,
+        "meta": {"checked_at": stamp, "updated_at": stamp, "validators": new_validators, "regions": regions,
                  "channels": len(document["channels"]),
                  "feeds": sum(len(c.get("feeds", [])) for c in document["channels"])},
     })

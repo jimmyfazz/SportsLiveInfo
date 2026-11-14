@@ -39,7 +39,7 @@ Home Assistant backups of the app are taken before every update (named "SportsLi
 All in `sportsliveinfo/src/sportsliveinfo/`; B1G must reproduce the published rules exactly.
 
 1. **Channel registry** (`guide.py`): `SERVICES` names per market, `SOURCE_ID_CROSSWALK`, `REGIONAL_RULES` + `REGIONAL_PARENTS` (published as `regional_services` in the channels asset). English regions → network id; nations are separate services.
-2. **Dictionary** (`dictionary.py`, iptv-org database, public domain): exact/compact → decoration → broadcast area; then fallbacks: aliases → singular/plural → language variants (only with a market code or a distinctive name). Closed channels are explained, never matched. Rules published in the dictionary asset (`aliases`, `language_variants`, `rules.fallbacks`).
+2. **Dictionary** (`dictionary.py`, iptv-org database, public domain): exact/compact → decoration → broadcast area; then fallbacks: aliases → singular/plural → language variants (only with a market code or a distinctive name) → own-market suffix → live successor of a closed channel (`replaced_by`). US/CA/CARIB callsigns; country tags in group markets (MENA, AFRICA, CARIB, LATAM, KU), whose untagged names pool every country; Cyrillic/Greek transliteration; optional world regions (0.3.18). Closures without a live successor are explained, never matched. Rules published in the dictionary asset; B1G must pass `schemas/fixtures/sli-v1/dictionary-cases.json`. See [feed contract §4.0](FEED_CONTRACT_SLI_V1.md) and the [0.3.18 research](RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md).
 3. **Event→channel** (`linking.broadcast_candidates`): strict fixture match (both sides, competition/programme words only, women's/age variants agree, guide may add a club suffix), sport-eligible channels (no radio/shopping/+1), then `_allocate_regions` (network only when every observed nation carries or simulcasts it).
 4. **Guide-listed live sport** (`linking._guide_live_events`): live listings on recognised channels, sport from listing words or channel, merged across guides/simulcasts, women's and men's kept apart, attached to a feed event when the names differ only in form. Spec tests: `tests/test_guide_listed_events.py`, `tests/test_broadcast_matcher_safety.py`.
 
@@ -50,8 +50,17 @@ All in `sportsliveinfo/src/sportsliveinfo/`; B1G must reproduce the published ru
 2. Check Home Assistant results (Collect now → Live today / Sports events), especially **French live sport** (Ligue 1, Top 14, cyclisme on Canal+/beIN/RMC): French guide listings could not be fetched from the cloud session, so French listing formats are unit-tested only.
 3. When the B1G reader exists: create a TV token — fine-grained, **Contents: Read-only**, `LiveSports-EPG-private` only.
 
+4. **0.3.18 (optional):** on the Sources page, enable only the guides you watch. By coverage of your channels:
+   - Sky UK/DE/IT (M3UPT);
+   - France + beIN MENA;
+   - Portugal M3UPT;
+   - Spain dobleM;
+   - EPGTalk US, Latin and sports (team channels);
+   - Sky Sport Now / Sky Go NZ;
+   - DStv (SuperSport). Run *Test EPG* first on every "verify" source. Enable dictionary regions only for regions you watch; each makes the TV download larger.
+
 **Deferred (owner will return to)**
-- Unmatched channels: France 151 of 777 (plus 46 closed, 71 event slots/Molotov); elsewhere mostly international brands whose local version the public database lacks — needs B1G guide-name matching on the TV.
+- Unmatched channels: largely addressed by the 0.3.18 research (UK + Europe 61.5 % identified; downloadable guide for about 70 % of UK/FR/ES/IT channels). The rest are mostly regional sports alternates, numbered event slots, local stations and FAST music channels absent from the public database; they need B1G guide-name matching on the TV.
 - Event coverage beyond tomorrow (paid API decision).
 
 **Minor**
@@ -65,7 +74,7 @@ Phases (one small PR each, real emulator evidence, report anything NOT RUN):
 - **P2** channel identity for the **current account**: channels + dictionary assets; precedence user mapping > provider epg id > crosswalk > service name > dictionary; never merge regional/+1/Sky Sports+/numbered; hidden channels respected; reproduce `schemas/fixtures/sli-v1/matching-cases.json`.
 - **P3** Sports Today: events + `broadcast_links` mapped to the account's channels; a *TV region* setting (England/Scotland/Wales/NI) applies `coverage`/`not_on`; "listed in TV guide (unverified)"; no "Live now" from programme start alone.
 - **P4** on-device guide-listed live sport: port §4.4 to Kotlin over the provider's own EPG cache; local only.
-- **P5** event-slot channels (fixture + time in the name) bound to feed events; local only.
+- **P5** event-slot channels (fixture + time in the name) bound to feed events; local only. Reference parser and matcher `event_slots.py` (0.3.18), contract §4.0b, fixture `slot-cases.json`.
 - **P6** guide matching fallback via canonical ids/dictionary; closed-channel notes.
 
 The full terminal prompt for this work was given to the owner on 14 November; its constraints are those in B1 `CLAUDE.md` (no TiviMate decompilation, no DRM circumvention, no credentials or personal data in commits, no paid APIs, TMDB/OMDb local, persistent player, D-pad and focus rules).
@@ -73,7 +82,7 @@ The full terminal prompt for this work was given to the owner on 14 November; it
 ## 7. Operating notes
 
 - **Release:** bump `sportsliveinfo/config.yaml`, `sportsliveinfo/Dockerfile` (`BUILD_VERSION`) and `sportsliveinfo/src/sportsliveinfo/__init__.py`; changelog entry; `PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py`; full test suite; PR; CI green; Home Assistant backup of the app; squash-merge; on Home Assistant refresh the app store (it caches the repository) and update.
-- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (241 tests at 0.3.17).
+- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (260 tests at 0.3.18).
 - **Benchmarks** used public UK guides (farleyflex, Freeview, EPGTalk UK), feed revisions from `LiveSports-EPG`, the iptv-org CSVs and the owner's private channel list; scripts and data are kept outside the repositories. Only GitHub-hosted guides are reachable from cloud sessions; iptv-epg.org, epgshare01 and xmltvfr.fr are blocked there.
 - **Privacy:** never commit the owner's channel list, credentials, tokens, LAN addresses or personal details; use synthetic names in tests.
 
@@ -91,7 +100,7 @@ READ FIRST (in order)
 2. SLI (github.com/jimmyfazz/SportsLiveInfo, main — the contract owner; do NOT edit it):
    docs/HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md (start here), docs/FEED_CONTRACTS_AND_PUBLICATION.md
    (esp. §6.1 D8 broadcast_links, §6.2 private feed), sportsliveinfo/CHANGELOG.md (0.3.8–0.3.17),
-   schemas/*.schema.json, schemas/fixtures/sli-v1/ (golden feed + matching-cases.json),
+   schemas/*.schema.json, schemas/fixtures/sli-v1/ (golden feed + matching-cases.json + dictionary-cases.json),
    sportsliveinfo/src/sportsliveinfo/{guide.py,dictionary.py,linking.py} (reference algorithms).
 3. Existing B1G code: ui/HomeSportsEvents.kt, data/SportsPriorityStore.kt, ui/EpgResolver.kt,
    data/ChannelVisibilityStore.kt, data/EpgChannelMappingStore.kt, ui/BroadcasterEpgAliases.kt,
@@ -115,10 +124,11 @@ P1 Feed client: fetch/verify/cache manifest + assets (public, optional private),
    background refresh at reader_poll_minutes, offline last-good. Unit tests against SLI golden fixtures.
 P2 Channel identity: map the CURRENT ACCOUNT's live channels to SLI canonical ids using the channels
    asset (services, normalisation steps, regional_services rules with parent/region, source_crosswalk)
-   and the dictionary asset (aliases, language_variants, fallbacks, closed channels).
+   and the dictionary asset (aliases, language_variants, fallbacks, closed channels and their live
+   successors, callsigns, country tags in group markets, transliteration: feed format 1.4, SLI 0.3.18).
    Precedence: user manual mapping > provider epg_channel_id exact > crosswalk > service name >
    dictionary. Never auto-merge regional versions, +1/+2, Sky Sports+ or numbered variants.
-   Respect ChannelVisibilityStore hidden categories/channels. Reproduce matching-cases.json exactly
+   Respect ChannelVisibilityStore hidden categories/channels. Reproduce matching-cases.json and dictionary-cases.json exactly
    (cross-language test). Store mappings locally only.
 P3 Sports Today rail: ingest events (events:<date> + today assets) and broadcast_links; map each
    link's canonical id to the account's channel(s); honour coverage/not_on/parent_channel_id with a

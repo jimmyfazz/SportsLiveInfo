@@ -573,11 +573,14 @@ class Engine:
     def _refresh_dictionary(self):
         """Public-domain channel dictionary: at most daily, conditional requests, last good kept on failure."""
         try:
-            status = dictionary.refresh(self.store)
+            switches = self.store.config().get("dictionary", {})
+            regions = [key for key in dictionary.REGIONS if switches.get(key)]
+            status = dictionary.refresh(self.store, regions=regions)
             if status != "fresh":
                 meta = (self.store.snapshot("channel-dictionary") or {}).get("data", {}).get("meta", {})
-                self.store.job("dictionary", "ok", "Channel dictionary %s (%s channels, %s feeds for UK and Europe)" % (
-                    status, meta.get("channels", "?"), meta.get("feeds", "?")))
+                scope = " + ".join(["UK and Europe"] + [dictionary.REGIONS[k][0] for k in meta.get("regions", [])])
+                self.store.job("dictionary", "ok", "Channel dictionary %s (%s channels, %s feeds for %s)" % (
+                    status, meta.get("channels", "?"), meta.get("feeds", "?"), scope))
         except Exception as exc:
             LOGGER.warning("Channel dictionary refresh failed (%s)", type(exc).__name__)
             self.store.job("dictionary", "failed", "Channel dictionary not refreshed (%s); previous version kept"
