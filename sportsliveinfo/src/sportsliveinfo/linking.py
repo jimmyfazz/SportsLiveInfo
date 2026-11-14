@@ -822,21 +822,29 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
 # event source has the fixture. Never published: programme text is not cleared.
 _LIVE_TEXT = re.compile(r"^(?:live|en direct|direct|en vivo|in diretta|live ?:)\b")
 _SPORT_WORDS = [
-    ("other", r"\b(skiing|alpine|biathlon|ski jumping|snowboard|powerlifting|weightlifting|triathlon|gaa|hurling|"
-              r"camogie|gaelic|badminton|swimming|diving|gymnastics|bowls|equestrian|sailing|rowing)\b"),
+    ("other", r"\b(skiing|alpine|alpin|ski|biathlon|ski jumping|snowboard|powerlifting|weightlifting|triathlon|gaa|"
+              r"hurling|camogie|gaelic|badminton|swimming|natation|diving|gymnastics|gymnastique|bowls|equestrian|"
+              r"equitation|sailing|voile|rowing|petanque|escrime|judo|wintersport|skating|patinage)\b"),
     ("darts", r"\bdarts\b"), ("snooker", r"\bsnooker\b"), ("golf", r"\b(golf|pga|lpga|dp world tour|wtgl)\b"),
-    ("tennis", r"\b(tennis|atp|wta|davis cup|billie jean king)\b"),
+    ("tennis", r"\b(tennis|atp|wta|davis cup|coupe davis|billie jean king|roland garros)\b"),
     ("cricket", r"\b(cricket|big bash|wbbl|odi|t20|t10|test match)\b"),
     ("rugby_league", r"\brugby league\b|\bsuper league\b"),
-    ("rugby_union", r"\b(rugby|nations championship|six nations|prem rugby|urc|champions cup|top 14)\b"),
+    ("rugby_union", r"\b(rugby|nations championship|six nations|prem rugby|urc|champions cup|top 14|pro d2|"
+                    r"tournoi des six nations)\b"),
     ("american_football", r"\b(nfl|redzone|college football|ncaa football|american football)\b"),
-    ("basketball", r"\b(nba|basketball|euroleague|eurobasket)\b"), ("ice_hockey", r"\b(nhl|ice hockey)\b"),
-    ("baseball", r"\b(mlb|baseball)\b"), ("motorsport", r"\b(f1|formula 1|formula one|motogp|indycar|nascar|wec)\b"),
-    ("boxing", r"\bboxing\b"), ("mma", r"\b(ufc|mma|pfl)\b"),
-    ("horse_racing", r"\b(racing|raceday|race day|horse)\b"), ("cycling", r"\b(cycling|cyclocross|tour de)\b"),
-    ("athletics", r"\b(athletics|marathon|diamond league)\b"), ("aussie_rules", r"\b(afl|aflw|aussie rules)\b"),
-    ("netball", r"\bnetball\b"), ("handball", r"\bhandball\b"), ("volleyball", r"\bvolleyball\b"),
-    ("football", r"\b(football|soccer|wsl|swpl|nwsl|mls|premier league|nations league|fa cup|efl|league one|"
+    ("basketball", r"\b(nba|basketball|basket|baloncesto|pallacanestro|euroleague|eurobasket|betclic elite)\b"),
+    ("ice_hockey", r"\b(nhl|ice hockey|hockey sur glace|eishockey)\b"),
+    ("baseball", r"\b(mlb|baseball)\b"), ("motorsport", r"\b(f1|formula 1|formula one|formule 1|formel 1|formula uno|motogp|moto gp|indycar|nascar|wec|"
+                   r"grand prix|gran premio|rallye)\b"),
+    ("boxing", r"\b(boxing|boxe|boxen|boxeo|pugilato)\b"), ("mma", r"\b(ufc|mma|pfl)\b"),
+    ("horse_racing", r"\b(racing|raceday|race day|horse|hippisme|quinte|courses hippiques|turf|pferderennen)\b"),
+    ("cycling", r"\b(cycling|cyclocross|cyclisme|radsport|ciclismo|tour de|giro|vuelta)\b"),
+    ("athletics", r"\b(athletics|athletisme|leichtathletik|atletismo|atletica|marathon|diamond league)\b"),
+    ("aussie_rules", r"\b(afl|aflw|aussie rules)\b"),
+    ("netball", r"\bnetball\b"), ("handball", r"\b(handball|balonmano|pallamano)\b"),
+    ("volleyball", r"\b(volleyball|volley|voleibol|pallavolo)\b"),
+    ("football", r"\b(football|soccer|fussball|futbol|calcio|ligue 1|ligue 2|ligue des champions|ligue europa|"
+                 r"coupe de france|wsl|swpl|nwsl|mls|premier league|nations league|fa cup|efl|league one|"
                  r"league two|championship|a league|laliga|la liga|serie a|bundesliga|ligue 1|eredivisie|spfl|"
                  r"champions league|europa league|conference league|world cup|euro 20\d\d|copa)\b"),
 ]

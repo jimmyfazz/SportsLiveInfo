@@ -2,6 +2,18 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.15 — France and Europe: channel identification and live sport
+
+- **Channel dictionary fallbacks**, tried only when a name does not resolve as written, and published in the dictionary asset so B1G applies the same rules:
+  - Known alternative spellings: everywhere "Nat Geo" → National Geographic, "Nick Jr/Junior" → Nickelodeon Junior, "RMC Sports" → RMC Sport, "Euro Sport" → Eurosport; in France HD1 → TF1 Séries Films, Automoto → Automoto la chaîne, LCI - La Chaîne Info → LCI, Canal+ Cinéma → Canal+ Cinémas and others; in Germany Pro7 → ProSieben, Kabel 1 → kabel eins.
+  - Singular/plural of the last word ("Sky Sport Top Events").
+  - Language variants ("CGTN FR" → CGTN French, "Africanews" in a French list → Africanews French), only when the name carries the market code or is distinctive; short global brands such as CNN are never guessed.
+  - Broadcast-area lookups now ignore spacing ("Euro Sport 1").
+- **Closed channels are explained**, not left unknown: C8, NRJ 12, J-One, Game One, MCM, the OCS channels and others closed in 2023–2026; the dictionary gives the closure date and replacement.
+- **Normalisation**: "4K Ultra", "(UHD/4K)", "Ultra HD" and "SD+" are quality markers; text mis-encoded via Windows-1252 ("ÃŽle-de-France") is repaired.
+- **Live sport in French, German, Spanish and Italian guides**: sport words such as cyclisme, basket, Formule 1, hippisme, boxe, Pro D2, Ligue 1, Fußball, Radsport, baloncesto, pallavolo now classify guide-listed live sport.
+- Measured on the owner's channel list (private): France resolves 65.5 % (60.2 % before); of 777 French linear entries 509 resolve, 46 are closed channels and 71 are event slots or Molotov virtual channels. UK and Europe overall 55.3 % (53.4 %): Netherlands 77.8 %, Poland 68.2 %, Spain 60.1 %, Portugal 52.3 %, Germany 49.7 %. Every new fallback match was checked by hand. UK live-sport benchmark unchanged.
+
 ## 0.3.14 — Private feed for your own TVs
 
 - New optional **private feed** (Publishing page): a personal-use copy for your B1G televisions, published to a separate **private** GitHub repository after each publication. It holds every collected event (no publication approval needed) and the guide-listed live sport from 0.3.12, with the guide's channel names and programme times in each channel link.

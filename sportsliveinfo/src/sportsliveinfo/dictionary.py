@@ -56,6 +56,34 @@ MARKET_COUNTRIES = {
 }
 
 
+# Fallback spellings, tried only when a name does not resolve as written. Each rule is a
+# regex on the market key and its replacement; "*" applies in every market. Exact and
+# conservative: a rule names one brand's own alternative spelling, never a different service.
+ALIASES = {
+    "*": [
+        (r"^nat geo\b", "national geographic"), (r"^national geo channel$", "national geographic"),
+        (r"^nick (?:jr|junior)$", "nickelodeon junior"), (r"^rmc sports\b", "rmc sport"),
+        (r"^discovery inves$", "discovery investigation"), (r"^euro sport\b", "eurosport"),
+    ],
+    "FR": [
+        (r"^hd1$", "tf1 series films"), (r"^automoto(?: tv)?$", "automoto la chaine"),
+        (r"^tv8 mont[ +-]blanc$", "tv8 mont blanc"), (r"^djazz tv$", "stingray djazz"),
+        (r"^lci - la chaine info$", "lci"), (r"^lcp public senat$", "lcp"),
+        (r"^planete\+ aventure experience$", "planete+ aventure"), (r"^discovery$", "discovery channel"),
+        (r"^canal\+ cinema$", "canal+ cinemas"),
+    ],
+    "DE": [(r"^pro ?7\b", "prosieben"), (r"^kabel ?1\b", "kabel eins")],
+}
+_ALIASES = {market: [(re.compile(pattern), target) for pattern, target in rules] for market, rules in ALIASES.items()}
+# Language/territory variants: "i24NEWS" in a French list is the database's "i24NEWS French".
+LANGUAGE_VARIANTS = {
+    "FR": ["french", "francais", "france"], "DE": ["deutsch", "german", "germany", "deutschland"],
+    "ES": ["espanol", "spanish", "espana"], "IT": ["italia", "italiano", "italian"],
+    "PT": ["portugal", "portugues", "portuguese"], "NL": ["nederland", "dutch"], "PL": ["polska", "polish"],
+    "TR": ["turkiye", "turk", "turkish"], "GR": ["greece", "hellas", "greek"], "RU": ["russia", "russian"],
+}
+
+
 def _split(value):
     return [part.strip() for part in str(value or "").split(";") if part.strip()]
 
@@ -122,10 +150,20 @@ def build_document(channels_csv, feeds_csv, regions_csv=""):
         "scope": "UK and Europe channels, plus feeds of other channels that broadcast into Europe",
         "market_countries": MARKET_COUNTRIES,
         "bare_market_codes": {k: sorted(v) for k, v in BARE_MARKET_CODES.items()},
+        "aliases": {market: [{"pattern": pattern, "replacement": target} for pattern, target in rules]
+                    for market, rules in ALIASES.items()},
+        "language_variants": LANGUAGE_VARIANTS,
         "rules": {
             "lookup": "market_key(name, market) == normalised name, alt name, or base name + feed name of a channel "
-                      "in one of market_countries[market]; then decoration-only equality; then channels whose feed "
-                      "broadcasts into those countries",
+                      "in one of market_countries[market] (exact or ignoring spaces/punctuation); then decoration-only "
+                      "equality; then channels whose feed broadcasts into those countries",
+            "fallbacks": "only when the lookup finds nothing, in order: (1) aliases[market] then aliases['*']: "
+                         "replace the first matching pattern and repeat the lookup; (2) singular/plural of the last "
+                         "word (>= 4 letters); (3) language_variants[market]: '<name> <variant>' in any country, only when "
+                         "the name ends in a market code (dropped first, e.g. 'CGTN FR'), or the plain name has at least 6 "
+                         "letters/digits and is not itself a channel; a result counts only when it is one channel",
+            "explain_closed": "a name matching only a closed channel is reported as closed (with replaced_by), "
+                              "never as a guide match",
             "confidence": "one channel id = high; several ids = ambiguous (owner review, never applied automatically)",
             "closed": "a closed channel only explains a name (e.g. a rebrand via replaced_by); it never supplies a guide",
             "precedence": "below user manual mappings, provider tvg-id exact and published crosswalks",
@@ -142,14 +180,20 @@ class Resolver:
         self.compact = defaultdict(set)
         self.signature = defaultdict(set)
         self.area = defaultdict(set)
+        self.anywhere = defaultdict(set)      # compact key -> ids in any country (language variants)
+        self.closed = defaultdict(set)        # (country, compact key) -> closed channel ids
         self.channels = {c["id"]: c for c in document.get("channels", [])}
         self.main_feed = {c["id"]: next((f.get("id") for f in c.get("feeds", []) if f.get("main")), None)
                           for c in self.channels.values()}
         for channel in self.channels.values():
-            if channel.get("closed"):
-                continue
             bases = [channel.get("name", "")] + list(channel.get("alt_names", []))
             home = channel.get("country", "")
+            if channel.get("closed"):
+                for base in bases:
+                    self.closed[(home, _compact(normalized_name(base)))].add(channel["id"])
+                continue
+            for base in bases:
+                self.anywhere[_compact(normalized_name(base))].add((channel["id"], None))
             for base in bases:
                 self._add(home, normalized_name(base), (channel["id"], None))
             for feed in channel.get("feeds", []):
@@ -161,6 +205,7 @@ class Resolver:
                         self._add(home, normalized_name(base + " " + name), (channel["id"], feed.get("id")))
                     for country in set(feed.get("areas", [])) - {home}:
                         self.area[(country, normalized_name(base))].add((channel["id"], feed.get("id")))
+                        self.area[(country, _compact(normalized_name(base)))].add((channel["id"], feed.get("id")))
 
     def _add(self, country, key, value):
         if not key:
@@ -171,13 +216,42 @@ class Resolver:
 
     def resolve(self, name, market):
         """Returns {"ids": [(channel_id, feed_id), ...], "method": ..., "confidence": "high"|"ambiguous"} or None."""
-        countries = MARKET_COUNTRIES.get(str(market or "").upper(), [])
+        market = str(market or "").upper()
+        countries = MARKET_COUNTRIES.get(market, [])
         key = market_key(name, market)
         if not key or not countries:
             return None
+        found = self._lookup(key, countries)
+        if found:
+            return found
+        for rule_market in (market, "*"):                     # (1) known alternative spellings
+            for pattern, target in _ALIASES.get(rule_market, []):
+                if pattern.search(key):
+                    found = self._lookup(pattern.sub(target, key, count=1), countries)
+                    if found:
+                        return dict(found, method="alias:" + found["method"])
+        words = key.split()                                   # (2) singular/plural of the last word
+        if words and len(words[-1]) >= 4 and words[-1].isalpha():
+            last = words[-1][:-1] if words[-1].endswith("s") else words[-1] + "s"
+            found = self._lookup(" ".join(words[:-1] + [last]), countries)
+            if found:
+                return dict(found, method="plural:" + found["method"])
+        # (3) language/territory variant in any country. Only when the name says so ("CGTN FR") or the
+        # plain name is distinctive and not itself a channel ("i24NEWS"): "CNN" stays unmatched, never
+        # CNN Portugal, because a short global brand in a local list is often the international feed.
+        coded = re.match(r"^(.+?)\s+(%s)$" % "|".join(code.lower() for code in MARKET_COUNTRIES), key)
+        base = coded.group(1) if coded else key
+        if coded or (len(_compact(base)) >= 6 and not self.anywhere.get(_compact(base))):
+            for variant in LANGUAGE_VARIANTS.get(market, []):
+                ids = self.anywhere.get(_compact(base + " " + variant))
+                if ids and len({i[0] for i in ids}) == 1:
+                    return {"ids": sorted(ids), "method": "language_variant", "confidence": "high"}
+        return None
+
+    def _lookup(self, key, countries):
         for method, lookup in (("exact", lambda c: self.exact.get((c, key)) or self.compact.get((c, _compact(key)))),
                                ("decoration", lambda c: self.signature.get((c,) + _sig(key))),
-                               ("broadcast_area", lambda c: self.area.get((c, key)))):
+                               ("broadcast_area", lambda c: self.area.get((c, key)) or self.area.get((c, _compact(key))))):
             for country in countries:
                 hit = lookup(country)
                 if hit:
@@ -185,6 +259,16 @@ class Resolver:
                     return {"ids": ids, "method": method,
                             "confidence": "high" if len({i[0] for i in ids}) == 1 else "ambiguous"}
         return None
+
+    def explain_closed(self, name, market):
+        """Closed channels a name matches (e.g. "C8", closed 2025): why no guide carries it. None otherwise."""
+        market = str(market or "").upper()
+        key = _compact(market_key(name, market))
+        ids = sorted({cid for country in MARKET_COUNTRIES.get(market, []) for cid in self.closed.get((country, key), ())})
+        if not ids:
+            return None
+        return [{k: self.channels[cid][k] for k in ("id", "name", "closed", "replaced_by") if self.channels[cid].get(k)}
+                for cid in ids]
 
     def describe(self, channel_id):
         """What a channel is, for channels without guide data."""
