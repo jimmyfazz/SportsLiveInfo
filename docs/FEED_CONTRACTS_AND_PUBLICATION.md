@@ -115,6 +115,16 @@ Published events (from owner-approved event sources only) may carry `broadcast_l
 - A link means "a guide lists this event on this channel", not that the owner's provider stream carries it. `broadcast_verified` stays false and `broadcasts` stays reserved for verified evidence. The reader maps the canonical id to the account's own channel through `channels` (exact provider id first, user mappings always win), honours `coverage`/`not_on` for regional services (`regional_services` in the channels asset), and must not show "Watch" as verified.
 - **Guide-listed events** (live listings with no event-source fixture, `origin: guide_listing`, 0.3.12+) are **not** covered by D8: they are built from guide programme text, whose sources do not permit republication (e.g. EPGTalk: personal use only, no republishing without written permission). They stay private on Home Assistant; for the TVs they are delivered privately (LAN) or computed on the device from the provider's own guide.
 
+### 6.2 Private personal-use feed (0.3.14+)
+
+The owner chose to deliver guide-listed live sport to their own TVs through a **private** repository (`jimmyfazz/LiveSports-EPG-private`) as well as computing it on each TV from the provider's own guide. The public repository `jimmyfazz/LiveSports-EPG` stays public and unchanged.
+
+- Same `sli/1.x` layout under `v1/`; the manifest carries `"visibility": "private"`, `rights.events.scope = "personal_use_private_repository"`, `rights.guide_listed_events = "included_private"` and capability `guide_listed_events`.
+- Contents: every collected event (no publication approval needed: personal use), guide-listed events (`origin: "guide_listing"`), and `broadcast_links` that may also carry the guide's `channel_name`, `programme_start_utc` and `programme_end_utc`.
+- Published after each publication run to its own repository with its own revision history; a private failure never blocks the public feed. The app refuses a public repository or the public feed repository as the private target.
+- **TV access:** a separate fine-grained token with **Contents: Read-only** on the private repository only, stored encrypted on the TV and never logged; never the Home Assistant publishing token. Readers merge private and public: when both are readable, prefer the private manifest (a superset); when the token is missing or rejected, fall back to the public feed and to on-device guide-listed events.
+- Never copy the private feed to a public location.
+
 ## 7. Safe importer and exporter boundaries
 
 - Optional `Export Safe Channel Inventory` is B1 user-initiated; local file export strips server/playlist/stream URLs, username/password, device IDs, viewing history, direct stream IDs, user secrets and personal account identity; HAOS import via admin-only local Ingress.

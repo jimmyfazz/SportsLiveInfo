@@ -206,7 +206,7 @@ def dictionary_document(store, conf):
     return document if isinstance(document, dict) and document.get("channels") else None
 
 
-def _event_public(event):
+def _event_public(event, private=False):
     row = {k: event[k] for k in EVENT_FIELDS if k in event and event[k] not in (None, "", [])}
     # A cached event must not become a "verified broadcaster" merely
     # because an untrusted source sets a boolean. A reviewed, versioned
@@ -219,14 +219,16 @@ def _event_public(event):
     if row["broadcast_verified"]:
         row["broadcasts"] = [{k: b[k] for k in ("canonical_channel_id", "name", "coverage_start_utc", "transmission") if k in b}
                              for b in event.get("broadcasts", []) if isinstance(b, dict)]
-    links = _broadcast_links(event)
+    links = _broadcast_links(event, private)
     if links:
         row["broadcast_links"] = links
+    if private and event.get("origin") == "guide_listing":
+        row["origin"] = "guide_listing"     # live sport listed in the guides, no event-source fixture
     row["b1g_priority_group"] = _priority_group(event.get("sport"), event.get("competition_id"))
     return row
 
 
-def _broadcast_links(event):
+def _broadcast_links(event, private=False):
     """Owner decision D8: publish guide-listed event->channel links as canonical ids and confidence only.
 
     No guide channel names, programme titles or programme times are published,
@@ -246,12 +248,20 @@ def _broadcast_links(event):
             link["parent_channel_id"] = str(candidate["parent_channel_id"])
         if candidate.get("not_on"):
             link["not_on"] = [str(x) for x in candidate["not_on"]]
+        if private:   # the owner's private feed may carry the guide's channel name and programme times
+            for field in ("channel_name", "programme_start_utc", "programme_end_utc"):
+                if candidate.get(field):
+                    link[field] = str(candidate[field])[:120]
         links.append(link)
     return sorted(links, key=lambda link: link["canonical_channel_id"])
 
 
-def build_feed(store, now=None, previous_revision=None):
-    """Return (manifest_dict, {path: bytes}) without any network IO."""
+def build_feed(store, now=None, previous_revision=None, private=False):
+    """Return (manifest_dict, {path: bytes}) without any network IO.
+
+    ``private=True`` builds the owner's personal-use feed for a private repository:
+    every collected event (no publication approval needed) and guide-listed live sport.
+    """
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     conf = store.config()
     approved = set(conf.get("publication_approvals", []))
@@ -268,6 +278,8 @@ def build_feed(store, now=None, previous_revision=None):
     # source supplied a participant/time/status. Until field-level lineage is
     # implemented, fail closed unless *every* contributor is approved.
     def licensed(event):
+        if private:
+            return True                   # personal use in the owner's private repository
         if event.get("origin") == "guide_listing":
             return False                  # derived from guide programme text: never published
         origin = event.get("source_id")
@@ -276,7 +288,10 @@ def build_feed(store, now=None, previous_revision=None):
                 and isinstance(contributors, list) and bool(contributors)
                 and all(isinstance(src, str) and src in approved for src in contributors))
     # Legacy/unclassified snapshot rows still need category fields the schema requires.
-    events = [_event_public(e if "category_id" in e else taxonomy.classify(e)) for e in all_events if licensed(e)]
+    events = [_event_public(e if "category_id" in e else taxonomy.classify(e), private) for e in all_events if licensed(e)]
+    if private:
+        approved = {src for e in all_events for src in (e.get("sources") or [e.get("source_id")])
+                    if isinstance(src, str) and src != "guide_listing"}
     omitted = sorted({src for e in all_events if not licensed(e) and e.get("origin") != "guide_listing"
                       for src in (e.get("sources") or [e.get("source_id")])
                       if isinstance(src, str) and src not in approved})
@@ -374,6 +389,14 @@ def build_feed(store, now=None, previous_revision=None):
                            "user_settings_override": True},
         "notices": [] if events else ["No rights-approved sporting events in this revision; registry assets remain valid."],
     }
+    if private:
+        manifest["visibility"] = "private"
+        manifest["rights"]["events"]["scope"] = "personal_use_private_repository"
+        manifest["rights"]["guide_listed_events"] = "included_private"
+        manifest["rights"]["broadcast_candidates"] = "channel_links_with_guide_names_and_times_private"
+        if any(e.get("origin") == "guide_listing" for e in events):
+            manifest["capabilities"].append("guide_listed_events")
+        manifest["notices"] = ["Private personal-use feed: never copy it to a public location."] + manifest["notices"]
     return manifest, files
 
 

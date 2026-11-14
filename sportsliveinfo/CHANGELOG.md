@@ -2,6 +2,12 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.14 — Private feed for your own TVs
+
+- New optional **private feed** (Publishing page): a personal-use copy for your B1G televisions, published to a separate **private** GitHub repository after each publication. It holds every collected event (no publication approval needed) and the guide-listed live sport from 0.3.12, with the guide's channel names and programme times in each channel link.
+- Uses the existing publishing token (add the private repository to it with Contents: Read and write). The TVs use a separate read-only token. The connection test and publisher refuse a public repository and refuse the public feed repository, so private data cannot reach a public location by mistake.
+- The public feed is unchanged, and a private-feed failure never blocks it. The contract is documented in the feed contract §6.2.
+
 ## 0.3.13 — Publish channel links (owner decision D8)
 
 - Published events now carry `broadcast_links`: the channels the guides list the event on, as SportsLiveInfo canonical ids with coverage (network or regional, `parent_channel_id`, `not_on`), confidence and the number of guides. No guide channel names, programme titles or programme times are published, and a link never marks an event as verified (`broadcast_verified` stays false).

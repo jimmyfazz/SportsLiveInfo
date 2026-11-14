@@ -261,6 +261,7 @@ class UI(BaseHTTPRequestHandler):
         page = {"sports": "sources", "bulk_sources": "sources", "options": "sources",
                 "epg": "sources", "test_source": "sources", "dictionary": "sources", "github": "publishing",
                 "test_github": "publishing", "approvals": "publishing", "publish": "publishing",
+                "private_feed": "publishing", "test_private_github": "publishing",
                 "preview_feed": "publishing", "schedule": "scheduler"}.get(action, page)
         try:
             page, message = self._action(action, form, value, page, message)
@@ -353,6 +354,22 @@ class UI(BaseHTTPRequestHandler):
         if action == "test_github":
             # Authenticate and inspect the SAVED destination; never commit.
             return "publishing", self.engine.test_github_destination()
+        if action == "private_feed":
+            from .engine import validate_github_target
+            enabled = value("enabled") == "on"
+            if value("repository") or enabled:
+                owner, repository, branch = validate_github_target(value("owner"), value("repository"), value("branch"))
+            else:
+                owner, repository, branch = value("owner"), "", value("branch") or "main"
+            public = self.store.config()["github"]
+            if repository and (owner.casefold(), repository.casefold()) == (public.get("owner", "").casefold(),
+                                                                           public.get("repository", "").casefold()):
+                raise ValueError("Use a separate private repository, not the public feed repository")
+            self.store.configure({"private_feed": {"owner": owner, "repository": repository, "branch": branch,
+                                                   "enabled": enabled}})
+            return "publishing", "Private feed settings saved" + (" and enabled" if enabled else "")
+        if action == "test_private_github":
+            return "publishing", self.engine.test_github_destination(private=True)
         if action == "schedule":
             times = []
             for t in value("times").split(","):
@@ -1003,6 +1020,32 @@ class UI(BaseHTTPRequestHandler):
         )
         body += '<section class="card" style="margin-top:16px">' + self._form("github", form) + '<div class="divider"></div><p class="help">Saved token: %s.</p>' % ("yes" if github.get("token") else "no") + '</section>'
         body += '<section class="card" style="margin-top:16px"><h3>Connection check (no upload)</h3><p>Save the token and destination first. Testing confirms the token can write, but never enables publication, commits or changes any file.</p>' + self._form("test_github", '<button class="secondary" type="submit">Test saved GitHub connection</button>') + '</section>'
+        private = config.get("private_feed") or {}
+        private_state = self.store._get("private_feed_state") or {}
+        private_form = ('<label for="pf-owner">GitHub owner</label><input id="pf-owner" name="owner" type="text" value="%s">'
+                        '<label for="pf-repo">Private repository name</label><input id="pf-repo" name="repository" type="text" value="%s" placeholder="LiveSports-EPG-private">'
+                        '<label for="pf-branch">Branch</label><input id="pf-branch" name="branch" type="text" value="%s">'
+                        '<label><input type="checkbox" name="enabled" value="on" %s> Enable private feed</label>'
+                        '<button type="submit">Save private feed settings</button>') % (
+            e(private.get("owner") or owner), e(private.get("repository") or ""), e(private.get("branch") or "main"),
+            "checked" if private.get("enabled") else "")
+        private_published = ("Last private revision <code>%s</code> %s." % (e(private_state["last_revision"]), e(when(private_state.get("published_at"))))
+                             if private_state.get("last_revision") else "No private feed has been published yet.")
+        body += ('<section class="card" style="margin-top:16px"><h2>Private feed for your own TVs</h2>'
+                 '<p>A personal-use copy for your B1G televisions: every collected event (no publication approval needed) '
+                 'and live sport listed in your TV guides, with channel names and times. It is published to a '
+                 '<strong>private</strong> repository after each publication and never to the public feed.</p>'
+                 '<ol><li>On GitHub create a new <strong>private</strong> repository, for example <strong>LiveSports-EPG-private</strong>, '
+                 'with a README so the branch exists.</li>'
+                 '<li>Edit the publishing token above: add that repository with <strong>Contents: Read and write</strong>.</li>'
+                 '<li>Enter it here, tick Enable and save, then run the private connection test.</li>'
+                 '<li>For the TVs, create a separate fine-grained token with <strong>Contents: Read-only</strong> on the private repository only. '
+                 'Never put the publishing token on a TV.</li></ol>'
+                 + self._form("private_feed", private_form)
+                 + '<p class="help">%s The private repository must stay private: the connection test and publisher refuse a public one, '
+                   'and it must differ from the public feed repository.</p>' % private_published
+                 + self._form("test_private_github", '<button class="secondary" type="submit">Test private feed connection</button>')
+                 + '</section>')
         # Rights register: the only place event publication can be authorised.
         rights = '<p>Tick only sources whose terms you have reviewed and that permit public redistribution of fixture facts (teams, times, competition). A fused event is published only when <em>every</em> contributing source is approved. EPG programme text is never published.</p><div class="grid">'
         for name, (label, _, _, _) in providers.SPORTS.items():

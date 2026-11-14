@@ -24,6 +24,9 @@ DEFAULT = {
     "github": {"owner": "jimmyfazz", "repository": "LiveSports-EPG", "branch": "main",
                "token": "", "enabled": False, "auto_publish": False},
     "publication_approvals": [],
+    # Optional PRIVATE feed for the owner's own TVs (personal use): every collected event plus
+    # guide-listed live sport. Uses the GitHub token above; must be a private repository.
+    "private_feed": {"owner": "jimmyfazz", "repository": "", "branch": "main", "enabled": False},
     # Optional public-domain channel identity dictionary (iptv-org database); off until the owner enables it.
     "dictionary": {"iptvorg": False},
 }
@@ -118,8 +121,8 @@ class Store:
                             for k, v in value.items())
                     ):
                         raise ValueError("Unknown provider or invalid enabled state")
-                    if key == "github" and any(k not in expected or type(v) is not type(expected[k])
-                                               for k, v in value.items()):
+                    if key in ("github", "private_feed") and any(k not in expected or type(v) is not type(expected[k])
+                                                                 for k, v in value.items()):
                         raise ValueError("Unsupported publication setting")
                     if key == "dictionary" and any(k not in expected or type(v) is not bool for k, v in value.items()):
                         raise ValueError("Unknown dictionary source or invalid enabled state")

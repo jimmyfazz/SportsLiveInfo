@@ -40,6 +40,20 @@ class GitHubOnboardingTests(unittest.TestCase):
             request.assert_not_called()
         self.assertFalse(self.store.config()["github"]["enabled"])
 
+    def test_private_feed_check_refuses_a_public_repository_and_accepts_a_private_one(self):
+        self.store.configure({"github": {"token": "dummy-secret"},
+                              "private_feed": {"repository": "LiveSports-EPG-private", "enabled": True}})
+        public = [_Response({"full_name": "jimmyfazz/LiveSports-EPG-private", "private": False,
+                             "permissions": {"push": True}})]
+        with patch("sportsliveinfo.engine._github_open", side_effect=public):
+            with self.assertRaisesRegex(ValueError, "PRIVATE repository"):
+                self.engine.test_github_destination(private=True)
+        private = [_Response({"full_name": "jimmyfazz/LiveSports-EPG-private", "private": True,
+                              "permissions": {"push": True}}),
+                   _Response({"ref": "refs/heads/main"}), _Response({"sha": "0123abcd"})]
+        with patch("sportsliveinfo.engine._github_open", side_effect=private):
+            self.assertIn("confirmed private", self.engine.test_github_destination(private=True))
+
     def test_token_check_proves_write_without_committing_or_enabling_publication(self):
         self.store.configure({"github": {"token": "dummy-secret"}})
         payloads = [
