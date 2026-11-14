@@ -4,6 +4,7 @@ Never equate an inferred EPG service with a playable B1G subscription stream.
 All programme text remains in the private HAOS database until rights are cleared.
 """
 from collections import defaultdict
+from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 import html
 import re
@@ -335,6 +336,11 @@ GENERIC_PROGRAMME = re.compile(r"^(?:live (?:football|sport|sports|rugby|cricket
 
 def normalized_name(name):
     """Remove safe decorations while retaining identity-bearing service variants."""
+    return _normalized_name(str(name))
+
+
+@lru_cache(maxsize=200_000)     # pure; called hundreds of thousands of times per guide match
+def _normalized_name(name):
     value = _strip_leading_markers(repair_text(html.unescape(str(name))))
     value = _LANGUAGE_TAG.sub(" ", value)
     value = unicodedata.normalize("NFKD", value)
@@ -479,21 +485,81 @@ def canonical_channel(source_id, epg_id, display_name):
         return None
     # The guide's own id names another country ("beINSports1.qa@MENA" in a French guide): never this
     # market's service, whatever the display name says.
-    id_country = _ID_COUNTRY.match(str(epg_id or ""))
-    if id_country and id_country.group(1).lower() not in _ID_COUNTRIES_FOR.get(market, {market.lower()}):
+    if foreign_guide_channel(market, epg_id):
         return None
     prefix = COUNTRY_PREFIX.match(str(display_name).strip())
     if prefix:
         region = prefix[1].casefold()
         if region != "sports" and COUNTRY_PREFIX_ALIASES.get(region, region) != market.casefold():
             return None
-    name = normalized_name(display_name)
+    found = _canonical_by_name(market, normalized_name(display_name))
+    if found:
+        return found
+    # Abbreviated display names ("TNTSports1 HD", "BBC One Wal HD", "SkySp ActionHD") in guides that use
+    # iptv-org channel ids: read the service from the id itself ("TNTSports1.uk@HD", "BBCOne.uk@WalesHD").
+    for name in _names_from_iptvorg_id(epg_id):
+        found = _canonical_by_name(market, normalized_name(name))
+        if found:
+            return found
+    return None
+
+
+def _canonical_by_name(market, name):
     found = SERVICES.get(market, {}).get(name)
     if found or market != "GB":
         return found
     if name in _IRISH_IN_GB:
         return SERVICES["IE"][name]
     return regional_service(name)
+
+
+_ID_WORDS = re.compile(r"[A-Z]\d+(?![a-z])|[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
+_FEED_QUALITY = re.compile(r"(?:Ultra)?(?:HDR|UHD|HD|SD)$|^(?:UK|Ireland)(?=HD|SD|Plus1|$)")
+
+
+def _names_from_iptvorg_id(epg_id):
+    """Candidate service names from an iptv-org id: "TNTSports1.uk@HD" -> "TNT Sports 1",
+    "BBCOne.uk@WalesHD" -> "BBC One Wales", "Channel4.uk@UKPlus1" -> "Channel 4 +1". [] for other ids."""
+    match = re.match(r"^([A-Za-z0-9]+)\.[a-z]{2}(?:@([A-Za-z0-9]+))?$", str(epg_id or ""))
+    if not match:
+        return []
+    base = " ".join(_ID_WORDS.findall(match.group(1)))
+    feed = match.group(2) or ""
+    plus1 = feed.endswith("Plus1")
+    feed = _FEED_QUALITY.sub("", feed.replace("Plus1", ""))
+    feed = _FEED_QUALITY.sub("", feed)
+    region = " ".join(_ID_WORDS.findall(feed))
+    names = []
+    for stem in ([base + " " + region] if region else []) + ([base] if not region else []):
+        name = stem + (" +1" if plus1 else "")
+        names += [name, re.sub(r"\bPlus$", "+", name)]
+    return names
+
+
+# Feed names of iptv-org ids that place a channel in another country ("DAZN2.uk@GermanyHD").
+_FEED_COUNTRIES = {"germany": "DE", "austria": "AT", "switzerland": "CH", "italy": "IT", "spain": "ES",
+                   "france": "FR", "poland": "PL", "portugal": "PT", "netherlands": "NL", "belgium": "BE",
+                   "turkey": "TR", "greece": "GR", "romania": "RO", "hungary": "HU", "czech": "CZ", "brazil": "BR",
+                   "mexico": "MX", "latinamerica": "LATAM", "mena": "MENA", "arabic": "MENA", "russia": "RU",
+                   "nordic": "SE", "sweden": "SE", "norway": "NO", "denmark": "DK", "finland": "FI",
+                   "india": "IN", "asia": "ASIA", "africa": "AFRICA", "northamerica": "US", "usa": "US",
+                   "canada": "CA", "australia": "AU", "ireland": "IE", "uk": "GB"}
+
+
+def foreign_guide_channel(market, epg_id):
+    """True when a guide channel's own iptv-org id places it outside the market: its country suffix
+    ("beINSports1.qa@MENA" in a French guide) or its feed name ("DAZN2.uk@GermanyHD" in a UK guide)."""
+    text = str(epg_id or "")
+    id_country = _ID_COUNTRY.match(text)
+    if not id_country:
+        return False
+    if id_country.group(1).lower() not in _ID_COUNTRIES_FOR.get(market, {market.lower()}):
+        return True
+    feed = text.split("@", 1)[1].lower() if "@" in text else ""
+    for word, country in _FEED_COUNTRIES.items():
+        if feed.startswith(word) and country != market and not (market in ("GB", "IE") and country in ("GB", "IE")):
+            return True
+    return False
 
 
 _ID_COUNTRY = re.compile(r"^[A-Za-z0-9+&!'_-]+(?:\.[A-Za-z0-9+&!'_-]+)*\.([A-Za-z]{2})(?:@[^@]+)?$")
@@ -506,11 +572,16 @@ _RAW_FAMILIES = {"sky_sport_nz"}  # need the market prefix that normalized_name(
 
 
 def channel_families(display_name):
+    return list(_channel_families(str(display_name)))
+
+
+@lru_cache(maxsize=50_000)
+def _channel_families(display_name):
     name = normalized_name(display_name)
     raw = unicodedata.normalize("NFKD", str(display_name))
     raw = SPACES.sub(" ", "".join(ch for ch in raw if not unicodedata.combining(ch)).casefold()).strip()
-    return [fid for fid, _, pattern in _FAMILY_PATTERNS
-            if pattern.search(name) or (fid in _RAW_FAMILIES and pattern.search(raw))]
+    return tuple(fid for fid, _, pattern in _FAMILY_PATTERNS
+                 if pattern.search(name) or (fid in _RAW_FAMILIES and pattern.search(raw)))
 
 
 def _dt(value):

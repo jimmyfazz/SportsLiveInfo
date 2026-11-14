@@ -262,6 +262,27 @@ class BroadcastMatcherSafetyTests(unittest.TestCase):
 class ForeignGuideIdTests(unittest.TestCase):
     """0.3.18 hard negative: a mixed guide's foreign id never becomes this market's service."""
 
+    def test_abbreviated_names_resolve_from_iptvorg_ids_and_foreign_feeds_never_do(self):
+        from sportsliveinfo.guide import canonical_channel, foreign_guide_channel
+        self.assertEqual(canonical_channel("m3upt_sky", "TNTSports1.uk@HD", "TNTSports1 HD"), "gb.tnt.sports.1")
+        self.assertEqual(canonical_channel("m3upt_sky", "BBCOne.uk@WalesHD", "BBC One Wal HD"), "gb.bbc.one.wales")
+        self.assertEqual(canonical_channel("m3upt_sky", "SkySportsPlus.uk@HD", "SkySp+ HD"), "gb.sky.sports.plus")
+        self.assertEqual(canonical_channel("m3upt_sky", "PremierSports1.ie@HD", "Premier 1 HD"), "gb.premier.sports.1")
+        self.assertIsNone(canonical_channel("m3upt_sky", "Channel4.uk@UKPlus1", "C4+1"))       # +1 never the base
+        # German feeds in a multi-country file: never UK services, by id country or by feed name.
+        self.assertTrue(foreign_guide_channel("GB", "SkySportTennis.de@HD"))
+        self.assertTrue(foreign_guide_channel("GB", "DAZN2.uk@GermanyHD"))
+        self.assertFalse(foreign_guide_channel("GB", "SkySportsRacing.uk@IrelandHD"))
+        self.assertFalse(foreign_guide_channel("GB", "BBCNews.uk@Europe"))
+
+    def test_sport_eligibility_uses_the_recognised_service(self):
+        from sportsliveinfo import linking
+        row = [None] * 12
+        row[5], row[6] = "gb.sky.sports.f1", "SkySp F1 HD"
+        self.assertTrue(linking._channel_sport_eligible("motorsport", linking._eligibility_name(row)))
+        row[5] = None
+        self.assertEqual(linking._eligibility_name(row), "SkySp F1 HD")
+
     def test_mena_bein_in_a_french_guide_is_not_bein_france(self):
         from sportsliveinfo.guide import canonical_channel
         self.assertIsNone(canonical_channel("fr_mena_grab", "beINSports1.qa@MENA", "beIN SPORTS 1"))

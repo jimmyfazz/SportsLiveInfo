@@ -2,6 +2,16 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.19 — EPGTalk UK fixed; 8× faster channel matching; Sky guide reads its ids
+
+- **EPGTalk UK guide failed at every refresh** since it grew past 100,000 programmes (14 Nov: 102,312, 10.7 MB). Its limits are now 20 MB / 180,000 programmes, and the current file imports.
+- **Event→channel matching is about 8× faster.** On the three current UK guides (about 160,000 programmes) a run took 78.5 s and now takes 9.6 s, with identical results. Channel names, team names and titles were re-normalised for every programme row; pure functions are now cached (`normalized_name`, `taxonomy.norm`, `name_signature`, channel families, sport eligibility, team options). This shortens every collection and publication on Home Assistant.
+- **Guides that abbreviate names but use iptv-org ids** (M3UPT Sky: "TNTSports1 HD", "BBC One Wal HD", "SkySp ActionHD") are read from the id ("TNTSports1.uk@HD", "BBCOne.uk@WalesHD"). Sky Sports, TNT Sports, Premier Sports and BBC One Scotland/Wales/NI are recognised; 111 of the file's 393 UK/Irish channels map (52 before). The sport-channel check also uses the recognised service, so these channels are no longer skipped as "not sport".
+- **Foreign feeds never become UK services:** a guide channel whose id names another country ("SkySportTennis.de@HD") or whose feed names one ("DAZN2.uk@GermanyHD") is excluded on the registry and dictionary paths. German listings from the multi-country Sky file therefore no longer appear on UK channels.
+- **Display names:** a UK service shows a UK feed's name over an Irish feed's ("Sky Mix HD", not "Sky Mix HD ROI").
+- **Measured** with the current UK guides plus the optional Sky guide (14–21 Nov): guide-listed live sport rises from 196 to 218 and linked fixtures from 42 to 44 (e.g. Las Vegas GP on Sky Sports F1), with no German listings. The current three guides alone give exactly the 0.3.18 result.
+- The add-on README is brought up to date.
+
 ## 0.3.18 — Channel identification worldwide; renames; new sport and FAST guides
 
 Results of a broad research pass over the owner's channel list (private, never committed), the public-domain iptv-org database and EPG site lists, and free guide sources. Full report: [channel identification and EPG source research](../docs/RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md).

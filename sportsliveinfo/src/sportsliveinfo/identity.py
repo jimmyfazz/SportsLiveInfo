@@ -19,6 +19,7 @@ import html
 import re
 import unicodedata
 from collections import Counter, defaultdict
+from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 
 from .guide import COUNTRY_BY_SOURCE, GENERIC_PROGRAMME, SOURCE_ID_CROSSWALK, canonical_channel, normalized_name
@@ -68,7 +69,12 @@ def title_tokens(title):
 
 def name_signature(display_name):
     """(identity tokens, comparable name tokens, normalised name) for a display name."""
-    norm = normalized_name(html.unescape(str(display_name)))
+    return _name_signature(str(display_name))
+
+
+@lru_cache(maxsize=100_000)
+def _name_signature(display_name):
+    norm = normalized_name(html.unescape(display_name))
     text = re.sub(r"\+\s*([12])\b", r" ts\1 ", norm)
     text = re.sub(r"\bplus\s*([12])\b", r" ts\1 ", text)
     text = text.replace("+", " plus ")

@@ -7,6 +7,16 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 14 November 2026 — 0.3.19 import fix and performance
+
+- **Owner's Home Assistant log:** EPGTalk UK had failed at every refresh with "exceeded an import size or record limit": 102,312 programmes against a 100,000 cap. The limit is raised and the real file now imports.
+- **Profiling:** `broadcast_candidates` spent 85 % of its time re-normalising names per programme row. With caches, 78.5 s became 9.6 s on the three UK guides, with byte-identical output (checked by comparing the JSON of both runs).
+- **Sky (M3UPT) guide:**
+  - The service is now read from its iptv-org ids; 111 of 393 UK/IE channels map, up from 52.
+  - Foreign feeds are excluded by id country and by feed name.
+  - Combined with the current guides: 218 guide-listed live events (196 before) and 44 linked fixtures (42 before).
+- **Tests:** 263 pass. NOT RUN: live verification on Home Assistant (after deployment).
+
 ## 14 November 2026 — 0.3.18 channel identification and EPG source research
 
 - Full report: [RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md](RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md).

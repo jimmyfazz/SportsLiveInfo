@@ -82,7 +82,7 @@ The full terminal prompt for this work was given to the owner on 14 November; it
 ## 7. Operating notes
 
 - **Release:** bump `sportsliveinfo/config.yaml`, `sportsliveinfo/Dockerfile` (`BUILD_VERSION`) and `sportsliveinfo/src/sportsliveinfo/__init__.py`; changelog entry; `PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py`; full test suite; PR; CI green; Home Assistant backup of the app; squash-merge; on Home Assistant refresh the app store (it caches the repository) and update.
-- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (260 tests at 0.3.18).
+- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (263 tests at 0.3.19).
 - **Benchmarks** used public UK guides (farleyflex, Freeview, EPGTalk UK), feed revisions from `LiveSports-EPG`, the iptv-org CSVs and the owner's private channel list; scripts and data are kept outside the repositories. Only GitHub-hosted guides are reachable from cloud sessions; iptv-epg.org, epgshare01 and xmltvfr.fr are blocked there.
 - **Privacy:** never commit the owner's channel list, credentials, tokens, LAN addresses or personal details; use synthetic names in tests.
 

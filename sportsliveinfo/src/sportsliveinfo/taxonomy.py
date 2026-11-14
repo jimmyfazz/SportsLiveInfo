@@ -9,6 +9,7 @@ country; never across sports.
 """
 import re
 import unicodedata
+from functools import lru_cache
 
 # sport id -> (label, typical duration in minutes used for a "probably live" estimate, display order)
 SPORTS = {
@@ -335,7 +336,12 @@ _SPACE = re.compile(r"\s+")
 
 
 def norm(value):
-    value = unicodedata.normalize("NFKD", str(value or ""))
+    return _norm(str(value or ""))
+
+
+@lru_cache(maxsize=200_000)
+def _norm(value):
+    value = unicodedata.normalize("NFKD", value)
     value = "".join(ch for ch in value if not unicodedata.combining(ch)).casefold()
     value = value.replace("&", " and ").replace("'", "").replace("’", "")
     value = _PUNCT.sub(" ", value)
