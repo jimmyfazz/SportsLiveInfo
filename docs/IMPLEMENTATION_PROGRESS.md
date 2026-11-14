@@ -16,7 +16,14 @@
   - Precision: two hand-checked samples (70 and 85 new matches); the country errors were fixed and one short-brand mismatch remains.
 - **New sources** (off by default): eight GitHub-hosted guides were downloaded and parsed by `decode_xmltv` within their limits. 32 EPG Share / IPTV-EPG.org country files are **verify** (hosts blocked from the cloud session: NOT RUN).
 - **Source rights:** no source licenses programme data for republication; all are private use only. The iptv-org database is public domain.
-- **Tests:** 250 passed locally. New `dictionary-cases.json` and matching cases for B1G.
+- **Second pass (per-channel guide reconciliation):**
+  - Sources: 49 GitHub-hosted guide files were downloaded and indexed. Every lineup channel was matched by id (regional feed aware) or by name within its market.
+  - Identification: UK + Europe 61.5 %, sport 71.2 %, whole list 49.6 %.
+  - Guide found: UK 69.8 %, France 75.4 %, Spain 72.8 %, Italy 72.7 %, Portugal 62.7 %, Germany 56.8 %.
+  - 13 more sources added; xz support added.
+  - Correction: Turkish beIN 1–4 no longer resolve to the Middle East channels.
+  - The private per-channel table stays outside the repository.
+- **Tests:** 253 passed locally. New `dictionary-cases.json` and matching cases for B1G.
 - **Blocked or NOT RUN:** live tests of the verify sources; B1G use; on-device checks.
 
 ## 13 November 2026 — 0.3.5 source connections and coverage

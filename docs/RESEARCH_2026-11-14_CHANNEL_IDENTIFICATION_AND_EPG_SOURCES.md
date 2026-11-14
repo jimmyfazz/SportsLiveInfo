@@ -193,3 +193,69 @@ Still uncertain (re-check later):
    - Mostly US/Canada regional sports alternates, numbered "sports pack" or "event" slots, Latin American and Caribbean local stations, Iranian and Kurdish satellite channels, and FAST music channels.
    - Many are absent from the public database. Guide-name matching on the TV, against the provider's own guide, is the route for them.
 5. **Not run here:** live tests of the "verify" sources (hosts blocked in the cloud session); B1G-side use on a device; a schedule-fingerprint check of the new guides against existing ones (it needs the guides stored on Home Assistant).
+
+## 8. Second pass — per-channel guide reconciliation (14 November, later)
+
+Request: research the actual channel names further and find the guide for each. A private table (one row per channel: identity, method, best guide file, guide channel id, programme count) was produced for the owner and is **not** in this repository.
+
+### 8.1 Guide catalogue
+
+These 49 files, all from GitHub, were downloaded and indexed (channel ids, names, programmes per channel, date range):
+- **M3UPT:** Sky UK/DE/IT, Sky Italia, Freeview UK, Portugal;
+- **EPGTalk:** US, US local, Latino, FreeTV, UK, Sports;
+- **Matt Huisman:** Plex, Pluto and Samsung TV Plus for 16 countries, Roku, DStv, Sky Go, Sky Sport Now, Kayo, AU, NZ;
+- **dobleM** (Spain), **Fazzani/grab** (France + MENA), **farleyflex**, **Freeview-EPG**.
+
+Stale files are excluded: Foxtel and Binge (October), Singtel (February 2025).
+
+### 8.2 Matching
+
+- **By dictionary id:** M3UPT, Fazzani and EPGTalk Sports use iptv-org ids.
+  - The regional feed must agree: BBC One Wales → `BBCOne.uk@WalesHD`, ITV2 +1 → `ITV2.uk@Plus1`.
+  - When no feed is named, only the main/HD/SD feed is used.
+- **By name, within the channel's market only:** a French guide never serves a DStv channel, and the Spanish-language Latin guide never serves the Caribbean.
+- **Team channels** ("NBA Boston Celtics", "NFL | Baltimore Ravens") match EPGTalk Sports' per-team channels. Each team channel's schedule is that team's fixtures.
+
+### 8.3 Results (owner's 21,250 linear channels)
+
+| Section | Downloadable guide found | Main guide files |
+|---|---|---|
+| UK | 69.8 % | M3UPT Sky, Freeview-EPG, EPGTalk FreeTV/UK |
+| France | 75.4 % | Fazzani/grab |
+| Spain | 72.8 % | dobleM |
+| Italy | 72.7 % | M3UPT Sky (IT part), Sky Italia |
+| Portugal | 62.7 % | M3UPT Portugal |
+| Germany/Austria | 56.8 % | M3UPT Sky (DE part) |
+| Canada | 35.4 % | EPGTalk US |
+| Africa | 36.2 % | DStv |
+| US | 25.1 % | EPGTalk US, Sports (365 team channels), Latino, Roku |
+| Latin America | 48.3 % | EPGTalk Latino |
+| Australia / NZ | 27.2 % / 75.0 % | AU all cities / Sky Go |
+| Scandinavia, Poland, Turkey, Russia, Balkans, Greece, Hungary, Czechia, MENA, India, Iran | 0–10 % | *Not on GitHub*: EPG Share and IPTV-EPG.org country files (listed in §5, "verify" on Home Assistant) |
+
+- **Sports channels:** 47.8 % have a downloadable guide; 49.4 % are identified across the whole list and 71.2 % in UK + Europe.
+- **The 9,072 channels with neither an identity nor a guide** are mostly:
+  - US local stations, about 1,060 (the callsign route covers those whose callsign the database knows);
+  - Mexican local stations filed under the provider's "Latin" section;
+  - FAST music channels, about 270;
+  - numbered event feeds: Magenta Sport, MyTeam, Canal Play, Molotov, DAZN numbered, "Sports pack" — about 175 found by pattern, more by name;
+  - live webcams and radio stations, about 160;
+  - small local and religious channels absent from every public list.
+
+### 8.4 Resolver additions found by checking individual names
+
+| Rule | Example (public channel names) | Gain |
+|---|---|---|
+| sport/sports/spor spelling | "Sky Sports Uno" (IT) → Sky Sport Uno; "Nova Sport 1" (GR) → Novasports 1; "Tivibu Sport 2" → Tivibu Spor 2 | Italy 72.1 → 77.4 %, Greece 61.1 → 68.2 % |
+| Implied first number | "Diema Sport 1" → Diema Sport (Diema Sport 2 exists); "Canal+ Sport 1" (PL) → Canal+ Sport | Bulgaria, Poland, Turkey |
+| Own-country numbered channel | "beIN Sports 1" in a Turkish list → beIN Sports 1 Turk; "Eurosport 3" in a Polish list → Eurosport 3 Polska | Turkey 52.1 → 54.6 %; **corrects** Turkish beIN 1–4, which had resolved to the Middle East channels |
+| Plain over 4K | "Eleven Sports 1" → Eleven Sports 1, not Eleven Sports 1 4K | Poland |
+| Spelling aliases | "beINSport", "… Xtra" | small |
+
+Measured overall: whole list 49.1 → 49.6 %, sport 46.2 → 49.4 %, UK + Europe 60.4 → 61.5 %, UK + Europe sport 64.8 → 71.2 %. No high-confidence match changed except the 11 corrections above.
+
+### 8.5 Not run / blocked
+
+- EPG Share, IPTV-EPG.org, epg.pw and open-epg files can't be reached from the cloud session. Their coverage of Scandinavia, Eastern Europe, Turkey, MENA and India must be measured on Home Assistant with *Test EPG*.
+- There is no on-device check yet.
+

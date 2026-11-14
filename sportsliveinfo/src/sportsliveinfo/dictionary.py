@@ -110,6 +110,7 @@ ALIASES = {
         (r"^nat geo\b", "national geographic"), (r"^national geo channel$", "national geographic"),
         (r"^nick (?:jr|junior)$", "nickelodeon junior"), (r"^rmc sports\b", "rmc sport"),
         (r"^discovery inves$", "discovery investigation"), (r"^euro sport\b", "eurosport"),
+        (r"^beinsports?\b", "bein sports"), (r"\bxtra$", "extra"),
     ],
     "FR": [
         (r"^hd1$", "tf1 series films"), (r"^automoto(?: tv)?$", "automoto la chaine"),
@@ -224,7 +225,13 @@ def build_document(channels_csv, feeds_csv, regions_csv="", extra_regions=()):
                          "the name ends in a market code (dropped first, e.g. 'CGTN FR'), or the plain name has at least 6 "
                          "letters/digits and is not itself a channel; a result counts only when it is one channel; "
                          "(4) a trailing code of the channel's own market (bare_market_codes[market]) is dropped, with a "
-                         "quality word before it ('ZDF HD DE' -> 'zdf'), and the lookup repeated",
+                         "quality word before it ('ZDF HD DE' -> 'zdf'), and the lookup repeated; (2b, after (2)) the "
+                         "sport word in its other spellings sport/sports/spor; (3b, after (3)) a name ending in a number "
+                         "plus language_variants[market] looked up in the market's own countries only ('beIN Sports 1' "
+                         "-> 'beIN Sports 1 Turk' in TR; also preferred whenever a numbered name is otherwise found only by "
+                         "broadcast_area, i.e. as a foreign channel broadcasting into the market); (6, last) '<name> 1' as '<name>' when '<name> 2' exists in the "
+                         "market. Any step: when candidates differ only by a 4K/UHD version and the provider name has "
+                         "no 4K/UHD marker, the plain channel is chosen (method suffix ':plain_not_4k')",
             "country_tag": "group_markets only: a leading section tag naming a country ('|NIGERIA| ', 'IQ: ', "
                            "'DSTV | ') replaces market_countries[market] with that one country for every step; the tag "
                            "is country_tags[TAG] or a two-letter code listed in market_countries[market]. Without a tag, "
@@ -307,7 +314,26 @@ class Resolver:
         if tagged:
             countries = [tagged]
         pooled = market in GROUP_MARKETS and not tagged      # untagged in a multi-country section
-        found = self._lookup(key, countries, pooled)
+
+        def own_numbered(stem_key):
+            """'<name> N' + language variant in the market's own countries ('beIN Sports 1 Turk' in TR)."""
+            if not re.search(r"\d$", stem_key):
+                return None
+            for stem in [stem_key] + _sport_spellings(stem_key):
+                for variant in LANGUAGE_VARIANTS.get(market, []):
+                    hit = self._prefer_plain(self._lookup(stem + " " + variant, countries, pooled), name)
+                    if hit and hit["confidence"] == "high" and hit["method"] != "broadcast_area":
+                        return dict(hit, method="numbered_variant:" + hit["method"])
+            return None
+
+        def look(candidate):
+            hit = self._lookup(candidate, countries, pooled)
+            if hit and hit["method"] == "broadcast_area":
+                # A numbered channel found only as a foreign channel broadcasting here (beIN Sports 1 of Qatar
+                # in a Turkish list): the market's own numbered version wins when the database has one.
+                return own_numbered(candidate) or hit
+            return hit
+        found = self._prefer_plain(look(key), name)
         if found:
             return found
         if market in _CALLSIGN_MARKETS:
@@ -317,15 +343,19 @@ class Resolver:
         for rule_market in (market, "*"):                     # (1) known alternative spellings
             for pattern, target in _ALIASES.get(rule_market, []):
                 if pattern.search(key):
-                    found = self._lookup(pattern.sub(target, key, count=1), countries)
+                    found = look(pattern.sub(target, key, count=1))
                     if found:
                         return dict(found, method="alias:" + found["method"])
         words = key.split()                                   # (2) singular/plural of the last word
         if words and len(words[-1]) >= 4 and words[-1].isalpha():
             last = words[-1][:-1] if words[-1].endswith("s") else words[-1] + "s"
-            found = self._lookup(" ".join(words[:-1] + [last]), countries)
+            found = look(" ".join(words[:-1] + [last]))
             if found:
                 return dict(found, method="plural:" + found["method"])
+        for variant in _sport_spellings(key):                 # (2b) "Sport"/"Sports"/"Spor" anywhere
+            found = self._prefer_plain(look(variant), name)
+            if found:
+                return dict(found, method="sport_word:" + found["method"])
         # (3) language/territory variant in any country. Only when the name says so ("CGTN FR") or the
         # plain name is distinctive and not itself a channel ("i24NEWS"): "CNN" stays unmatched, never
         # CNN Portugal, because a short global brand in a local list is often the international feed.
@@ -336,16 +366,40 @@ class Resolver:
                 ids = self.anywhere.get(_compact(base + " " + variant))
                 if ids and len({i[0] for i in ids}) == 1:
                     return {"ids": sorted(ids), "method": "language_variant", "confidence": "high"}
+        # (3b) a numbered channel's own-country version ("beIN Sports 1" in a Turkish list is
+        # "beIN Sports 1 Turk"): only a channel of the market's own countries, never a foreign variant.
+        found = own_numbered(base)
+        if found:
+            return found
         found = self._successor(key, countries)                # (5) rebrand: closed name -> its successor
         if found:
             return found
         if coded and coded.group(2).upper() in BARE_MARKET_CODES.get(market, ()):
             # (4) a trailing code of the channel's own market ("ZDF HD DE" in a German list): drop it.
             stripped = re.sub(r"\s+(?:hd|fhd|uhd|4k)$", "", base)
-            found = self._lookup(stripped, countries)
+            found = look(stripped)
             if found:
                 return dict(found, method="market_suffix:" + found["method"])
+        # (6) a first channel listed with "1" that the database names without a number ("Diema Sport 1" =
+        # "Diema Sport"), only when the same market also has "<name> 2" (so the numbering is a series).
+        numbered = re.match(r"^(.+?)\s+1$", key)
+        if numbered:
+            for stem in [numbered.group(1)] + _sport_spellings(numbered.group(1)):
+                if look(stem + " 2"):
+                    found = self._prefer_plain(look(stem), name)
+                    if found and found["confidence"] == "high":
+                        return dict(found, method="implicit_1:" + found["method"])
         return None
+
+    def _prefer_plain(self, found, name):
+        """Several channels that differ only by a 4K/UHD version: a name without 4K/UHD is the plain channel."""
+        if not found or found["confidence"] != "ambiguous" or _UHD.search(str(name)):
+            return found
+        plain = {cid for cid, _feed in found["ids"] if not _UHD.search(self.channels.get(cid, {}).get("name", ""))}
+        if len(plain) == 1:
+            return dict(found, ids=[i for i in found["ids"] if i[0] in plain], confidence="high",
+                        method=found["method"] + ":plain_not_4k")
+        return found
 
     def _lookup(self, key, countries, pooled=False):
         """First method that finds anything; within it the first country in order, or (pooled: an untagged
@@ -414,6 +468,17 @@ class Resolver:
             return None
         return {k: channel[k] for k in ("id", "name", "country", "network", "categories", "website", "launched",
                                          "closed", "replaced_by") if channel.get(k)}
+
+
+_UHD = re.compile(r"\b(?:4k|uhd|2160p|ultra hd)\b", re.I)
+_SPORT_WORD = re.compile(r"\b(sports?|spor)\b")
+
+
+def _sport_spellings(key):
+    """The other spellings of the sport word in a name: sport/sports/spor (each occurrence alike)."""
+    if not _SPORT_WORD.search(key):
+        return []
+    return [v for v in (_SPORT_WORD.sub(word, key) for word in ("sport", "sports", "spor")) if v != key]
 
 
 _CALLSIGN_MARKETS = {"US", "CA", "CARIB"}

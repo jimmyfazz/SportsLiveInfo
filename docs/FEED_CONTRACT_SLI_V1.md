@@ -74,7 +74,17 @@ SportsLiveInfo **must not** make a breaking change inside `v1/`. A future `v2/` 
    - then decoration-only equality;
    - then channels whose feeds broadcast into those countries.
    Cyrillic and Greek names and alternative names are also indexed in Latin script (published transliteration: Cyrillic per-letter with ya/ia, yu/iu, kh/h variants; Greek both look-alike letters "EPT" and sound "ERT").
-5. Only when nothing is found, the fallbacks in `rules.fallbacks`, in order: aliases, singular/plural, language variant, **(4)** a trailing code of the channel's own market ("ZDF HD DE"), **(5)** a closed channel's live successor (below). In US/CA/CARIB a **station callsign** in brackets ("NBC 5 (KXXX) City") matches feeds named after it; when several networks share the callsign, the one named in the provider name wins (`rules.callsign`).
+5. Only when nothing is found, the fallbacks in `rules.fallbacks`, in order:
+   - aliases;
+   - singular/plural;
+   - the sport word in its other spellings (sport/sports/spor);
+   - language variant;
+   - the market's own numbered channel ("beIN Sports 1" → "beIN Sports 1 Turk" in TR). This is also preferred whenever a numbered name is otherwise found only as a foreign channel broadcasting into the market;
+   - a closed channel's live successor (below);
+   - a trailing code of the channel's own market ("ZDF HD DE");
+   - an implied first number ("Diema Sport 1" = "Diema Sport" when "Diema Sport 2" exists).
+
+   When candidates differ only by a 4K/UHD version and the provider name has no 4K/UHD marker, the plain channel is chosen. In US/CA/CARIB a **station callsign** in brackets ("NBC 5 (KXXX) City") matches feeds named after it; when several networks share the callsign, the one named in the provider name wins (`rules.callsign`).
 6. One channel id is **high** confidence. Several ids are **ambiguous**: never apply them automatically.
 7. Precedence: below user manual mappings, provider tvg-id exact and `channels.source_crosswalk`.
 8. A resolved id may select a guide whose channel id equals it (many guides use these ids), or link through `identity` members.

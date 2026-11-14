@@ -26,6 +26,11 @@ COUNTRY_BY_SOURCE = {
                                                            "HU", "RO")},
     "mjh_plex_gb": "GB", "mjh_samsung_gb": "GB", "mjh_pluto_gb": "GB",
     "es_doblem": "ES", "fr_mena_grab": "FR", "pt_m3upt": "PT",
+    # Multi-country Sky file: GB names only; its DE/IT channels carry .de/.at/.it ids, which the foreign-id
+    # guard keeps out of GB services.
+    "m3upt_sky": "GB", "m3upt_sky_it": "IT", "m3upt_freeview_uk": "GB",
+    "epgtalk_us": "US", "epgtalk_us_local": "US", "epgtalk_latino": "US", "mjh_roku_us": "US", "mjh_plex_us": "US",
+    "mjh_au_all": "AU", "mjh_skygo_nz": "NZ", "mjh_samsung_in": "IN", "mjh_dstv_za": "ZA",
 }
 
 # An intentionally small *verified-name* registry, per market. Exact catalogue

@@ -3,6 +3,7 @@ import gzip
 import hashlib
 import io
 import json
+import lzma
 import re
 import urllib.error
 import urllib.parse
@@ -66,6 +67,34 @@ EPG = {
                      "https://raw.githubusercontent.com/Fazzani/grab/master/merge.xml.gz"),
     "pt_m3upt": ("Portugal (Sport TV 1-7, DAZN 1-5 PT, Eleven) · M3UPT",
                  "https://raw.githubusercontent.com/LITUATUI/M3UPT/main/EPG/epg-m3upt.xml.gz"),
+    # Second research pass (14 Nov 2026): every file below was downloaded and parsed; channel counts are
+    # those with programmes. Ranked by how many of the owner's channels each covers (private measurement).
+    "m3upt_sky": ("Sky UK, Germany/Austria and Italy · M3UPT (1,243 channels incl. regions, 7 days; xz)",
+                  "https://raw.githubusercontent.com/LITUATUI/M3UPT/main/EPG/epg-sky-uk.xml.xz"),
+    "m3upt_sky_it": ("Sky Italia · M3UPT (144 channels, 7 days; xz)",
+                     "https://raw.githubusercontent.com/LITUATUI/M3UPT/main/EPG/epg-sky-it.xml.xz"),
+    "m3upt_freeview_uk": ("UK Freeview · M3UPT (338 channels, 7 days; xz)",
+                          "https://raw.githubusercontent.com/LITUATUI/M3UPT/main/EPG/epg-freeview-uk.xml.xz"),
+    "epgtalk_us": ("United States and Canada · EPGTalk (738 channels incl. regional sports networks, 7 days)",
+                   "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/US_guide.xml.gz"),
+    "epgtalk_us_local": ("US local stations (ABC/CBS/NBC/FOX by city) · EPGTalk",
+                         "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/US_local_guide.xml.gz"),
+    "epgtalk_latino": ("Latin America and US Spanish · EPGTalk (595 channels, 7 days)",
+                       "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Latino_guide.xml.gz"),
+    "epgtalk_freetv": ("Free streaming channels (Samsung, Pluto, Plex, Roku…) · EPGTalk (1,173 channels)",
+                       "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/FreeTV_guide.xml.gz"),
+    "mjh_roku_us": ("US free streaming · Roku (Matt Huisman, 733 channels)",
+                    "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/Roku/all.xml.gz"),
+    "mjh_plex_us": ("US free streaming · Plex (Matt Huisman, 702 channels)",
+                    "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/Plex/us.xml.gz"),
+    "mjh_dstv_za": ("South Africa / Africa · DStv incl. SuperSport (Matt Huisman, 155 channels)",
+                    "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/DStv/za.xml.gz"),
+    "mjh_samsung_in": ("India free streaming · Samsung TV Plus (Matt Huisman)",
+                       "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/SamsungTVPlus/in.xml.gz"),
+    "mjh_au_all": ("Australia free-to-air, all cities · Matt Huisman (16 days)",
+                   "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/au/all/epg.xml.gz"),
+    "mjh_skygo_nz": ("New Zealand · Sky Go, all Sky NZ channels (Matt Huisman, 100 channels, about 3 months)",
+                     "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/SkyGo/epg.xml.gz"),
 }
 # Further iptv-epg.org country files named on its guides page (not reachable from the development
 # sandbox: "verify" with Test EPG before enabling).
@@ -102,7 +131,10 @@ EPG["epgshare_bein"] = ("beIN Sports MENA (Arabic/English) · EPG Share BEIN1 (v
                         "https://epgshare01.online/epgshare01/epg_ripper_BEIN1.xml.gz")
 EPG_FAMILY.update({"epgshare_" + cc.lower(): "epgshare" for cc in EPGSHARE_MARKETS})
 EPG_FAMILY.update({"epgshare_bein": "epgshare", "es_doblem": "doblem", "fr_mena_grab": "fazzani_grab",
-                   "pt_m3upt": "m3upt", "mjh_plex_gb": "mjh", "mjh_samsung_gb": "mjh", "mjh_pluto_gb": "mjh",
+                   "pt_m3upt": "m3upt", "m3upt_sky": "m3upt", "m3upt_sky_it": "m3upt", "m3upt_freeview_uk": "m3upt",
+                   "epgtalk_us": "epgtalk", "epgtalk_us_local": "epgtalk", "epgtalk_latino": "epgtalk",
+                   "epgtalk_freetv": "epgtalk", "mjh_roku_us": "mjh", "mjh_plex_us": "mjh", "mjh_dstv_za": "mjh",
+                   "mjh_samsung_in": "mjh", "mjh_au_all": "mjh", "mjh_skygo_nz": "mjh", "mjh_plex_gb": "mjh", "mjh_samsung_gb": "mjh", "mjh_pluto_gb": "mjh",
                    **{"iptv_epg_" + cc: "iptv_epg_org" for cc in ("se", "no", "dk", "tr", "pt", "pl", "ru", "al",
                                                                  "bg", "cz", "hu", "ro")}})
 # (max download bytes, max programmes) per guide; broad national guides are large.
@@ -125,7 +157,16 @@ EPG_LIMITS = {
 EPG_LIMITS.update({"epgshare_" + cc.lower(): (40_000_000, 250_000) for cc in EPGSHARE_MARKETS})
 EPG_LIMITS.update({"es_doblem": (15_000_000, 150_000), "fr_mena_grab": (25_000_000, 260_000),
                    "pt_m3upt": (8_000_000, 100_000), "mjh_plex_gb": (3_000_000, 40_000),
-                   "mjh_samsung_gb": (2_000_000, 20_000), "mjh_pluto_gb": (2_000_000, 20_000)})
+                   "mjh_samsung_gb": (2_000_000, 20_000), "mjh_pluto_gb": (2_000_000, 20_000),
+                   # Measured 14 Nov 2026 (download MB / programmes): Sky xz 7.4/241k, EPGTalk US 14.4/127k,
+                   # Latino 10.3/104k, FreeTV 6.9/98k, Roku 3.5/67k, Plex US 2.8/57k, Sky Go NZ 6.7/49k.
+                   "m3upt_sky": (12_000_000, 320_000), "m3upt_sky_it": (3_000_000, 50_000),
+                   "m3upt_freeview_uk": (3_000_000, 90_000), "epgtalk_us": (22_000_000, 200_000),
+                   "epgtalk_us_local": (5_000_000, 50_000), "epgtalk_latino": (16_000_000, 160_000),
+                   "epgtalk_freetv": (11_000_000, 150_000), "mjh_roku_us": (6_000_000, 100_000),
+                   "mjh_plex_us": (5_000_000, 90_000), "mjh_dstv_za": (2_000_000, 30_000),
+                   "mjh_samsung_in": (1_000_000, 10_000), "mjh_au_all": (4_000_000, 50_000),
+                   "mjh_skygo_nz": (10_000_000, 80_000)})
 EPG_DAILY_REQUEST_LIMIT = 4
 DEFAULT_EPG_LIMIT = (14_000_000, 100_000)
 # XML TV Fr lists an expanded France-only file of about 70 MiB.
@@ -136,6 +177,10 @@ EPG_EXPANDED_LIMITS = {
     # Measured 14 Nov 2026 (uncompressed): dobleM 95 MB, Fazzani/grab 130 MB, M3UPT 38 MB, Plex GB 5 MB.
     "es_doblem": 130_000_000, "fr_mena_grab": 170_000_000, "pt_m3upt": 60_000_000,
     "mjh_plex_gb": 15_000_000, "mjh_samsung_gb": 8_000_000, "mjh_pluto_gb": 10_000_000,
+    "m3upt_sky": 190_000_000, "m3upt_sky_it": 30_000_000, "m3upt_freeview_uk": 35_000_000,
+    "epgtalk_us": 170_000_000, "epgtalk_us_local": 30_000_000, "epgtalk_latino": 140_000_000,
+    "epgtalk_freetv": 105_000_000, "mjh_roku_us": 55_000_000, "mjh_plex_us": 30_000_000,
+    "mjh_dstv_za": 15_000_000, "mjh_samsung_in": 3_000_000, "mjh_au_all": 28_000_000, "mjh_skygo_nz": 95_000_000,
 }
 # The standard XMLTV prologue names an *external* DTD that the parser never fetches.
 # Remove only that exact marker at the start of the file, for every source; an
@@ -363,7 +408,7 @@ class _LimitedXmlInput:
 
 def decode_xmltv(raw, source, max_expanded=None, max_programmes=100_000,
                  max_channels=40_000):
-    """Stream bounded XMLTV/gzip with source-aware programme detail.
+    """Stream bounded XMLTV (plain, gzip or xz) with source-aware programme detail.
 
     This is private source collection, never licence approval for redistribution.
     """
@@ -371,6 +416,8 @@ def decode_xmltv(raw, source, max_expanded=None, max_programmes=100_000,
         raise ValueError("Empty XMLTV input")
     if raw[:2] == b"\x1f\x8b":
         stream = gzip.GzipFile(fileobj=io.BytesIO(raw))
+    elif raw[:6] == b"\xfd7zXZ\x00":            # .xz (M3UPT guides); expansion bounded below as for gzip
+        stream = lzma.LZMAFile(io.BytesIO(raw))
     else:
         stream = io.BytesIO(raw)
     if max_expanded is None:

@@ -116,7 +116,8 @@ OldChannel.fr,Old Channel,,,,FR,general,FALSE,,2025-03-01,NewChannel.fr,
     def test_aliases_singular_plural_and_uhd_markers(self):
         self.assertEqual(self.ids("FR | Nat Geo Wild HD"), ("NationalGeographicWild.fr", "alias:exact"))
         self.assertEqual(self.ids("HD1"), ("TF1SeriesFilms.fr", "alias:exact"))
-        self.assertEqual(self.ids("Example Sports 1 FHD"), None)            # plural only on a final word
+        # Plural only on a final word, except the sport word (0.3.18: sport/sports/spor anywhere).
+        self.assertEqual(self.ids("Example Sports 1 FHD"), ("ExampleSport1.fr", "sport_word:exact"))
         self.assertEqual(self.ids("Example Cinema")[0], "ExampleCinemas.fr")
         self.assertEqual(self.ids("FR | Example Sport 1 4K Ultra")[0], "ExampleSport1.fr")
         self.assertEqual(self.ids("Example Sport 1 (UHD/4K)")[0], "ExampleSport1.fr")
@@ -217,6 +218,34 @@ ExampleNet.us,WXMQ,WXMQ-TV,,FALSE,ct/USABC,America/New_York,eng,1080i
         self.assertEqual(self.ids("TR | Old Brand HD", "TR"), (("NewBrand.tr", None), "replaced_by", "high"))
         self.assertIsNone(self.ids("TR | Gone", "TR"))
         self.assertEqual(self.resolver.explain_closed("TR | Gone", "TR")[0]["id"], "Gone.tr")
+
+    def test_sport_spellings_implicit_first_number_and_plain_not_4k(self):
+        ch = """id,name,alt_names,network,owners,country,categories,is_nsfw,launched,closed,replaced_by,website
+NovaSports1.gr,Novasports 1,,,,GR,sports,FALSE,,,,
+ArenaSport.bg,Arena Sport,,,,BG,sports,FALSE,,,,
+ArenaSport2.bg,Arena Sport 2,,,,BG,sports,FALSE,,,,
+SoloSport.bg,Solo Sport,,,,BG,sports,FALSE,,,,
+EightSports1.pl,Eight Sports 1,,,,PL,sports,FALSE,,,,
+EightSports14K.pl,Eight Sports 1 4K,,,,PL,sports,FALSE,,,,
+StarSports1.qa,Star Sports 1,,,,QA,sports,FALSE,,,,
+StarSports1Turk.tr,Star Sports 1 Turk,,,,TR,sports,FALSE,,,,
+"""
+        fd = ("channel,id,name,alt_names,is_main,broadcast_area,timezones,languages,format\n"
+              "StarSports1.qa,MENA,MENA,,TRUE,c/QA;c/TR,Asia/Qatar,ara,1080i\n")
+        r = dictionary.Resolver(dictionary.build_document(ch, fd, ""))
+        def first(name, market):
+            hit = r.resolve(name, market)
+            return (hit["ids"][0][0], hit["method"], hit["confidence"]) if hit else None
+        self.assertEqual(first("GR | NOVA SPORT 1", "GR")[0], "NovaSports1.gr")
+        self.assertEqual(first("BG | Arena Sport 1", "BG")[:2], ("ArenaSport.bg", "implicit_1:exact"))
+        self.assertIsNone(first("BG | Solo Sport 1", "BG"))                 # no "Solo Sport 2": not a series
+        self.assertEqual(first("PL | Eight Sports 1", "PL"), ("EightSports1.pl", "exact:plain_not_4k", "high"))
+        self.assertEqual(first("PL | Eight Sports 1 4K", "PL")[2], "ambiguous")   # the 4K name is not decided here
+        self.assertEqual(first("TR | Star Sport 1", "TR")[0], "StarSports1Turk.tr")
+        # The Qatari channel also broadcasts into Turkey; the Turkish version still wins for a Turkish list.
+        self.assertEqual(first("TR | Star Sports 1", "TR")[:2], ("StarSports1Turk.tr", "numbered_variant:exact"))
+        self.assertEqual(first("TR | StarSports 1", "TR")[0], "StarSports1Turk.tr")
+        self.assertIsNone(first("Star Sport 1", "PL"))                      # foreign variants are never taken
 
     def test_own_market_suffix(self):
         self.assertEqual(self.ids("US Example Net HD US", "US")[0][0], "ExampleNet.us")

@@ -50,10 +50,17 @@ All in `sportsliveinfo/src/sportsliveinfo/`; B1G must reproduce the published ru
 2. Check Home Assistant results (Collect now → Live today / Sports events), especially **French live sport** (Ligue 1, Top 14, cyclisme on Canal+/beIN/RMC): French guide listings could not be fetched from the cloud session, so French listing formats are unit-tested only.
 3. When the B1G reader exists: create a TV token — fine-grained, **Contents: Read-only**, `LiveSports-EPG-private` only.
 
-4. **0.3.18 (optional):** on the Sources page, enable only the new guides you watch: Sky Sport Now NZ, Spain dobleM, France + beIN MENA, Portugal M3UPT, and UK FAST if needed. Run *Test EPG* first on every "verify" source. Enable dictionary regions only for regions you watch; each makes the TV download larger.
+4. **0.3.18 (optional):** on the Sources page, enable only the guides you watch. By coverage of your channels:
+   - Sky UK/DE/IT (M3UPT);
+   - France + beIN MENA;
+   - Portugal M3UPT;
+   - Spain dobleM;
+   - EPGTalk US, Latin and sports (team channels);
+   - Sky Sport Now / Sky Go NZ;
+   - DStv (SuperSport). Run *Test EPG* first on every "verify" source. Enable dictionary regions only for regions you watch; each makes the TV download larger.
 
 **Deferred (owner will return to)**
-- Unmatched channels: largely addressed by the 0.3.18 research (UK + Europe 60.4 %). The rest are mostly regional sports alternates, numbered event slots, local stations and FAST music channels absent from the public database; they need B1G guide-name matching on the TV.
+- Unmatched channels: largely addressed by the 0.3.18 research (UK + Europe 61.5 % identified; downloadable guide for about 70 % of UK/FR/ES/IT channels). The rest are mostly regional sports alternates, numbered event slots, local stations and FAST music channels absent from the public database; they need B1G guide-name matching on the TV.
 - Event coverage beyond tomorrow (paid API decision).
 
 **Minor**
@@ -75,7 +82,7 @@ The full terminal prompt for this work was given to the owner on 14 November; it
 ## 7. Operating notes
 
 - **Release:** bump `sportsliveinfo/config.yaml`, `sportsliveinfo/Dockerfile` (`BUILD_VERSION`) and `sportsliveinfo/src/sportsliveinfo/__init__.py`; changelog entry; `PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py`; full test suite; PR; CI green; Home Assistant backup of the app; squash-merge; on Home Assistant refresh the app store (it caches the repository) and update.
-- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (250 tests at 0.3.18).
+- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (253 tests at 0.3.18).
 - **Benchmarks** used public UK guides (farleyflex, Freeview, EPGTalk UK), feed revisions from `LiveSports-EPG`, the iptv-org CSVs and the owner's private channel list; scripts and data are kept outside the repositories. Only GitHub-hosted guides are reachable from cloud sessions; iptv-epg.org, epgshare01 and xmltvfr.fr are blocked there.
 - **Privacy:** never commit the owner's channel list, credentials, tokens, LAN addresses or personal details; use synthetic names in tests.
 

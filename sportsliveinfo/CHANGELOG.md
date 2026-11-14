@@ -19,7 +19,25 @@ Results of a broad research pass over the owner's channel list (private, never c
 - **Channel registry:** Sky Sport NZ 1–9/Premier League/Select and Fox Sports AU 503–507/More/News.
 - **Hard negative:** a guide channel whose own id names another country ("beINSports1.qa@MENA" in the France + MENA guide) never becomes this market's service (beIN Sports 1 France).
 - Feed format 1.4: the dictionary asset adds `regions`, `group_markets`, `country_tags` and the rules above; new cross-language fixture `schemas/fixtures/sli-v1/dictionary-cases.json` for B1G.
-- **Measured on the owner's 21,250 linear channels:** UK/Europe (default settings) 60.4 % identified (55.4 % before), UK/Europe sport channels 64.8 % (57.8 %); with all world regions 49.1 % of the whole list (20.0 %). Ambiguous results are never applied. Two hand-checked samples (70 and 85 new matches) found the errors described in the report. The country errors were fixed before release; one short-brand mismatch remains.
+- **Second pass: per-channel guide reconciliation.** Every channel in the owner's list was matched against 49 downloadable guide files, by dictionary id (regional feed included: BBC One Wales gets the Wales guide, never East) and by name within its market. Results:
+  - **Resolver additions:**
+    - "Sport"/"Sports"/"Spor" spellings anywhere (Sky Sport Uno, Novasports, Tivibu Spor);
+    - an implied "1" ("Diema Sport 1" = Diema Sport, only when a "2" exists);
+    - the market's own numbered channel ("beIN Sports 1" in a Turkish list is beIN Sports 1 Turk), which is also preferred over a foreign channel that merely broadcasts into the market;
+    - the plain channel over its 4K sister;
+    - "beINSport" and "Xtra" spellings.
+  - **Correction:** Turkish beIN Sports 1–4 previously resolved to the Middle East channels and Polish Eurosport 1/2 to the pan-European feed; both now resolve to their own national channels.
+  - **XMLTV `.xz` files** are read, with the same size bounds as gzip.
+  - **13 more guides**, off by default, each downloaded and parsed:
+    - Sky UK + Germany/Austria + Italy (1,243 channels including every BBC/ITV region) and Sky Italia, both from M3UPT;
+    - Freeview UK (M3UPT);
+    - EPGTalk US (738 channels including regional sports networks), US local stations, Latin America (595) and free streaming channels (1,173);
+    - Roku and Plex US, DStv South Africa (SuperSport), Samsung TV Plus India, Australia all cities, Sky Go NZ (100 channels, 3 months).
+  - EPGTalk's existing sports guide carries per-team channels for the NFL, NBA, NHL, MLB, MLS, WNBA and European leagues; 365 of the owner's team channels match it.
+- **Measured on the owner's 21,250 linear channels:**
+  - Identification: UK/Europe 61.5 % (55.4 % before), UK/Europe sport channels 71.2 % (57.8 %), whole list with all world regions 49.6 % (20.0 %).
+  - Downloadable guide from the GitHub-hosted files: France 75.4 %, Spain 72.8 %, Italy 72.7 %, UK 69.8 %, Portugal 62.7 %, Germany 56.8 %; sport channels 47.8 %.
+  - Scandinavia, Poland, Turkey, Russia, the Balkans, Greece, MENA and India depend on the EPG Share / IPTV-EPG.org files, which can be tested only on Home Assistant. Ambiguous results are never applied. Two hand-checked samples (70 and 85 new matches) found the errors described in the report. The country errors were fixed before release; one short-brand mismatch remains.
 
 ## 0.3.17 — Connection tests run in the background
 
