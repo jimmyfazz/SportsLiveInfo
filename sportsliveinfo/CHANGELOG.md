@@ -20,6 +20,19 @@
   - **Precedence:** provider guide primary; user mapping, then provider `tvg-id`, crosswalk, service name, dictionary, event slots, local stations, fingerprint; ambiguous results never applied.
   - **Guide choice:** feed-aware, never another region, country or +1.
   - **Conformance:** fixtures, plus acceptance by comparing B1G's per-channel result with the Home Assistant CSV (≥ 99 % agreement, zero region/+1/foreign errors).
+- **Regional versions never merge with the national service (fix).** A guide channel identified through the dictionary as a regional feed was reported as the national channel ("France 3 Alsace" as France 3, "ITV1 Granada" as ITV1, "BBC One Wales" as BBC One wherever the curated list did not catch it first). The identity is now `id@Region` ("France3.fr@Alsace"). One rule, `dictionary.service_identity`, is used for guide channels, for the coverage report and by B1G:
+  - the main or a picture-quality feed ("HD", "UKHD") is the channel itself;
+  - exactly one regional feed keeps its region;
+  - a timeshift feed, several channels or several regions give no identity (ambiguous, review only).
+  - A side effect: each BBC One / ITV region now gets its own dictionary-to-service alias, where before the regions collided and none was published.
+- **Guide choice reference for B1G** (`coverage.choose_guide_channels`): picks guide channels from the published `guide_map` by provider `tvg-id`, then service, then the same iptv-org channel in guides that did not identify it. Regions must agree exactly ("London" never takes "London East"); never +1, never another country's feed, never a guide channel with no programmes in the next 7 days. The coverage report uses the same exact-region rule.
+- **`guide_map.service_aliases`:** dictionary id → SLI service id where SLI reports a dictionary channel under a curated service (`ITV1.uk` → `gb.itv.one`), so a TV that identifies a channel by its dictionary id finds the same guide rows.
+- **Feed assets stay within B1G's 8 MB limit.** The dictionary no longer carries feed languages, picture format or owners (none identify a channel): with every world region switched on it is 6.7 MB (was 8.8 MB, which B1G rejected); UK/Europe only is 2.2 MB (was 2.8 MB). An optional asset over 8 MB is now left out of the feed instead of being published; a required one stops the build with an error.
+- **B1G conformance fixtures** (exact answers from SportsLiveInfo's reference code, all public or synthetic):
+  - `dictionary-conformance/`: 15,794 provider-style names over 3,138 public iptv-org channels, with ids, method, confidence and identity;
+  - `slot-conformance.json`: 2,500 generated event-slot names (fictional teams) across five clocks, including both 2026 UK clock changes;
+  - `guide-choice-cases.json`: 1,200 guide choices covering regions, +1, foreign feeds, aliases and disabled guides;
+  - `dictionary-cases.json` now embeds its dictionary document.
 - Measured on the owner's list with the guides available from GitHub: the report builds in about 8 s for 25,700 channels. Its recommendations put the Sky guide first, then France + beIN, Portugal, EPGTalk US and Spain.
 
 ## 0.3.19 — EPGTalk UK fixed; 8× faster channel matching; Sky guide reads its ids

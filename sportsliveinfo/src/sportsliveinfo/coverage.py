@@ -194,6 +194,72 @@ def guide_index(source_id, guide):
             "first": min(starts) if starts else None, "last": max(starts) if starts else None}
 
 
+_IPTVORG_BASE = re.compile(r"^[A-Za-z0-9+&!'_-]+\.[a-z]{2}$")
+
+
+def feed_agrees(region, guide_feed):
+    """Whether a guide channel's iptv-org feed ("WalesHD", "HD", "Plus1") is the wanted region (None = national).
+    Exact region only: "London" never takes "LondonEast", a national channel never takes a region or +1."""
+    guide_feed = str(guide_feed or "")
+    if channel_dictionary._TIMESHIFT_FEED.search(guide_feed):
+        return False
+    guide_region = "" if channel_dictionary._MAIN_FEED.fullmatch(guide_feed) else re.sub(r"(?:HD|SD)$", "", guide_feed)
+    return guide_region.lower() == str(region or "").lower()
+
+
+def choose_guide_channels(guide_map, identity=None, *, tvg_id=None, market=None, enabled=None):
+    """Reference for B1G: the published guide channels for one provider channel, best first.
+
+    ``guide_map`` is the published ``sli.guide-map/1`` document; ``identity`` the provider channel's service
+    (SLI service id, or a dictionary identity from ``dictionary.service_identity``); ``tvg_id`` the provider's
+    own guide id; ``market`` the channel's market; ``enabled`` the guide sources switched on (None = all).
+    Returns ``(how, [(source_id, guide channel id, programmes_7d)])``; ``how`` is "provider_id", "service",
+    "dictionary_id" or None. Guide channels without programmes in the next 7 days are never offered.
+    Conformance: ``schemas/fixtures/sli-v1/guide-choice-cases.json``.
+    """
+    aliases = {str(k): str(v) for k, v in ((guide_map or {}).get("service_aliases") or {}).items()}
+    rows = []
+    for guide in (guide_map or {}).get("guides") or []:
+        source = str(guide.get("source_id") or "")
+        if enabled is not None and source not in enabled:
+            continue
+        for channel in guide.get("channels") or []:
+            count = int(channel.get("programmes_7d") or 0)
+            if count > 0 and channel.get("id"):
+                rows.append((source, str(channel["id"]), count, channel.get("service")))
+
+    def ranked(hits):
+        return sorted({(source, cid, count) for source, cid, count, _ in hits}, key=lambda h: (-h[2], h[0], h[1]))
+
+    if tvg_id:
+        hits = [row for row in rows if row[1] == tvg_id]
+        if hits:
+            return "provider_id", ranked(hits)
+    if not identity:
+        return None, []
+    wanted = {identity} | ({aliases[identity]} if identity in aliases else set()) | {
+        dictionary_id for dictionary_id, service in aliases.items() if service == identity}
+    service_hits = [row for row in rows if row[3] in wanted]
+    # Also the same iptv-org channel in guides that did not identify it, for the dictionary id itself and for
+    # each dictionary id SLI reports under this service (the region after "@" must agree exactly).
+    id_hits = []
+    for wanted_id in sorted(wanted):
+        base, _, region = wanted_id.partition("@")
+        if not _IPTVORG_BASE.match(base):
+            continue
+        for row in rows:
+            guide_base, _, guide_feed = row[1].partition("@")
+            if guide_base != base or (row[3] and row[3] not in wanted):
+                continue                          # another channel, or the guide itself says another service
+            if market and foreign_guide_channel(market, row[1]):
+                continue
+            if feed_agrees(region, guide_feed):
+                id_hits.append(row)
+    if service_hits or id_hits:
+        return ("service" if service_hits else "dictionary_id"), ranked(service_hits + id_hits)
+    return None, []
+
+
 class _Matcher:
     def __init__(self, indexes):
         self.by_id = defaultdict(list)          # exact guide channel id -> [(source, id, n)]
@@ -210,7 +276,7 @@ class _Matcher:
                 entry = (source, cid, n)
                 self.by_id[cid].append(entry)
                 base, _, feed = cid.partition("@")
-                if re.match(r"^[A-Za-z0-9+&!'_-]+\.[a-z]{2}$", base):
+                if _IPTVORG_BASE.match(base):
                     self.by_base[base].append(entry + (feed,))
                 markets = [market] if market else []
                 for m in markets:
@@ -233,10 +299,7 @@ class _Matcher:
             for source, cid, n, guide_feed in self.by_base.get(channel_id, ()):
                 if market and foreign_guide_channel(market, cid):
                     continue
-                if feed:
-                    if re.sub(r"(?:HD|SD)$", "", guide_feed).lower().startswith(re.sub(r"(?:HD|SD)$", "", feed).lower()):
-                        hits.append((source, cid, n))
-                elif not guide_feed or re.fullmatch(r"(?:HD|SD|UHD|UltraHDR|UK|UKHD)", guide_feed):
+                if feed_agrees(feed, guide_feed):
                     hits.append((source, cid, n))
             if hits:
                 return "dictionary_id", hits
@@ -272,10 +335,12 @@ def build_report(lineup, *, dictionary_document=None, enabled_indexes=(), survey
         identity, method, categories = None, None, ()
         if resolver and market:
             hit = resolver.resolve(entry["name"], _dictionary_market(market))
-            if hit and hit["confidence"] == "high":
-                identity = tuple(hit["ids"][0])
+            service = channel_dictionary.service_identity(hit)
+            if service:                                  # same rule as the guide side and B1G
+                base, _, region = service.partition("@")
+                identity = (base, region or None)
                 method = hit["method"]
-                categories = tuple(resolver.channels.get(identity[0], {}).get("categories", ()))
+                categories = tuple(resolver.channels.get(base, {}).get("categories", ()))
             elif hit:
                 method = "ambiguous"
         genre = genre_of(entry["category"], entry["name"], categories)
@@ -296,7 +361,8 @@ def build_report(lineup, *, dictionary_document=None, enabled_indexes=(), survey
         best = max(hits, key=lambda h: (h[0] in enabled_ids, h[2])) if hits else None
         rows.append({"category": entry["category"], "name": entry["name"], "market": market or "",
                      "genre": genre, "kind": entry.get("kind", "linear"),
-                     "identity": identity[0] if identity else "", "identity_method": method or "",
+                     "identity": (identity[0] + ("@" + identity[1] if identity[1] else "")) if identity else "",
+                     "identity_method": method or "",
                      "state": state, "match": how or "", "guide_source": best[0] if best else "",
                      "guide_channel": best[1] if best else "", "programmes": best[2] if best else 0})
         for group in ("*all", "market:" + (market or "?"), "genre:" + genre):

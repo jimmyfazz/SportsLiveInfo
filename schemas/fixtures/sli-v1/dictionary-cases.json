@@ -1,6 +1,811 @@
 {
  "schema": "sli.dictionary-cases/1",
- "note": "B1G's dictionary resolver must return exactly these results for this synthetic database (channels/feeds CSV in tools/generate_feed_fixtures.py, all optional regions on)",
+ "note": "B1G's dictionary resolver must return exactly these results for `document` (built from the synthetic channels/feeds CSV in tools/generate_feed_fixtures.py, all optional regions on)",
+ "document": {
+  "schema": "sli.dictionary/1",
+  "source": {
+   "name": "iptv-org/database",
+   "licence": "Unlicense (public domain)",
+   "url": "https://github.com/iptv-org/database"
+  },
+  "scope": "UK and Europe + Sub-Saharan Africa + Asia-Pacific + Latin America and the Caribbean + Middle East and North Africa + North America + South Asia channels, plus feeds of other channels that broadcast there",
+  "regions": [
+   "africa",
+   "asia_pacific",
+   "latin_america_caribbean",
+   "middle_east_north_africa",
+   "north_america",
+   "south_asia"
+  ],
+  "market_countries": {
+   "GB": [
+    "UK",
+    "GG",
+    "JE",
+    "IM",
+    "IE"
+   ],
+   "IE": [
+    "IE",
+    "UK"
+   ],
+   "FR": [
+    "FR",
+    "BE",
+    "CH",
+    "LU",
+    "MC"
+   ],
+   "DE": [
+    "DE",
+    "AT",
+    "CH",
+    "LI"
+   ],
+   "AT": [
+    "AT",
+    "DE"
+   ],
+   "CH": [
+    "CH",
+    "DE",
+    "FR",
+    "IT"
+   ],
+   "BE": [
+    "BE",
+    "FR",
+    "NL"
+   ],
+   "ES": [
+    "ES",
+    "AD"
+   ],
+   "IT": [
+    "IT",
+    "SM",
+    "VA",
+    "CH"
+   ],
+   "PT": [
+    "PT"
+   ],
+   "NL": [
+    "NL",
+    "BE"
+   ],
+   "PL": [
+    "PL"
+   ],
+   "SE": [
+    "SE",
+    "NO",
+    "DK",
+    "FI"
+   ],
+   "NO": [
+    "NO",
+    "SE",
+    "DK",
+    "FI"
+   ],
+   "DK": [
+    "DK",
+    "SE",
+    "NO",
+    "FI"
+   ],
+   "FI": [
+    "FI",
+    "SE",
+    "NO",
+    "DK"
+   ],
+   "IS": [
+    "IS"
+   ],
+   "TR": [
+    "TR",
+    "CY"
+   ],
+   "GR": [
+    "GR",
+    "CY"
+   ],
+   "CY": [
+    "CY",
+    "GR"
+   ],
+   "RO": [
+    "RO",
+    "MD"
+   ],
+   "BG": [
+    "BG"
+   ],
+   "HU": [
+    "HU"
+   ],
+   "CZ": [
+    "CZ",
+    "SK"
+   ],
+   "SK": [
+    "SK",
+    "CZ"
+   ],
+   "SI": [
+    "SI"
+   ],
+   "HR": [
+    "HR"
+   ],
+   "RS": [
+    "RS"
+   ],
+   "BA": [
+    "BA"
+   ],
+   "ME": [
+    "ME"
+   ],
+   "MK": [
+    "MK"
+   ],
+   "AL": [
+    "AL",
+    "XK",
+    "MK"
+   ],
+   "RU": [
+    "RU",
+    "BY"
+   ],
+   "UA": [
+    "UA"
+   ],
+   "LT": [
+    "LT"
+   ],
+   "LV": [
+    "LV"
+   ],
+   "EE": [
+    "EE"
+   ],
+   "MT": [
+    "MT"
+   ],
+   "US": [
+    "US"
+   ],
+   "CA": [
+    "CA",
+    "US"
+   ],
+   "AU": [
+    "AU"
+   ],
+   "NZ": [
+    "NZ"
+   ],
+   "IN": [
+    "IN"
+   ],
+   "PK": [
+    "PK"
+   ],
+   "BD": [
+    "BD"
+   ],
+   "NP": [
+    "NP"
+   ],
+   "IR": [
+    "IR"
+   ],
+   "KU": [
+    "IQ",
+    "TR",
+    "IR",
+    "SY"
+   ],
+   "VN": [
+    "VN"
+   ],
+   "PH": [
+    "PH"
+   ],
+   "MENA": [
+    "QA",
+    "SA",
+    "AE",
+    "EG",
+    "KW",
+    "BH",
+    "OM",
+    "LB",
+    "JO",
+    "IQ",
+    "SY",
+    "MA",
+    "DZ",
+    "TN",
+    "LY",
+    "PS",
+    "YE",
+    "SD",
+    "MR"
+   ],
+   "AFRICA": [
+    "NG",
+    "ZA",
+    "KE",
+    "GH",
+    "ET",
+    "TZ",
+    "UG",
+    "CM",
+    "CI",
+    "SN",
+    "CD",
+    "AO",
+    "MZ",
+    "ZM",
+    "ZW",
+    "RW",
+    "SO",
+    "ML",
+    "BF",
+    "GA",
+    "CG",
+    "BJ",
+    "TG",
+    "MG",
+    "GN",
+    "NE"
+   ],
+   "CARIB": [
+    "JM",
+    "TT",
+    "BB",
+    "DO",
+    "PR",
+    "HT",
+    "BS",
+    "GY",
+    "SR",
+    "LC",
+    "GD",
+    "VC",
+    "AG",
+    "DM",
+    "KN",
+    "CW",
+    "AW"
+   ],
+   "LATAM": [
+    "MX",
+    "AR",
+    "CO",
+    "CL",
+    "PE",
+    "VE",
+    "EC",
+    "UY",
+    "PY",
+    "BO",
+    "CR",
+    "GT",
+    "HN",
+    "SV",
+    "NI",
+    "PA",
+    "US",
+    "BR"
+   ]
+  },
+  "bare_market_codes": {
+   "GB": [
+    "GB",
+    "UK"
+   ],
+   "IE": [
+    "IE"
+   ],
+   "FR": [
+    "BE",
+    "CH",
+    "FR"
+   ],
+   "DE": [
+    "AT",
+    "CH",
+    "DE"
+   ],
+   "ES": [
+    "ES"
+   ],
+   "IT": [
+    "IT"
+   ],
+   "PT": [
+    "PT"
+   ],
+   "NL": [
+    "BE",
+    "NL"
+   ],
+   "PL": [
+    "PL"
+   ],
+   "SE": [
+    "SE",
+    "SW"
+   ],
+   "NO": [
+    "NO"
+   ],
+   "DK": [
+    "DK"
+   ],
+   "FI": [
+    "FI"
+   ],
+   "TR": [
+    "TR",
+    "TRK"
+   ],
+   "GR": [
+    "GR"
+   ],
+   "RO": [
+    "RO"
+   ],
+   "BG": [
+    "BG"
+   ],
+   "HU": [
+    "HU"
+   ],
+   "CZ": [
+    "CZ"
+   ],
+   "SK": [
+    "SK"
+   ],
+   "AL": [
+    "AL"
+   ],
+   "RU": [
+    "RU"
+   ],
+   "UA": [
+    "UA",
+    "UKR"
+   ],
+   "US": [
+    "US",
+    "USA"
+   ],
+   "CA": [
+    "CA",
+    "CAN"
+   ],
+   "AU": [
+    "AU",
+    "AUS"
+   ],
+   "NZ": [
+    "NZ"
+   ],
+   "IN": [
+    "IN",
+    "IND"
+   ],
+   "PK": [
+    "PK"
+   ],
+   "NP": [
+    "NP",
+    "NPL"
+   ],
+   "BD": [
+    "BD"
+   ],
+   "IR": [
+    "IR"
+   ],
+   "KU": [
+    "KU"
+   ],
+   "VN": [
+    "VN"
+   ],
+   "PH": [
+    "PH"
+   ],
+   "MENA": [
+    "AR",
+    "ARA",
+    "MENA"
+   ],
+   "AFRICA": [
+    "AF",
+    "AFR"
+   ],
+   "CARIB": [
+    "CARIB"
+   ],
+   "LATAM": [
+    "LAT",
+    "LATAM",
+    "LATIN"
+   ]
+  },
+  "group_markets": [
+   "AFRICA",
+   "CARIB",
+   "KU",
+   "LATAM",
+   "MENA"
+  ],
+  "country_tags": {
+   "IRQ": "IQ",
+   "ALG": "DZ",
+   "MOR": "MA",
+   "SAU": "SA",
+   "KSA": "SA",
+   "SUD": "SD",
+   "PAL": "PS",
+   "YEMEN": "YE",
+   "LIBYA": "LY",
+   "EM": "AE",
+   "UAE": "AE",
+   "DSTV": "ZA",
+   "JAWWY": "SA",
+   "SHAHID": "SA",
+   "NIGERIA": "NG",
+   "GHANA": "GH",
+   "SENEGAL": "SN",
+   "SOMALIA": "SO",
+   "CAMAROON": "CM",
+   "CAMEROON": "CM",
+   "GUINEE": "GN",
+   "GUINEA": "GN",
+   "BENIN": "BJ",
+   "MALI": "ML",
+   "BURKINAFASO": "BF",
+   "KENYA": "KE",
+   "UGANDA": "UG",
+   "TANZANIA": "TZ",
+   "ETHIOPIA": "ET",
+   "ZAMBIA": "ZM",
+   "ZIMBABWE": "ZW",
+   "RWANDA": "RW",
+   "CONGO": "CD",
+   "ANGOLA": "AO",
+   "GABON": "GA",
+   "TOGO": "TG",
+   "NIGER": "NE",
+   "JAMAICA": "JM",
+   "TRINIDAD": "TT"
+  },
+  "aliases": {
+   "*": [
+    {
+     "pattern": "^nat geo\\b",
+     "replacement": "national geographic"
+    },
+    {
+     "pattern": "^national geo channel$",
+     "replacement": "national geographic"
+    },
+    {
+     "pattern": "^nick (?:jr|junior)$",
+     "replacement": "nickelodeon junior"
+    },
+    {
+     "pattern": "^rmc sports\\b",
+     "replacement": "rmc sport"
+    },
+    {
+     "pattern": "^discovery inves$",
+     "replacement": "discovery investigation"
+    },
+    {
+     "pattern": "^euro sport\\b",
+     "replacement": "eurosport"
+    },
+    {
+     "pattern": "^beinsports?\\b",
+     "replacement": "bein sports"
+    },
+    {
+     "pattern": "\\bxtra$",
+     "replacement": "extra"
+    }
+   ],
+   "FR": [
+    {
+     "pattern": "^hd1$",
+     "replacement": "tf1 series films"
+    },
+    {
+     "pattern": "^automoto(?: tv)?$",
+     "replacement": "automoto la chaine"
+    },
+    {
+     "pattern": "^tv8 mont[ +-]blanc$",
+     "replacement": "tv8 mont blanc"
+    },
+    {
+     "pattern": "^djazz tv$",
+     "replacement": "stingray djazz"
+    },
+    {
+     "pattern": "^lci - la chaine info$",
+     "replacement": "lci"
+    },
+    {
+     "pattern": "^lcp public senat$",
+     "replacement": "lcp"
+    },
+    {
+     "pattern": "^planete\\+ aventure experience$",
+     "replacement": "planete+ aventure"
+    },
+    {
+     "pattern": "^discovery$",
+     "replacement": "discovery channel"
+    },
+    {
+     "pattern": "^canal\\+ cinema$",
+     "replacement": "canal+ cinemas"
+    }
+   ],
+   "DE": [
+    {
+     "pattern": "^pro ?7\\b",
+     "replacement": "prosieben"
+    },
+    {
+     "pattern": "^kabel ?1\\b",
+     "replacement": "kabel eins"
+    }
+   ],
+   "RU": [
+    {
+     "pattern": "^viasat (explore|history|nature)$",
+     "replacement": "viju \\1"
+    },
+    {
+     "pattern": "^viasat sport$",
+     "replacement": "viju+ sport"
+    }
+   ]
+  },
+  "language_variants": {
+   "FR": [
+    "french",
+    "francais",
+    "france"
+   ],
+   "DE": [
+    "deutsch",
+    "german",
+    "germany",
+    "deutschland"
+   ],
+   "ES": [
+    "espanol",
+    "spanish",
+    "espana"
+   ],
+   "IT": [
+    "italia",
+    "italiano",
+    "italian"
+   ],
+   "PT": [
+    "portugal",
+    "portugues",
+    "portuguese"
+   ],
+   "NL": [
+    "nederland",
+    "dutch"
+   ],
+   "PL": [
+    "polska",
+    "polish"
+   ],
+   "TR": [
+    "turkiye",
+    "turk",
+    "turkish"
+   ],
+   "GR": [
+    "greece",
+    "hellas",
+    "greek"
+   ],
+   "RU": [
+    "russia",
+    "russian"
+   ]
+  },
+  "rules": {
+   "lookup": "market_key(name, market) == normalised name, alt name, or base name + feed name of a channel in one of market_countries[market] (exact or ignoring spaces/punctuation); then decoration-only equality; then channels whose feed broadcasts into those countries",
+   "fallbacks": "only when the lookup finds nothing, in order: (1) aliases[market] then aliases['*']: replace the first matching pattern and repeat the lookup; (2) singular/plural of the last word (>= 4 letters); (3) language_variants[market]: '<name> <variant>' in any country, only when the name ends in a market code (dropped first, e.g. 'CGTN FR'), or the plain name has at least 6 letters/digits and is not itself a channel; a result counts only when it is one channel; (4) a trailing code of the channel's own market (bare_market_codes[market]) is dropped, with a quality word before it ('ZDF HD DE' -> 'zdf'), and the lookup repeated; (2b, after (2)) the sport word in its other spellings sport/sports/spor; (3b, after (3)) a name ending in a number plus language_variants[market] looked up in the market's own countries only ('beIN Sports 1' -> 'beIN Sports 1 Turk' in TR; also preferred whenever a numbered name is otherwise found only by broadcast_area, i.e. as a foreign channel broadcasting into the market); (6, last) '<name> 1' as '<name>' when '<name> 2' exists in the market. Any step: when candidates differ only by a 4K/UHD version and the provider name has no 4K/UHD marker, the plain channel is chosen (method suffix ':plain_not_4k')",
+   "country_tag": "a leading '(MX)'-style bracket with a Latin American country code in US, CA, LATAM or CARIB lists puts that country first, then market_countries['LATAM'] (LATAM rules); and in group_markets: a leading section tag naming a country ('|NIGERIA| ', 'IQ: ', 'DSTV | ') replaces market_countries[market] with that one country for every step; the tag is country_tags[TAG] or a two-letter code listed in market_countries[market]. Without a tag, each lookup method pools all market_countries (not first country wins), so a name found in two countries is ambiguous",
+   "callsign": "US/CA/Caribbean only, when the lookup finds nothing: a station callsign in brackets ('NBC 5 (KFYR) Minot') matches feeds named after that callsign ('KFYR', 'KFYR-TV'); when several channels share it, the one whose name or network appears in the provider name wins",
+   "transliteration": "Cyrillic and Greek names and alternative names are also indexed in Latin script (transliterate()), so 'Rossiya 1' and 'EPT 1' match",
+   "explain_closed": "a name matching only a closed channel is reported as closed (with replaced_by), never as a guide match",
+   "confidence": "one channel id = high; several ids = ambiguous (owner review, never applied automatically)",
+   "closed": "a closed channel never supplies its own guide. Fallback (5): when every closed channel a name matches names a live successor (replaced_by, followed up to 3 times) and that is one channel, the name resolves to the successor with method 'replaced_by' (the stream now carries it: 'FOX' in a Turkish list -> NOW). Otherwise explain_closed only explains the name",
+   "precedence": "below user manual mappings, provider tvg-id exact and published crosswalks"
+  },
+  "channels": [
+   {
+    "id": "AzteExample.mx",
+    "name": "Azte Example",
+    "country": "MX",
+    "categories": [
+     "general"
+    ]
+   },
+   {
+    "id": "CaribNews.tt",
+    "name": "Carib News",
+    "country": "TT",
+    "categories": [
+     "news"
+    ]
+   },
+   {
+    "id": "DesertOne.iq",
+    "name": "Desert One",
+    "country": "IQ",
+    "categories": [
+     "general"
+    ]
+   },
+   {
+    "id": "DesertOne.sa",
+    "name": "Desert One",
+    "country": "SA",
+    "categories": [
+     "general"
+    ]
+   },
+   {
+    "id": "Ellas1.gr",
+    "name": "ELT1",
+    "country": "GR",
+    "alt_names": [
+     "ΕΛΤ1"
+    ],
+    "categories": [
+     "general"
+    ]
+   },
+   {
+    "id": "ExampleKids.us",
+    "name": "Example Kids",
+    "country": "US",
+    "categories": [
+     "kids"
+    ],
+    "feeds": [
+     {
+      "id": "KXMP",
+      "name": "KXMP",
+      "areas": [
+       "US"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "ExampleNet.us",
+    "name": "Example Net",
+    "country": "US",
+    "categories": [
+     "general"
+    ],
+    "feeds": [
+     {
+      "id": "KXMP",
+      "name": "KXMP",
+      "areas": [
+       "US"
+      ]
+     },
+     {
+      "id": "WXMQ",
+      "name": "WXMQ-TV",
+      "areas": [
+       "US"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "ExampleTV.de",
+    "name": "Example TV",
+    "country": "DE",
+    "categories": [
+     "general"
+    ]
+   },
+   {
+    "id": "Gone.tr",
+    "name": "Gone",
+    "country": "TR",
+    "categories": [
+     "general"
+    ],
+    "closed": "2025-01-01"
+   },
+   {
+    "id": "NewBrand.tr",
+    "name": "New Brand",
+    "country": "TR",
+    "categories": [
+     "general"
+    ]
+   },
+   {
+    "id": "OldBrand.tr",
+    "name": "Old Brand",
+    "country": "TR",
+    "categories": [
+     "general"
+    ],
+    "closed": "2024-02-12",
+    "replaced_by": "NewBrand.tr"
+   },
+   {
+    "id": "PeakNational.ng",
+    "name": "Peak National",
+    "country": "NG",
+    "alt_names": [
+     "PNT"
+    ],
+    "categories": [
+     "news"
+    ]
+   },
+   {
+    "id": "PeakTV.gh",
+    "name": "PNT TV",
+    "country": "GH",
+    "categories": [
+     "news"
+    ]
+   },
+   {
+    "id": "Rodina1.ru",
+    "name": "Rodina 1",
+    "country": "RU",
+    "alt_names": [
+     "Родина 1"
+    ],
+    "categories": [
+     "general"
+    ]
+   },
+   {
+    "id": "SunExample.in",
+    "name": "Sun Example",
+    "country": "IN",
+    "categories": [
+     "general"
+    ]
+   }
+  ]
+ },
  "cases": [
   {
    "name": "US Example Net HD",
@@ -13,7 +818,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "ExampleNet.us"
   },
   {
    "name": "US USA Example Net",
@@ -21,7 +827,8 @@
    "market_key": "usa example net",
    "ids": [],
    "method": null,
-   "confidence": null
+   "confidence": null,
+   "identity": null
   },
   {
    "name": "IN-TM | Sun Example FHD",
@@ -34,7 +841,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "SunExample.in"
   },
   {
    "name": "(MX) (IZ) Azte Example",
@@ -47,7 +855,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "AzteExample.mx"
   },
   {
    "name": "Claro Azte Example",
@@ -60,7 +869,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "AzteExample.mx"
   },
   {
    "name": "Carib (FLOW) Carib News",
@@ -73,7 +883,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "CaribNews.tt"
   },
   {
    "name": "US Example Net 5 (KXMP) Springfield",
@@ -86,7 +897,8 @@
     ]
    ],
    "method": "callsign",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "ExampleNet.us@KXMP"
   },
   {
    "name": "US Example Kids (KXMP)",
@@ -99,7 +911,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "ExampleKids.us@KXMP"
   },
   {
    "name": "US Other 7 (KXMP) Town",
@@ -116,7 +929,8 @@
     ]
    ],
    "method": "callsign",
-   "confidence": "ambiguous"
+   "confidence": "ambiguous",
+   "identity": null
   },
   {
    "name": "US Example 9 (WXMQ-TV) Town",
@@ -129,7 +943,8 @@
     ]
    ],
    "method": "callsign",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "ExampleNet.us@WXMQ"
   },
   {
    "name": "|NIGERIA| PNT",
@@ -142,7 +957,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "PeakNational.ng"
   },
   {
    "name": "IRQ: Desert One HD",
@@ -155,7 +971,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "DesertOne.iq"
   },
   {
    "name": "Desert One",
@@ -172,7 +989,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "ambiguous"
+   "confidence": "ambiguous",
+   "identity": null
   },
   {
    "name": "RU | RODINA 1 HD",
@@ -185,7 +1003,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "Rodina1.ru"
   },
   {
    "name": "GR | ELT 1",
@@ -198,7 +1017,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "Ellas1.gr"
   },
   {
    "name": "TR | Old Brand HD",
@@ -211,7 +1031,8 @@
     ]
    ],
    "method": "replaced_by",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "NewBrand.tr"
   },
   {
    "name": "TR | Gone",
@@ -219,7 +1040,8 @@
    "market_key": "gone",
    "ids": [],
    "method": null,
-   "confidence": null
+   "confidence": null,
+   "identity": null
   },
   {
    "name": "DE ||VIP| Example TV HD DE",
@@ -232,7 +1054,8 @@
     ]
    ],
    "method": "market_suffix:exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "ExampleTV.de"
   },
   {
    "name": "Al Example",
@@ -240,7 +1063,8 @@
    "market_key": "al example",
    "ids": [],
    "method": null,
-   "confidence": null
+   "confidence": null,
+   "identity": null
   },
   {
    "name": "(MX) (IZ) Azte Example HD",
@@ -253,7 +1077,8 @@
     ]
    ],
    "method": "exact",
-   "confidence": "high"
+   "confidence": "high",
+   "identity": "AzteExample.mx"
   }
  ]
 }

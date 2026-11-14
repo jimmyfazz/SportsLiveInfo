@@ -4,18 +4,89 @@
   "title": "SportsLiveInfo guide channel map (sli.guide-map/1)",
   "description": "Optional (feed 1.5+). For every guide enabled on the SportsLiveInfo host: each guide channel's id and name, the service it is (SLI service id or iptv-org dictionary id, with the method) and its programme count for the next 7 days. Ids, names and counts only; never programme text.",
   "type": "object",
-  "required": ["schema", "guides", "rules"],
+  "required": [
+    "schema",
+    "guides",
+    "rules"
+  ],
   "properties": {
-    "schema": {"const": "sli.guide-map/1"},
-    "generated_at": {"type": ["string", "null"]},
-    "rules": {"type": "object"},
-    "guides": {"type": "array", "items": {"type": "object", "required": ["source_id", "source_url", "channels"],
-      "properties": {"source_id": {"type": "string"}, "source_url": {"type": "string"},
-                     "market": {"type": ["string", "null"]},
-                     "channels": {"type": "array", "items": {"type": "object", "required": ["id", "name", "programmes_7d"],
-                       "properties": {"id": {"type": "string"}, "name": {"type": "string"},
-                                      "service": {"type": "string"},
-                                      "method": {"enum": ["registry", "identity_registry", "dictionary", "identity_dictionary"]},
-                                      "programmes_7d": {"type": "integer", "minimum": 0}}}}}}}
+    "schema": {
+      "const": "sli.guide-map/1"
+    },
+    "generated_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "rules": {
+      "type": "object"
+    },
+    "guides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source_id",
+          "source_url",
+          "channels"
+        ],
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": "string"
+          },
+          "market": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "programmes_7d"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "service": {
+                  "type": "string"
+                },
+                "method": {
+                  "enum": [
+                    "registry",
+                    "identity_registry",
+                    "dictionary",
+                    "identity_dictionary"
+                  ]
+                },
+                "programmes_7d": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "service_aliases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Dictionary id -> SLI service id where SportsLiveInfo reports guide channels of that dictionary channel under a curated service (e.g. ITV1.uk -> gb.itv.one). Optional; a reader looks up both ids."
+    }
   }
 }

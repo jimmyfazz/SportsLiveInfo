@@ -16,7 +16,11 @@
 - **Real results:**
   - The report builds in about 8 s on the owner's 25,700-entry list.
   - Region detection agrees with the research classifier on 92 %; the remaining differences are mostly the provider's "Latin" section, read as Latin America.
-- **Tests:** 269 pass, including:
+- **Region identity fix:** dictionary-identified guide channels keep their region (`France3.fr@Alsace`); one rule (`dictionary.service_identity`) for SLI, the coverage report and B1G.
+- **Guide choice reference** (`coverage.choose_guide_channels`) and `guide_map.service_aliases`.
+- **Dictionary size:** 8.8 MB → 6.7 MB with every world region on (2.8 → 2.2 MB UK/Europe), measured on the current iptv-org database; assets over B1G's 8 MiB limit are never published.
+- **B1G conformance:** the Kotlin ports in B1 (`SliDictionaryResolver`, `SliEventSlots`, `SliGuideMap`) reproduce all 15,794 dictionary, 2,516 slot and 1,200 guide-choice cases (JVM unit tests, local Kotlin compiler; the Android Gradle build is NOT RUN in the cloud session).
+- **Tests:** 275 pass, including:
   - an end-to-end multipart upload through the real handler;
   - a check that no channel-list text appears in any feed file;
   - CSRF refusal.

@@ -733,11 +733,12 @@ class Engine:
         identity_snapshot = self.store.snapshot("channel-identity") or {}
         dictionary_document = (dictionary_snapshot.get("data") or {}).get("document")
         identity_document = (identity_snapshot.get("data") or {}).get("document")
-        guide_listed, guide_map = [], {}
+        guide_listed, guide_map, service_aliases = [], {}, {}
         links = linking.broadcast_candidates(eligible, guide_sources, now, gaps=gaps,
                                              dictionary_document=dictionary_document,
                                              identity_document=identity_document,
-                                             guide_events=guide_listed, guide_map=guide_map)
+                                             guide_events=guide_listed, guide_map=guide_map,
+                                             service_aliases=service_aliases)
         for event in eligible:
             status, candidates = links.get(event["id"], ("none", []))
             event["broadcast_status"] = status
@@ -761,7 +762,8 @@ class Engine:
             "today": today,
             "epg": {"schema_version": "0.3", "generated_at": generated_at, "sources": guides,
                     "note": "Private source-specific schedules; publication rights not cleared"},
-            "guide-map": {"generated_at": generated_at, "guides": guide_map},
+            "guide-map": {"generated_at": generated_at, "guides": guide_map,
+                          "service_aliases": dict(sorted(service_aliases.items()))},
         })
 
     def _guide_sources(self, conf, summaries, include_programmes):

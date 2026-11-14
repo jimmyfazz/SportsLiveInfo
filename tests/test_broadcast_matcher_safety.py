@@ -147,9 +147,12 @@ class BroadcastMatcherSafetyTests(unittest.TestCase):
             programme("North Harbor v Westshire", "itv1", "ITV1"),
             programme("North Harbor v Westshire", "regional", "Example Regional One"),
         ], {"itv1": "ITV1", "regional": "Example Regional One"})}
-        result = linking.broadcast_candidates([fixture()], guides, START, dictionary_document=document)
+        aliases = {}
+        result = linking.broadcast_candidates([fixture()], guides, START, dictionary_document=document,
+                                              service_aliases=aliases)
         ids = [row["canonical_channel_id"] for row in result["synthetic:event:1"][1]]
         self.assertEqual(ids, ["gb.itv.one"])
+        self.assertEqual(aliases, {"ExampleOne.uk": "gb.itv.one"})   # published in guide_map for the TV
 
     def test_guide_dates_tags_and_league_badges_are_ignored(self):
         event = fixture()

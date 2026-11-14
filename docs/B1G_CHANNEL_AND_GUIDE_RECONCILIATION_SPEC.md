@@ -31,7 +31,8 @@ Status: binding for the B1G reader from SportsLiveInfo 0.3.20 (feed format `sli/
 4. **Service name in the market** (`channels.services`, `regional_services` rules): the normalised name in the channel's own market only.
 5. **Dictionary** (`dictionary.rules`, exactly as `dictionary.Resolver.resolve`).
    - Steps, in order: market key; country tag; exact / decoration / broadcast area; callsign (US/CA/CARIB); aliases; singular/plural; sport word; language variant; own-country numbered channel; live successor; own-market suffix; implied first number; plain over 4K.
-   - Must reproduce `schemas/fixtures/sli-v1/dictionary-cases.json` exactly.
+   - **Identity** of a hit: `dictionary.service_identity` — `id` for the main or a picture-quality feed, `id@Region` for exactly one regional feed ("BBCOne.uk@Wales"), none for a timeshift feed, several channels or several regions.
+   - Must reproduce `schemas/fixtures/sli-v1/dictionary-cases.json` and `dictionary-conformance/cases.json` exactly (ids, method, confidence and identity).
 6. **Event feeds and slot channels.**
    - Use `event_slots.parse_slot` and `match_slot`; the guide entry comes from the name or the linked event (contract §4.0b).
    - Must reproduce `slot-cases.json`.
@@ -51,9 +52,11 @@ Never auto-merge any of these, whatever the name says:
 ## 3. Choosing the guide for a reconciled channel
 
 1. **The provider's own guide stays primary.** If it has programmes for the channel over the next 24 hours, show it and stop. Any SLI-mapped guide is a non-destructive supplement only.
-2. Otherwise, choose among the `guide_map` channels whose `service` equals the identity. For a dictionary identity, also accept channels whose `id` before `@` equals it. Rules:
-   - The feed after `@` must agree for regional and timeshift feeds: "Wales" only for the Wales service, "Plus1" only for a +1 channel.
-   - Take the guide the owner has enabled on the TV, with the most `programmes_7d`.
+2. Otherwise choose exactly as `coverage.choose_guide_channels` (conformance: `guide-choice-cases.json`):
+   - a guide channel whose `id` equals the provider `tvg-id`; else
+   - the `guide_map` channels whose `service` is the identity, or its `service_aliases` partner (both directions); plus
+   - the same iptv-org channel (`id` before `@`) in guides that did not identify it, when the feed after `@` is exactly the identity's region ("Wales"/"WalesHD" for `…@Wales`; none, "HD", "SD", "UK", "UKHD" for the national channel), never a timeshift feed, and never another country's feed for the channel's market.
+   - Only guides the owner has enabled on the TV; only guide channels with `programmes_7d` > 0; most programmes first.
    - Never take a guide channel of another service, region, country or timeshift.
 3. Event slot channels show the slot's fixture and time from the name, or the linked event. Never a "Live" state from the name alone.
 4. Nothing found: show the dictionary description (name, network, categories, website) as an information card, and offer the channel in the review list.
@@ -64,7 +67,9 @@ Never auto-merge any of these, whatever the name says:
 |---|---|
 | `schemas/fixtures/sli-v1/matching-cases.json` | guide channel → service (registry, crosswalk, foreign-id hard negatives) |
 | `schemas/fixtures/sli-v1/dictionary-cases.json` | provider name + market → dictionary identity (every rule) |
-| `schemas/fixtures/sli-v1/slot-cases.json` | event slot parsing and event linking |
+| `schemas/fixtures/sli-v1/dictionary-conformance/` | 15,794 provider-style names over 3,138 public channels: ids, method, confidence, identity |
+| `schemas/fixtures/sli-v1/slot-cases.json`, `slot-conformance.json` | event slot parsing and event linking (2,516 names, five clocks, both UK clock changes) |
+| `schemas/fixtures/sli-v1/guide-choice-cases.json` | guide channel choice from `guide_map` (1,200 combinations) |
 | golden feed `schemas/fixtures/sli-v1/v1/` | reading every asset, including `guide_map` |
 
 **Acceptance on the owner's real list (local):**

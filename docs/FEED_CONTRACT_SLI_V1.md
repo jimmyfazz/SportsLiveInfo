@@ -35,7 +35,7 @@ v1/assets/<kind>/<sha256[:24]>.json   immutable, content-addressed assets
 | `health` | `sli.health/1` | no | Source states and guide coverage per family, measured on the HA host |
 | `identity` (since 1.1, capability `channel_identity`) | `sli.identity/1` | no | **Channel identity graph.** Guide channels linked across guides because they show the same programmes at the same times and their names agree apart from decoration. Members `{source_id, channel_id}` per service; `timeshifts` (+1/+2 channels with their base channel); `sources` with guide URLs. Channel ids and names only, never programme data. Generated `<mk>.auto.*` ids are join keys valid within one revision; curated ids are stable |
 
-JSON is UTF-8, compact, keys sorted. The SHA-256 in the manifest covers the exact bytes.
+JSON is UTF-8, compact, keys sorted. The SHA-256 in the manifest covers the exact bytes. No asset exceeds 8 MiB (B1G's `MAX_ASSET_BYTES`): an optional asset above it is left out of the feed and a required one stops the build.
 
 ## 3. Manifest essentials
 
@@ -64,7 +64,7 @@ SportsLiveInfo **must not** make a breaking change inside `v1/`. A future `v2/` 
 
 | `dictionary` (since 1.2, capability `channel_dictionary`) | `sli.dictionary/1` | no | **UK and Europe channel dictionary** from the public-domain iptv-org database (when the owner enables it), plus any **optional world regions** the owner switched on (`regions`, since 0.3.18): channel id, name, alternative names, country, network, owners, categories, website, launched, closed/replaced_by, and feeds (regional/HD/+1) with broadcast-area countries. Includes `market_countries`, `bare_market_codes`, `group_markets`, `country_tags`, `aliases`, `language_variants` and lookup `rules` |
 
-| `guide_map` (since 1.5, capability `guide_map`) | `sli.guide-map/1` | no | For every guide enabled on the SLI host: each guide channel's `id`, `name`, the `service` it is (SLI service id or dictionary id) with `method`, and `programmes_7d`. Ids, names and counts only. B1G uses it to pick the guide channel for an identified provider channel. |
+| `guide_map` (since 1.5, capability `guide_map`) | `sli.guide-map/1` | no | For every guide enabled on the SLI host: each guide channel's `id`, `name`, the `service` it is (SLI service id or dictionary id) with `method`, and `programmes_7d`. Ids, names and counts only. Optional `service_aliases` (dictionary id → SLI service id). B1G uses it to pick the guide channel for an identified provider channel (reference: `coverage.choose_guide_channels`). |
 
 **The complete order of work for B1G is in [B1G channel and guide reconciliation — authoritative specification](B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md).**
 

@@ -26,6 +26,9 @@ FORMAT_MAJOR, FORMAT_MINOR = 1, 5  # 1.1: optional `identity` asset; 1.2: option
 # `country_tags` and the 0.3.18 lookup rules (country tag, callsign, transliteration, successor, own-market suffix);
 # 1.5: optional `guide_map` asset (what each guide channel is)
 ROOT = "v1"
+# B1G refuses any asset above this size (SliFeedContract.MAX_ASSET_BYTES, sized for 32-bit Fire TV sticks).
+# An optional asset over it is not published; a required one fails the build loudly.
+MAX_READER_ASSET_BYTES = 8 * 1024 * 1024
 LONDON = ZoneInfo("Europe/London")
 
 EVENT_FIELDS = (
@@ -212,11 +215,14 @@ def guide_map_document(store):
             "guides": [{"source_id": source_id, "source_url": providers.EPG[source_id][1],
                         "market": COUNTRY_BY_SOURCE.get(source_id), "channels": channels}
                        for source_id, channels in sorted(guides.items()) if source_id in providers.EPG],
+            "service_aliases": {str(k): str(v) for k, v in sorted((data.get("service_aliases") or {}).items())},
             "rules": {"service": "SLI service id (registry/identity methods) or iptv-org dictionary id "
                                  "(dictionary methods); absent when the guide channel is not identified",
                       "use": "after B1G identifies a provider channel (user mapping > provider tvg-id > service id > "
                              "dictionary id), take the guide channel with that id or service, preferring the one with "
-                             "the most programmes_7d; never a guide channel of another service, region or +1"}}
+                             "the most programmes_7d; never a guide channel of another service, region or +1",
+                      "service_aliases": "dictionary id -> SLI service id where SportsLiveInfo reports that "
+                                         "dictionary channel under a curated service; look up both"}}
 
 
 def dictionary_document(store, conf):
@@ -328,6 +334,10 @@ def build_feed(store, now=None, previous_revision=None, private=False):
 
     def add(kind, obj, schema, required, **extra):
         data = _json(obj)
+        if len(data) > MAX_READER_ASSET_BYTES:
+            if required:
+                raise ValueError("required feed asset %s exceeds the reader limit" % kind.split(":")[0])
+            return                     # e.g. a dictionary with every world region switched on
         digest = hashlib.sha256(data).hexdigest()
         path = "%s/assets/%s/%s.json" % (ROOT, kind.split(":")[0], digest[:24])
         files[path] = data
