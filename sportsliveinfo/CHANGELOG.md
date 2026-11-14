@@ -2,6 +2,26 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.20 — Channel coverage on Home Assistant; guide channel map; B1G reconciliation spec
+
+- **New *Channel coverage* page (local only).** Import your provider's channel list (M3U or text).
+  - **Privacy:** it is stored only in the App's database on Home Assistant, never published or sent to GitHub. Stream addresses, which contain your provider login, are discarded while the file is read; only category, name and the provider's own guide id (`tvg-id`) are kept.
+  - **What the report shows, for every linear channel** (entertainment, movies, kids, news, documentaries, music, sport, religious …):
+    - whether it is identified (the provider's `tvg-id` first, then the channel dictionary);
+    - which guide carries it, from the guides you have on or the guides available.
+  - **Breakdowns** by type of channel and by market.
+  - **Recommendations:** which guides to switch on, in order of new channels covered, and which dictionary regions you need.
+  - **Download:** a per-channel CSV that stays on your device.
+- **Guide survey** (button on the same page): every guide in the catalogue, including those marked "verify", is downloaded once in the background. Only channel ids, names and programme counts are kept. Nothing is switched on, and unreachable guides are reported, not retried in a loop. This measures Scandinavian, Eastern European, Turkish, Middle East and Indian guides that cannot be tested from outside your network.
+- **Guide channel map** (feed format 1.5, asset `guide_map`, public and private feeds):
+  - **Contents:** for every guide you have enabled, each guide channel's id, name, the service it is and its programme count for the next 7 days. Ids and names only, never programme text.
+  - **Use in B1G:** to reconcile a provider channel to the right guide channel by id instead of by name.
+- **[B1G channel and guide reconciliation specification](../docs/B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md):** one binding order of work for the TV.
+  - **Precedence:** provider guide primary; user mapping, then provider `tvg-id`, crosswalk, service name, dictionary, event slots, local stations, fingerprint; ambiguous results never applied.
+  - **Guide choice:** feed-aware, never another region, country or +1.
+  - **Conformance:** fixtures, plus acceptance by comparing B1G's per-channel result with the Home Assistant CSV (≥ 99 % agreement, zero region/+1/foreign errors).
+- Measured on the owner's list with the guides available from GitHub: the report builds in about 8 s for 25,700 channels. Its recommendations put the Sky guide first, then France + beIN, Portugal, EPGTalk US and Spain.
+
 ## 0.3.19 — EPGTalk UK fixed; 8× faster channel matching; Sky guide reads its ids
 
 - **EPGTalk UK guide failed at every refresh** since it grew past 100,000 programmes (14 Nov: 102,312, 10.7 MB). Its limits are now 20 MB / 180,000 programmes, and the current file imports.

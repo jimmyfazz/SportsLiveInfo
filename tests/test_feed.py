@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "schemas" / "fixtures" / "sli-v1"
 SCHEMAS = {"sli.manifest/1": "sli-manifest", "sli.taxonomy/1": "sli-taxonomy", "sli.channels/1": "sli-channels",
            "sli.events-day/1": "sli-events-day", "sli.today/1": "sli-today", "sli.health/1": "sli-health",
-           "sli.identity/1": "sli-identity", "sli.dictionary/1": "sli-dictionary"}
+           "sli.identity/1": "sli-identity", "sli.dictionary/1": "sli-dictionary", "sli.guide-map/1": "sli-guide-map"}
 NOW = datetime(2026, 11, 14, 14, 0, tzinfo=timezone.utc)
 _spec = importlib.util.spec_from_file_location("feed_fixtures", ROOT / "tools" / "generate_feed_fixtures.py")
 fixtures_tool = importlib.util.module_from_spec(_spec)
@@ -95,7 +95,13 @@ class GoldenFixtureContractTests(unittest.TestCase):
             schema = load_schema(asset["schema"])
             validate(json.loads(data), schema, schema)
             kinds.add(asset["kind"].split(":")[0])
-        self.assertEqual(kinds, {"taxonomy", "channels", "identity", "dictionary", "events", "today", "health"})
+        self.assertEqual(kinds, {"taxonomy", "channels", "identity", "dictionary", "guide_map", "events", "today",
+                                 "health"})
+        guide_map = self.asset("guide_map")
+        channels = {(g["source_id"], c["id"]): c for g in guide_map["guides"] for c in g["channels"]}
+        self.assertEqual(channels[("epgtalk_uk", "SkySpMainEvHD.uk")]["service"], "gb.sky.sports.main_event")
+        self.assertNotIn("service", channels[("epgtalk_uk", "SkySpMainEv1.uk")])     # +1 is never the base service
+        self.assertNotIn("title", json.dumps(guide_map))                            # no programme text
         self.assertEqual(sum(a["kind"].startswith("events:") for a in self.manifest["assets"]), 8)
 
     def asset(self, kind):

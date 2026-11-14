@@ -7,6 +7,21 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 14 November 2026 — 0.3.20 channel coverage, guide survey, guide map, B1G spec
+
+- **Local *Channel coverage* page:** M3U/text import that discards URLs; per-channel identity and guide for every genre; recommendations; CSV export.
+- **Guide survey:** a background job, at most once a day per guide, that keeps channel indexes only.
+- **`guide_map` asset** (feed 1.5).
+- **B1G reconciliation spec.**
+- **Real results:**
+  - The report builds in about 8 s on the owner's 25,700-entry list.
+  - Region detection agrees with the research classifier on 92 %; the remaining differences are mostly the provider's "Latin" section, read as Latin America.
+- **Tests:** 269 pass, including:
+  - an end-to-end multipart upload through the real handler;
+  - a check that no channel-list text appears in any feed file;
+  - CSRF refusal.
+- **NOT RUN:** the survey against the live "verify" hosts (blocked in the cloud session; it runs on Home Assistant).
+
 ## 14 November 2026 — 0.3.19 import fix and performance
 
 - **Owner's Home Assistant log:** EPGTalk UK had failed at every refresh with "exceeded an import size or record limit": 102,312 programmes against a 100,000 cap. The limit is raised and the real file now imports.

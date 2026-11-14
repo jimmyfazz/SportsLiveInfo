@@ -64,6 +64,10 @@ SportsLiveInfo **must not** make a breaking change inside `v1/`. A future `v2/` 
 
 | `dictionary` (since 1.2, capability `channel_dictionary`) | `sli.dictionary/1` | no | **UK and Europe channel dictionary** from the public-domain iptv-org database (when the owner enables it), plus any **optional world regions** the owner switched on (`regions`, since 0.3.18): channel id, name, alternative names, country, network, owners, categories, website, launched, closed/replaced_by, and feeds (regional/HD/+1) with broadcast-area countries. Includes `market_countries`, `bare_market_codes`, `group_markets`, `country_tags`, `aliases`, `language_variants` and lookup `rules` |
 
+| `guide_map` (since 1.5, capability `guide_map`) | `sli.guide-map/1` | no | For every guide enabled on the SLI host: each guide channel's `id`, `name`, the `service` it is (SLI service id or dictionary id) with `method`, and `programmes_7d`. Ids, names and counts only. B1G uses it to pick the guide channel for an identified provider channel. |
+
+**The complete order of work for B1G is in [B1G channel and guide reconciliation — authoritative specification](B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md).**
+
 ### 4.0 Using the dictionary (B1G reader)
 
 1. Determine the channel's market from the provider category (e.g. "UK |" → GB, "INT \| France" → FR) or from its name prefix ("|NO|" → NO). World markets (only present when the owner enabled the region): US, CA, AU, NZ, IN, PK, BD, NP, IR, VN, PH, and the multi-country **group markets** MENA, AFRICA, CARIB, LATAM, KU (Kurdish) for provider sections that mix countries.

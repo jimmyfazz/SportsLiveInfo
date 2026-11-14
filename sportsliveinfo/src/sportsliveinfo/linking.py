@@ -331,6 +331,33 @@ def _dictionary_hit(resolver, source_id, display_name, channel_id=None):
     return channel_id, tuple(channel.get("categories", []))
 
 
+def guide_channel_map(guides, channel_identities, now, days=7):
+    """{source_id: [{"id", "name", "service", "method", "programmes_7d"}]}: what each guide channel is.
+
+    Ids, names and counts only (no programme text). B1G uses it to pick the guide channel for a provider
+    channel it has identified (provider tvg-id, SLI service id or dictionary id), see the feed contract.
+    """
+    until = now + timedelta(days=days)
+    out = {}
+    for source_id, guide in guides:
+        counts = defaultdict(int)
+        for programme in guide.get("programmes") or []:
+            try:
+                if _dt(programme["start_utc"]) < until and _dt(programme["end_utc"]) > now:
+                    counts[str(programme.get("channel_id", ""))] += 1
+            except (KeyError, ValueError, TypeError):
+                continue
+        rows = []
+        for channel_id, name in sorted((guide.get("channels") or {}).items()):
+            identity = channel_identities.get((source_id, str(channel_id)))
+            row = {"id": str(channel_id), "name": str(name)[:120], "programmes_7d": counts.get(str(channel_id), 0)}
+            if identity and identity[0]:
+                row["service"], row["method"] = identity[0], identity[1]
+            rows.append(row)
+        out[source_id] = rows
+    return out
+
+
 def _channel_identity_index(epg_guides, dictionary_document=None, identity_document=None):
     """Resolve guide channels through the curated registry, identity graph and dictionary.
 
@@ -745,7 +772,7 @@ def _allocate_regions(found, matched, observed):
 
 
 def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_document=None, identity_document=None,
-                         guide_events=None, guide_days=8):
+                         guide_events=None, guide_days=8, guide_map=None):
     """Return {event_id: (status, [candidate...])} for the given events.
 
     When ``guide_events`` is a list, live sport listed on recognised channels that
@@ -776,6 +803,8 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
     # Bound each lookup by the longest accepted programme and the kickoff tolerance.
     coverage = {} if gaps is not None else None
     channel_identities, guides = _channel_identity_index(epg_guides or {}, dictionary_document, identity_document)
+    if guide_map is not None:
+        guide_map.update(guide_channel_map(guides, channel_identities, now))
     rows = _programme_index(guides, window_start, window_end,
                             include_non_matches=gaps is not None, coverage=coverage,
                             channel_identities=channel_identities)
