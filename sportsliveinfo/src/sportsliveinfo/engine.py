@@ -131,6 +131,23 @@ _GH_REPO = re.compile(r"[A-Za-z0-9._-]{1,100}")
 _GH_BRANCH = re.compile(r"[A-Za-z0-9._/-]{1,100}")
 
 
+def parse_github_repository(owner, repository):
+    """Accept a repository as a name, "owner/name" or a GitHub link; returns (owner, name).
+
+    Owners naturally paste "https://github.com/owner/name" into the repository field.
+    """
+    owner, value = str(owner or "").strip(), str(repository or "").strip()
+    match = re.match(r"^(?:https?://)?(?:www\.)?github\.com/([^/\s]+)/([^/\s?#]+)", value, re.I)
+    if match:
+        owner, value = match.group(1), match.group(2)
+    elif value.count("/") == 1:
+        owner, value = value.split("/")
+    value = value.rstrip("/")
+    if value.endswith(".git"):
+        value = value[:-4]
+    return owner.strip(), value.strip()
+
+
 def validate_github_target(owner, repository, branch):
     """One validator for save, test and publish (GitHub owner/repo/ref naming rules)."""
     ok = (isinstance(owner, str) and _GH_OWNER.fullmatch(owner) and not owner.endswith("-")
@@ -138,7 +155,11 @@ def validate_github_target(owner, repository, branch):
           and isinstance(branch, str) and _GH_BRANCH.fullmatch(branch) and ".." not in branch
           and not branch.startswith(("-", "/", ".")) and not branch.endswith(("/", ".", ".lock")) and "//" not in branch)
     if not ok:
-        raise ValueError("Invalid GitHub owner, repository or branch")
+        owner_ok = isinstance(owner, str) and bool(_GH_OWNER.fullmatch(owner)) and not owner.endswith("-")
+        repo_ok = isinstance(repository, str) and bool(_GH_REPO.fullmatch(repository)) and repository not in (".", "..")
+        field = "owner" if not owner_ok else "repository name" if not repo_ok else "branch"
+        raise ValueError("Invalid GitHub %s: use e.g. owner jimmyfazz, repository LiveSports-EPG-private, "
+                         "branch main (a github.com link in the repository field also works)" % field)
     return owner, repository, branch
 
 

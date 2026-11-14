@@ -244,6 +244,20 @@ class BroadcastMatcherSafetyTests(unittest.TestCase):
             identity_document=SPORTS_IDENTITY)
         self.assertIn(event["id"], result)
 
+    def test_radio_commentary_on_a_tv_channel_is_never_a_candidate(self):
+        event = fixture()
+        for title in ("Live: Radio Commentary", "Live Audio Commentary"):
+            with self.subTest(title=title):
+                result = linking.broadcast_candidates(
+                    [event], {"farleyflex": guide([programme(title, subtitle="Synthetic Cup: North Harbor v Westshire")])},
+                    START, identity_document=SPORTS_IDENTITY)
+                self.assertNotIn(event["id"], result)
+        found = []
+        linking.broadcast_candidates([], {"farleyflex": guide([programme("Live: Radio Commentary",
+                                                                         subtitle="North Harbor v Westshire")])},
+                                     START - timedelta(hours=1), guide_events=found)
+        self.assertEqual(found, [])
+
 
 if __name__ == "__main__":
     unittest.main()

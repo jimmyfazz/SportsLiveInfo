@@ -2,6 +2,12 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.16 — Radio commentary excluded; repository fields accept links
+
+- Listings for radio or audio-only commentary on a TV channel (for example a club channel's "Live: Radio Commentary") are no longer offered as a channel for the match, either as a fixture link or as a guide-listed event.
+- The Publishing page's repository fields (public and private feed) accept a GitHub link (`https://github.com/owner/name`), `owner/name` or the bare name, and say which field is invalid. Previously a pasted link was rejected with a generic message, so the private feed settings appeared not to save.
+- Documentation: new [14 November handover](../docs/HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md) (state, decisions, outstanding work, B1G plan) and refreshed current status.
+
 ## 0.3.15 — France and Europe: channel identification and live sport
 
 - **Channel dictionary fallbacks**, tried only when a name does not resolve as written, and published in the dictionary asset so B1G applies the same rules:
