@@ -23,7 +23,8 @@
   - 13 more sources added; xz support added.
   - Correction: Turkish beIN 1–4 no longer resolve to the Middle East channels.
   - The private per-channel table stays outside the repository.
-- **Tests:** 253 passed locally. New `dictionary-cases.json` and matching cases for B1G.
+- **Third pass:** event-slot parser and matcher (1,483 / 1,500 correct round-trip, 0 wrong); US local stations by network + city (about 380); Latin American country tags (Latin America 59.1 → 69.1 %); whole list 50.1 %.
+- **Tests:** 260 passed locally. New `dictionary-cases.json` and matching cases for B1G.
 - **Blocked or NOT RUN:** live tests of the verify sources; B1G use; on-device checks.
 
 ## 13 November 2026 — 0.3.5 source connections and coverage

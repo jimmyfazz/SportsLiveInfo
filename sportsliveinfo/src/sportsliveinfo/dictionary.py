@@ -59,7 +59,9 @@ MARKET_COUNTRIES = {
     "MENA": "QA SA AE EG KW BH OM LB JO IQ SY MA DZ TN LY PS YE SD MR".split(),
     "AFRICA": "NG ZA KE GH ET TZ UG CM CI SN CD AO MZ ZM ZW RW SO ML BF GA CG BJ TG MG GN NE".split(),
     "CARIB": "JM TT BB DO PR HT BS GY SR LC GD VC AG DM KN CW AW".split(),
-    "LATAM": "MX AR CO CL PE VE BR EC UY PY BO CR GT HN SV NI PA US".split(),
+    # Spanish-speaking countries first; the US (where many Latin American feeds are registered) next;
+    # Brazil (Portuguese-language feeds) last.
+    "LATAM": "MX AR CO CL PE VE EC UY PY BO CR GT HN SV NI PA US BR".split(),
 }
 # Multi-country provider sections ("AR | Food Music & West Asia", "AFRICA") tag each channel with its
 # country or platform: "|NIGERIA| AIT", "IRQ: Al Iraqia", "DSTV | M-Net". In those markets the tag
@@ -76,8 +78,17 @@ COUNTRY_TAGS = {
 _COUNTRY_TAG = re.compile(r"^\s*(?:\|\s*([A-Za-z ]{2,20}?)\s*\||([A-Za-z]{2,6})\s*[|:])")
 
 
+# Latin American country codes in brackets at the start of a name in US/Canadian/Latin sections:
+# "(MX) (IZ) Azteca Uno (Cancun)", "(PY) Claro SNT". Never "(FR)"/"(EN)"/"(ES)", which are languages there.
+_LATAM_BRACKET = re.compile(r"^\s*\((MX|AR|CO|CL|PE|VE|BR|EC|UY|PY|BO|CR|GT|HN|SV|NI|PA|DO|PR|CU)\)\s", re.I)
+_LATAM_BRACKET_MARKETS = {"US", "CA", "LATAM", "CARIB"}
+
+
 def country_tag(name, market):
-    """ISO country named by a group-market section tag ("|NIGERIA| ...", "IQ: ...", "DSTV | ..."), else None."""
+    """ISO country named by a section tag ("|NIGERIA| ...", "IQ: ...", "DSTV | ...", "(MX) ..."), else None."""
+    bracket = _LATAM_BRACKET.match(str(name))
+    if bracket and str(market or "").upper() in _LATAM_BRACKET_MARKETS:
+        return bracket.group(1).upper()
     if str(market or "").upper() not in GROUP_MARKETS:
         return None
     match = _COUNTRY_TAG.match(str(name))
@@ -232,7 +243,9 @@ def build_document(channels_csv, feeds_csv, regions_csv="", extra_regions=()):
                          "broadcast_area, i.e. as a foreign channel broadcasting into the market); (6, last) '<name> 1' as '<name>' when '<name> 2' exists in the "
                          "market. Any step: when candidates differ only by a 4K/UHD version and the provider name has "
                          "no 4K/UHD marker, the plain channel is chosen (method suffix ':plain_not_4k')",
-            "country_tag": "group_markets only: a leading section tag naming a country ('|NIGERIA| ', 'IQ: ', "
+            "country_tag": "a leading '(MX)'-style bracket with a Latin American country code in US, CA, LATAM or "
+                           "CARIB lists puts that country first, then market_countries['LATAM'] (LATAM rules); and in "
+                           "group_markets: a leading section tag naming a country ('|NIGERIA| ', 'IQ: ', "
                            "'DSTV | ') replaces market_countries[market] with that one country for every step; the tag "
                            "is country_tags[TAG] or a two-letter code listed in market_countries[market]. Without a tag, "
                            "each lookup method pools all market_countries (not first country wins), so a name found in "
@@ -311,7 +324,13 @@ class Resolver:
         if not key or not countries:
             return None
         tagged = country_tag(name, market)
-        if tagged:
+        if tagged and _LATAM_BRACKET.match(str(name)):
+            # "(MX) …": that country first, then the rest of Latin America (pan-regional channels such as
+            # AMC or Cartoon Network Latin America are registered under the US or Brazil).
+            market = "LATAM"
+            key = market_key(name, market) or key
+            countries = [tagged] + [c for c in MARKET_COUNTRIES["LATAM"] if c != tagged]
+        elif tagged:
             countries = [tagged]
         pooled = market in GROUP_MARKETS and not tagged      # untagged in a multi-country section
 

@@ -34,8 +34,16 @@ Results of a broad research pass over the owner's channel list (private, never c
     - EPGTalk US (738 channels including regional sports networks), US local stations, Latin America (595) and free streaming channels (1,173);
     - Roku and Plex US, DStv South Africa (SuperSport), Samsung TV Plus India, Australia all cities, Sky Go NZ (100 channels, 3 months).
   - EPGTalk's existing sports guide carries per-team channels for the NFL, NBA, NHL, MLB, MLS, WNBA and European leagues; 365 of the owner's team channels match it.
+- **Event-slot channels** (new `event_slots.py`, reference for B1G; the channel names stay on the TV):
+  - The parser reads slot label, competition, fixture and start time from names such as "EPL 05 | A vs B (Sat 17:30 UK)", "DAZN 52: League| A vs. B| Sat 18 Oct 12:30 PM", "PL+ 017| A v B (2026-08-29 16:20:00)", "NFL 01: 8:15PM A @ B" and "… @ Nov 9 7:00 PM :NBA 04". It understands time zones and day/month or month/day dates.
+  - A slot links to exactly one SportsLiveInfo event: both sides must match and the start must be within 3 hours. A clock time alone never picks between two meetings of the same teams.
+  - Round-trip test on this week's real feed: 1,483 of 1,500 slot names built in five provider formats link to the right event; 17 stay unlinked, none wrong.
+  - New fixture `slot-cases.json`; feed contract §4.0b.
+- **US/Canadian local stations** without an id match: network + city ("NBC 5 (KXXX) City" → guide "NBC City"), never a "News" stream. This covers about 380 of the owner's otherwise guideless stations (`guide.local_station_key`, contract §4.0a).
+- **Latin American country tags:** "(MX)", "(PY)", "(AR)" … at the start of a name in US, CA, LATAM or CARIB lists search that country first, then Latin America, with Brazil (Portuguese) last. Latin America identification rises from 59.1 % to 69.1 %, US from 40.3 % to 41.4 %, and Mexican channels get their Mexican feeds (FX, National Geographic, History, TUDN).
 - **Measured on the owner's 21,250 linear channels:**
-  - Identification: UK/Europe 61.5 % (55.4 % before), UK/Europe sport channels 71.2 % (57.8 %), whole list with all world regions 49.6 % (20.0 %).
+  - Identification: UK/Europe 61.5 % (55.4 % before), UK/Europe sport channels 71.2 % (57.8 %), whole list with all world regions 50.1 % (20.0 %).
+  - Guide found, including local stations and event slots: US 30.3 %, Canada 38.0 %.
   - Downloadable guide from the GitHub-hosted files: France 75.4 %, Spain 72.8 %, Italy 72.7 %, UK 69.8 %, Portugal 62.7 %, Germany 56.8 %; sport channels 47.8 %.
   - Scandinavia, Poland, Turkey, Russia, the Balkans, Greece, MENA and India depend on the EPG Share / IPTV-EPG.org files, which can be tested only on Home Assistant. Ambiguous results are never applied. Two hand-checked samples (70 and 85 new matches) found the errors described in the report. The country errors were fixed before release; one short-brand mismatch remains.
 

@@ -1,0 +1,277 @@
+{
+ "schema": "sli.slot-cases/1",
+ "note": "B1G's event-slot parser must give these results for now=2026-11-14T16:00:00+00:00 and the events listed",
+ "now": "2026-11-14T16:00:00+00:00",
+ "events": [
+  {
+   "id": "a",
+   "participants": [
+    "Northtown United",
+    "Southport Rovers"
+   ],
+   "start_utc": "2026-11-14T17:30:00+00:00"
+  },
+  {
+   "id": "b",
+   "participants": [
+    "Lake City",
+    "River Wanderers"
+   ],
+   "start_utc": "2026-11-15T00:15:00+00:00"
+  },
+  {
+   "id": "c1",
+   "participants": [
+    "Hill Hawks",
+    "Bay Bears"
+   ],
+   "start_utc": "2026-11-14T22:00:00+00:00"
+  },
+  {
+   "id": "c2",
+   "participants": [
+    "Hill Hawks",
+    "Bay Bears"
+   ],
+   "start_utc": "2026-11-15T22:00:00+00:00"
+  }
+ ],
+ "cases": [
+  {
+   "name": "22. EPL 05 | Northtown United vs Southport Rovers (Sat 17:30 UK)",
+   "default_tz": "Europe/London",
+   "parsed": {
+    "slot": "EPL 05",
+    "competition": "",
+    "participants": [
+     "Northtown United",
+     "Southport Rovers"
+    ],
+    "start_utc": "2026-11-14T17:30:00Z",
+    "precision": "datetime",
+    "away_at_home": false
+   },
+   "event_id": "a"
+  },
+  {
+   "name": "CA-DAZN 52: Premier League| Northtown United vs. Southport Rovers| Sat 14 Nov 12:30 PM",
+   "default_tz": "America/New_York",
+   "parsed": {
+    "slot": "CA-DAZN 52",
+    "competition": "Premier League",
+    "participants": [
+     "Northtown United",
+     "Southport Rovers"
+    ],
+    "start_utc": "2026-11-14T17:30:00Z",
+    "precision": "datetime",
+    "away_at_home": false
+   },
+   "event_id": "a"
+  },
+  {
+   "name": "PL+ 017|  Northtown United v Southport Rovers - Player Cam (2026-11-14 17:30:00)",
+   "default_tz": "Europe/London",
+   "parsed": {
+    "slot": "PL+ 017",
+    "competition": "Player Cam",
+    "participants": [
+     "Northtown United",
+     "Southport Rovers"
+    ],
+    "start_utc": "2026-11-14T17:30:00Z",
+    "precision": "datetime",
+    "away_at_home": false
+   },
+   "event_id": "a"
+  },
+  {
+   "name": "National League 8 | Northtown United vs Southport Rovers // UK Sat 14 Nov 5:30pm // ET Sat 14 Nov 12:30pm",
+   "default_tz": "America/New_York",
+   "parsed": {
+    "slot": "National League 8",
+    "competition": "",
+    "participants": [
+     "Northtown United",
+     "Southport Rovers"
+    ],
+    "start_utc": "2026-11-14T17:30:00Z",
+    "precision": "datetime",
+    "away_at_home": false
+   },
+   "event_id": "a"
+  },
+  {
+   "name": "NFL 01: 7:15PM River Wanderers @ Lake City",
+   "default_tz": "America/New_York",
+   "parsed": {
+    "slot": "NFL 01",
+    "competition": "",
+    "participants": [
+     "River Wanderers",
+     "Lake City"
+    ],
+    "start_utc": "2026-11-15T00:15:00Z",
+    "precision": "time",
+    "away_at_home": true
+   },
+   "event_id": "b"
+  },
+  {
+   "name": "MLB 01 |  Lake City x River Wanderers start:2026-11-15 00:15:00 stop:2026-11-15 03:00:00",
+   "default_tz": "America/New_York",
+   "parsed": {
+    "slot": "MLB 01",
+    "competition": "",
+    "participants": [
+     "Lake City",
+     "River Wanderers"
+    ],
+    "start_utc": "2026-11-15T00:15:00Z",
+    "precision": "datetime",
+    "away_at_home": false
+   },
+   "event_id": "b"
+  },
+  {
+   "name": "Fite TV 3 HD: TrillerTV-Example League 2025/26: Lake City vs River Wanderers - Sat,14 Nov 19:15 ET",
+   "default_tz": "Europe/London",
+   "parsed": {
+    "slot": "Fite TV 3 HD",
+    "competition": "TrillerTV-Example League 2025/26",
+    "participants": [
+     "Lake City",
+     "River Wanderers"
+    ],
+    "start_utc": "2026-11-15T00:15:00Z",
+    "precision": "datetime",
+    "away_at_home": false
+   },
+   "event_id": "b"
+  },
+  {
+   "name": "Lake City vs River Wanderers (Lake) @ Nov 14 7:15 PM :NBA  04",
+   "default_tz": "America/New_York",
+   "parsed": {
+    "slot": "NBA  04",
+    "competition": "",
+    "participants": [
+     "Lake City",
+     "River Wanderers"
+    ],
+    "start_utc": "2026-11-15T00:15:00Z",
+    "precision": "datetime",
+    "away_at_home": false
+   },
+   "event_id": "b"
+  },
+  {
+   "name": "PPV EVENT 09: Lake City vs. River Wanderers (11.14 7:15 PM ET)",
+   "default_tz": "Europe/London",
+   "parsed": {
+    "slot": "PPV EVENT 09",
+    "competition": "",
+    "participants": [
+     "Lake City",
+     "River Wanderers"
+    ],
+    "start_utc": "2026-11-15T00:15:00Z",
+    "precision": "datetime",
+    "away_at_home": false
+   },
+   "event_id": "b"
+  },
+  {
+   "name": "NCAAF 02 Lake City vs River Wanderers 715PM",
+   "default_tz": "America/New_York",
+   "parsed": {
+    "slot": "NCAAF 02",
+    "competition": "",
+    "participants": [
+     "Lake City",
+     "River Wanderers"
+    ],
+    "start_utc": "2026-11-15T00:15:00Z",
+    "precision": "time",
+    "away_at_home": false
+   },
+   "event_id": "b"
+  },
+  {
+   "name": "NHL 01: 5:00PM Bay Bears @ Hill Hawks",
+   "default_tz": "America/New_York",
+   "parsed": {
+    "slot": "NHL 01",
+    "competition": "",
+    "participants": [
+     "Bay Bears",
+     "Hill Hawks"
+    ],
+    "start_utc": "2026-11-14T22:00:00Z",
+    "precision": "time",
+    "away_at_home": true
+   },
+   "event_id": null
+  },
+  {
+   "name": "NHL 01 | Bay Bears @ Hill Hawks (Sat 22:00 UK)",
+   "default_tz": "Europe/London",
+   "parsed": {
+    "slot": "NHL 01",
+    "competition": "",
+    "participants": [
+     "Bay Bears",
+     "Hill Hawks"
+    ],
+    "start_utc": "2026-11-14T22:00:00Z",
+    "precision": "datetime",
+    "away_at_home": true
+   },
+   "event_id": "c1"
+  },
+  {
+   "name": "EPL 05 | Northtown United vs Lake City (Sat 17:30 UK)",
+   "default_tz": "Europe/London",
+   "parsed": {
+    "slot": "EPL 05",
+    "competition": "",
+    "participants": [
+     "Northtown United",
+     "Lake City"
+    ],
+    "start_utc": "2026-11-14T17:30:00Z",
+    "precision": "datetime",
+    "away_at_home": false
+   },
+   "event_id": null
+  },
+  {
+   "name": "NO: V SPORT 1 HD",
+   "default_tz": "Europe/London",
+   "parsed": null,
+   "event_id": null
+  },
+  {
+   "name": "AL: X Premium 2 HD",
+   "default_tz": "Europe/London",
+   "parsed": null,
+   "event_id": null
+  },
+  {
+   "name": "L1 Pass 03 | PSG vs Troyes (Sat 20:05 UK)",
+   "default_tz": "Europe/London",
+   "parsed": {
+    "slot": "L1 Pass 03",
+    "competition": "",
+    "participants": [
+     "PSG",
+     "Troyes"
+    ],
+    "start_utc": "2026-11-14T20:05:00Z",
+    "precision": "datetime",
+    "away_at_home": false
+   },
+   "event_id": null
+  }
+ ]
+}

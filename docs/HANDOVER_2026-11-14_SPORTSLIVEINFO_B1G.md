@@ -74,7 +74,7 @@ Phases (one small PR each, real emulator evidence, report anything NOT RUN):
 - **P2** channel identity for the **current account**: channels + dictionary assets; precedence user mapping > provider epg id > crosswalk > service name > dictionary; never merge regional/+1/Sky Sports+/numbered; hidden channels respected; reproduce `schemas/fixtures/sli-v1/matching-cases.json`.
 - **P3** Sports Today: events + `broadcast_links` mapped to the account's channels; a *TV region* setting (England/Scotland/Wales/NI) applies `coverage`/`not_on`; "listed in TV guide (unverified)"; no "Live now" from programme start alone.
 - **P4** on-device guide-listed live sport: port §4.4 to Kotlin over the provider's own EPG cache; local only.
-- **P5** event-slot channels (fixture + time in the name) bound to feed events; local only.
+- **P5** event-slot channels (fixture + time in the name) bound to feed events; local only. Reference parser and matcher `event_slots.py` (0.3.18), contract §4.0b, fixture `slot-cases.json`.
 - **P6** guide matching fallback via canonical ids/dictionary; closed-channel notes.
 
 The full terminal prompt for this work was given to the owner on 14 November; its constraints are those in B1 `CLAUDE.md` (no TiviMate decompilation, no DRM circumvention, no credentials or personal data in commits, no paid APIs, TMDB/OMDb local, persistent player, D-pad and focus rules).
@@ -82,7 +82,7 @@ The full terminal prompt for this work was given to the owner on 14 November; it
 ## 7. Operating notes
 
 - **Release:** bump `sportsliveinfo/config.yaml`, `sportsliveinfo/Dockerfile` (`BUILD_VERSION`) and `sportsliveinfo/src/sportsliveinfo/__init__.py`; changelog entry; `PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py`; full test suite; PR; CI green; Home Assistant backup of the app; squash-merge; on Home Assistant refresh the app store (it caches the repository) and update.
-- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (253 tests at 0.3.18).
+- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (260 tests at 0.3.18).
 - **Benchmarks** used public UK guides (farleyflex, Freeview, EPGTalk UK), feed revisions from `LiveSports-EPG`, the iptv-org CSVs and the owner's private channel list; scripts and data are kept outside the repositories. Only GitHub-hosted guides are reachable from cloud sessions; iptv-epg.org, epgshare01 and xmltvfr.fr are blocked there.
 - **Privacy:** never commit the owner's channel list, credentials, tokens, LAN addresses or personal details; use synthetic names in tests.
 

@@ -444,6 +444,27 @@ def market_key(name, market):
 _WORLD_TAG_MARKETS = {"US", "CA", "MENA", "AFRICA", "CARIB", "LATAM", "IN", "PK", "VN", "PH", "IR", "KU", "NP", "BD"}
 
 
+_LOCAL_NETWORKS = r"(abc|cbs|nbc|fox|pbs|cw|mytv|univision|telemundo|unimas|ion|ctv|global|citytv|cbc|tva)"
+_LOCAL_LINEUP = re.compile(_LOCAL_NETWORKS + r"\s*\d*\s*\(\s*[KWC][A-Z]{2,3}[^)]*\)\s*-?\s*([A-Za-z .'-]+?)"
+                           r"(?:,\s*[A-Z]{2})?\s*(?:\(|$|\bHD\b|\bFHD\b)", re.I)
+_LOCAL_GUIDE = re.compile(r"^(?:\d+(?:\.\d+)?\s+)?(?:(?:US|CA)\s*-\s*)?" + _LOCAL_NETWORKS + r"\s+(?!news\b)([A-Za-z .'-]+?)\.?$",
+                          re.I)
+
+
+def local_station_key(name, *, guide=False):
+    """("nbc", "seattle") for a US/Canadian local station, else None.
+
+    Lineup names carry a callsign ("US NBC 5 (KING) Seattle"); guide names are "NBC Seattle" or
+    "US - NBC Seattle" (EPGTalk). A "News" stream ("US - ABC News Sacramento") is a different channel
+    and never matches. Used only as a guide-name fallback for stations without an id match.
+    """
+    match = (_LOCAL_GUIDE.match(str(name).strip()) if guide else _LOCAL_LINEUP.search(str(name)))
+    if not match:
+        return None
+    city = re.sub(r"[^a-z]", "", match.group(2).lower())
+    return (match.group(1).lower(), city) if len(city) >= 3 else None
+
+
 def canonical_channel(source_id, epg_id, display_name):
     """Conservative identity hint: never infer unknown regional or suffix variants.
 

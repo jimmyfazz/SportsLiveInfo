@@ -92,6 +92,50 @@ SportsLiveInfo **must not** make a breaking change inside `v1/`. A future `v2/` 
 10. For channels without any guide, `name`, `network`, `categories` and `website` may be shown as an information card.
 11. Attribution "Channel dictionary from the iptv-org database" (Unlicense) is listed in `rights.attribution`.
 
+### 4.0a US/Canadian local stations (B1G guide-name fallback)
+
+A local station with no id match uses `guide.local_station_key`:
+- the lineup name ("US NBC 5 (KXYZ) City") gives (network, city);
+- it matches a guide channel named "NETWORK City" or "US - NETWORK City" (EPGTalk US local and US guides).
+
+"News" streams ("US - ABC News City") are different channels and never match. Only one guide channel per (network, city) counts. Measured: about 380 of the owner's 1,847 otherwise guideless local stations.
+
+### 4.0b Event-slot channels (B1G, on the TV only)
+
+Numbered event channels whose name announces the programme are matched on the TV; their names are local lineup data and are never uploaded. Examples: "EPL 05 | Home vs Away (Sat 17:30 UK)", "DAZN 52: League| Home vs. Away| Sat 18 Oct 12:30 PM", "NFL 01: 8:15PM Away @ Home".
+
+The reference is `sportsliveinfo/src/sportsliveinfo/event_slots.py`. B1G must reproduce `schemas/fixtures/sli-v1/slot-cases.json` exactly.
+
+1. **`parse_slot(name, now, default_tz)`** reads, in order:
+   - the slot label, leading ("EPL 05 |") or trailing (":NBA  04");
+   - the start time;
+   - the fixture ("vs", "v", "@", lower-case "x");
+   - the competition text.
+
+   Time formats, in order:
+   - ISO, including `start:`… which is UTC;
+   - day + date + month;
+   - month + day;
+   - numeric date (UK "21/07" is understood);
+   - weekday + time;
+   - time alone.
+
+   Time zones:
+   - A zone word sets the zone (UK, GMT, ET, CET…), including "// UK Sat …" before a second "// ET …" copy, which is ignored.
+   - Otherwise the section's default applies: US/CA sections America/New_York, all others Europe/London.
+
+   Names that are channels, not fixtures, give no result: "V Sport 1", "X Premium", "CA V Montreal".
+2. **`match_slot(parsed, events, now)`** links the slot to exactly one SportsLiveInfo event:
+   - Both sides must match (either order), ignoring bracketed country codes.
+   - With a full date and time, the start must be within 3 hours.
+   - With a clock time alone, it must be the same time of day (±30 min) between 4 hours ago and 36 hours ahead. Two meetings of the same teams then stay unresolved.
+   - Without a time, the event must fall in that window.
+   - Otherwise, no link.
+3. **What the TV shows for a slot channel:**
+   - With a link: one guide entry, the event's title and time, plus its sport and competition from the feed.
+   - Without a link: the parsed fixture and time, marked "from the channel name".
+   - Never a "Live" state from the name alone.
+
 ### 4.1 Using the identity graph (B1G reader)
 
 The identity graph lets a provider tvg-id from one guide family use another guide's rows for the same channel:

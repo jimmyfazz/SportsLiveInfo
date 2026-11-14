@@ -241,6 +241,19 @@
    "ids": [],
    "method": null,
    "confidence": null
+  },
+  {
+   "name": "(MX) (IZ) Azte Example HD",
+   "market": "US",
+   "market_key": "azte example",
+   "ids": [
+    [
+     "AzteExample.mx",
+     null
+    ]
+   ],
+   "method": "exact",
+   "confidence": "high"
   }
  ]
 }

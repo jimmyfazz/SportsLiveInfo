@@ -247,6 +247,22 @@ StarSports1Turk.tr,Star Sports 1 Turk,,,,TR,sports,FALSE,,,,
         self.assertEqual(first("TR | StarSports 1", "TR")[0], "StarSports1Turk.tr")
         self.assertIsNone(first("Star Sport 1", "PL"))                      # foreign variants are never taken
 
+    def test_latin_american_bracket_tag_puts_that_country_first(self):
+        ch = """id,name,alt_names,network,owners,country,categories,is_nsfw,launched,closed,replaced_by,website
+CanalExample.mx,Canal Example,,,,MX,general,FALSE,,,,
+CanalExample.co,Canal Example,,,,CO,general,FALSE,,,,
+PanRegional.us,Pan Regional,,,,US,general,FALSE,,,,
+PanRegional.br,Pan Regional,,,,BR,general,FALSE,,,,
+"""
+        r = dictionary.Resolver(dictionary.build_document(ch, "channel,id,name,alt_names,is_main,broadcast_area,"
+                                                          "timezones,languages,format\n", "", list(dictionary.REGIONS)))
+        self.assertEqual(r.resolve("(MX) (IZ) Canal Example HD", "US")["ids"][0][0], "CanalExample.mx")
+        self.assertEqual(r.resolve("(CO) Claro Canal Example", "US")["ids"][0][0], "CanalExample.co")
+        # A pan-regional channel: the US registration before the Brazilian (Portuguese) one.
+        self.assertEqual(r.resolve("(AR) Claro Pan Regional HD", "LATAM")["ids"][0][0], "PanRegional.us")
+        # "(FR)" in a Canadian list is a language, never a country tag.
+        self.assertIsNone(dictionary.country_tag("CA (FR) Canal Example", "CA"))
+
     def test_own_market_suffix(self):
         self.assertEqual(self.ids("US Example Net HD US", "US")[0][0], "ExampleNet.us")
 

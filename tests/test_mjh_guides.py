@@ -80,6 +80,15 @@ class MattHuismanGuideTests(unittest.TestCase):
                          "gb.sky.sports.main_event")
         self.assertIsNone(canonical_channel("m3upt_sky", "SkySport1.de@HD", "Sky Sport 1 HD"))
 
+    def test_local_station_network_and_city(self):
+        from sportsliveinfo.guide import local_station_key as key
+        self.assertEqual(key("US NBC 5 (KXYZ) Springfield"), ("nbc", "springfield"))
+        self.assertEqual(key("US (TB) abc 10 (KXYZ-TV) Lake City, ST"), ("abc", "lakecity"))
+        self.assertEqual(key("4.1 US - CBS Springfield", guide=True), ("cbs", "springfield"))
+        self.assertEqual(key("FOX Lake City.", guide=True), ("fox", "lakecity"))
+        self.assertIsNone(key("US - ABC News Springfield", guide=True))     # a news stream, not the station
+        self.assertIsNone(key("US NBC Sports Bay Area"))                       # no callsign: not a local station
+
 
 if __name__ == "__main__":
     unittest.main()

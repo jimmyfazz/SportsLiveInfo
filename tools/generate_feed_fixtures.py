@@ -198,7 +198,51 @@ DICTIONARY_CASES = [
     ("US Example 9 (WXMQ-TV) Town", "US"), ("|NIGERIA| PNT", "AFRICA"), ("IRQ: Desert One HD", "MENA"),
     ("Desert One", "MENA"), ("RU | RODINA 1 HD", "RU"), ("GR | ELT 1", "GR"), ("TR | Old Brand HD", "TR"),
     ("TR | Gone", "TR"), ("DE ||VIP| Example TV HD DE", "DE"), ("Al Example", "AL"),
+    ("(MX) (IZ) Azte Example HD", "US"),
 ]
+
+
+SLOT_NOW = "2026-11-14T16:00:00+00:00"
+SLOT_EVENTS = [
+    {"id": "a", "participants": ["Northtown United", "Southport Rovers"], "start_utc": "2026-11-14T17:30:00+00:00"},
+    {"id": "b", "participants": ["Lake City", "River Wanderers"], "start_utc": "2026-11-15T00:15:00+00:00"},
+    {"id": "c1", "participants": ["Hill Hawks", "Bay Bears"], "start_utc": "2026-11-14T22:00:00+00:00"},
+    {"id": "c2", "participants": ["Hill Hawks", "Bay Bears"], "start_utc": "2026-11-15T22:00:00+00:00"},
+]
+SLOT_CASES = [
+    ("22. EPL 05 | Northtown United vs Southport Rovers (Sat 17:30 UK)", "Europe/London"),
+    ("CA-DAZN 52: Premier League| Northtown United vs. Southport Rovers| Sat 14 Nov 12:30 PM", "America/New_York"),
+    ("PL+ 017|  Northtown United v Southport Rovers - Player Cam (2026-11-14 17:30:00)", "Europe/London"),
+    ("National League 8 | Northtown United vs Southport Rovers // UK Sat 14 Nov 5:30pm // ET Sat 14 Nov 12:30pm",
+     "America/New_York"),
+    ("NFL 01: 7:15PM River Wanderers @ Lake City", "America/New_York"),
+    ("MLB 01 |  Lake City x River Wanderers start:2026-11-15 00:15:00 stop:2026-11-15 03:00:00", "America/New_York"),
+    ("Fite TV 3 HD: TrillerTV-Example League 2025/26: Lake City vs River Wanderers - Sat,14 Nov 19:15 ET",
+     "Europe/London"),
+    ("Lake City vs River Wanderers (Lake) @ Nov 14 7:15 PM :NBA  04", "America/New_York"),
+    ("PPV EVENT 09: Lake City vs. River Wanderers (11.14 7:15 PM ET)", "Europe/London"),
+    ("NCAAF 02 Lake City vs River Wanderers 715PM", "America/New_York"),
+    ("NHL 01: 5:00PM Bay Bears @ Hill Hawks", "America/New_York"),
+    ("NHL 01 | Bay Bears @ Hill Hawks (Sat 22:00 UK)", "Europe/London"),
+    ("EPL 05 | Northtown United vs Lake City (Sat 17:30 UK)", "Europe/London"),
+    ("NO: V SPORT 1 HD", "Europe/London"),
+    ("AL: X Premium 2 HD", "Europe/London"),
+    ("L1 Pass 03 | PSG vs Troyes (Sat 20:05 UK)", "Europe/London"),
+]
+
+
+def slot_cases():
+    from datetime import datetime
+    from sportsliveinfo import event_slots
+    now = datetime.fromisoformat(SLOT_NOW)
+    cases = []
+    for name, tz in SLOT_CASES:
+        parsed = event_slots.parse_slot(name, now=now, default_tz=tz)
+        found = event_slots.match_slot(parsed, SLOT_EVENTS, now=now) if parsed else None
+        cases.append({"name": name, "default_tz": tz, "parsed": parsed, "event_id": found["id"] if found else None})
+    return {"schema": "sli.slot-cases/1",
+            "note": "B1G's event-slot parser must give these results for now=" + SLOT_NOW + " and the events listed",
+            "now": SLOT_NOW, "events": SLOT_EVENTS, "cases": cases}
 
 
 def dictionary_cases():
@@ -235,6 +279,7 @@ def write(out=OUT):
         target.write_bytes(data)
     (out / "matching-cases.json").write_text(json.dumps(matching_cases(), ensure_ascii=False, indent=1) + "\n")
     (out / "dictionary-cases.json").write_text(json.dumps(dictionary_cases(), ensure_ascii=False, indent=1) + "\n")
+    (out / "slot-cases.json").write_text(json.dumps(slot_cases(), ensure_ascii=False, indent=1) + "\n")
     return manifest
 
 

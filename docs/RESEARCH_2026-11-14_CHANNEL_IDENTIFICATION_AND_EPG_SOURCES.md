@@ -259,3 +259,22 @@ Measured overall: whole list 49.1 → 49.6 %, sport 46.2 → 49.4 %, UK + Europe
 - EPG Share, IPTV-EPG.org, epg.pw and open-epg files can't be reached from the cloud session. Their coverage of Scandinavia, Eastern Europe, Turkey, MENA and India must be measured on Home Assistant with *Test EPG*.
 - There is no on-device check yet.
 
+## 9. Third pass — event-slot channels, US locals, Latin American tags
+
+- **Event slots:**
+  - 345 channel names in the owner's list carry a fixture. 264 parse and 256 of those have a start time.
+  - Formats found:
+    - "EPL 05 | A vs B (Sat 17:30 UK)";
+    - "DAZN NN: Competition| A vs. B| Sat 18 Oct 12:30 PM";
+    - "PL+ 017| A v B (2026-08-29 16:20:00)";
+    - "National League 8 | A vs B // UK Sat 31 Oct 3:00pm // ET …";
+    - "NFL 01: 8:15PM A vs B";
+    - "MLB 01 | A x B start:… stop:…";
+    - "Fite TV 1 HD: TrillerTV-Competition: A vs B - Sat,18 Oct 21:00 ET";
+    - "A vs B (A) @ Nov 9 7:00 PM :NBA 04";
+    - "PPV EVENT 09: A vs. B (10.18 8:00 PM ET)".
+  - The names in the list are of earlier weeks, so the linking was tested by building slot names from 300 of this week's real feed events in five formats: **1,483 / 1,500 linked correctly, 0 wrong**. Two consecutive meetings of the same teams with only a clock time are left unlinked by design.
+- **US/Canadian local stations:** EPGTalk's local guide names stations "NETWORK City". 380 of 1,847 local stations without an id match get a guide by network + city. The 64 "News" streams are separate channels and are excluded.
+- **Latin American country tags** ("(MX) (IZ) …", "(PY) Claro …") now pick the country. This was measured before and after reordering Latin America so that Brazilian (Portuguese) feeds come last; the remaining changes were checked by hand.
+- **Totals (owner's list):** identification 50.1 % of the whole list (all regions); guide found 28.0 % overall, with US 30.3 % and Canada 38.0 %. European figures are as in §8.
+
