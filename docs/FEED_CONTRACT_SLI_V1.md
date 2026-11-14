@@ -62,22 +62,25 @@ JSON is UTF-8, compact, keys sorted. The SHA-256 in the manifest covers the exac
 
 SportsLiveInfo **must not** make a breaking change inside `v1/`. A future `v2/` lives beside `v1/` until all TVs are updated.
 
-| `dictionary` (since 1.2, capability `channel_dictionary`) | `sli.dictionary/1` | no | **UK and Europe channel dictionary** from the public-domain iptv-org database (when the owner enables it): channel id, name, alternative names, country, network, owners, categories, website, launched, closed/replaced_by, and feeds (regional/HD/+1) with broadcast-area countries. Includes `market_countries`, `bare_market_codes` and lookup `rules` |
+| `dictionary` (since 1.2, capability `channel_dictionary`) | `sli.dictionary/1` | no | **UK and Europe channel dictionary** from the public-domain iptv-org database (when the owner enables it), plus any **optional world regions** the owner switched on (`regions`, since 0.3.18): channel id, name, alternative names, country, network, owners, categories, website, launched, closed/replaced_by, and feeds (regional/HD/+1) with broadcast-area countries. Includes `market_countries`, `bare_market_codes`, `group_markets`, `country_tags`, `aliases`, `language_variants` and lookup `rules` |
 
 ### 4.0 Using the dictionary (B1G reader)
 
-1. Determine the channel's market from the provider category (e.g. "UK |" → GB, "INT \| France" → FR) or from its name prefix ("|NO|" → NO).
-2. Compute `market_key(name, market)`: the published normalisation, after removing a bare upper-case code equal to the market.
-3. Look up, in order:
+1. Determine the channel's market from the provider category (e.g. "UK |" → GB, "INT \| France" → FR) or from its name prefix ("|NO|" → NO). World markets (only present when the owner enabled the region): US, CA, AU, NZ, IN, PK, BD, NP, IR, VN, PH, and the multi-country **group markets** MENA, AFRICA, CARIB, LATAM, KU (Kurdish) for provider sections that mix countries.
+2. Compute `market_key(name, market)`: the published normalisation after removing, once, a bare code equal to the market ("US Example", "Carib (FLOW) Example"), leading provider market/platform tags ("|SENEGAL| ", "IN-TM | ", "EG: ", "JOYN DE: ", "DE ||VIP| ", "Shahid | "), leading bracket tags in world markets ("(MX) (IZ) "), the LATAM platform word "Claro " and trailing platform marks ("(FL)", "(C)", "|TN|"). Bare codes of *other* markets are never removed ("Al Jazeera" in an Albanian list).
+3. **Group markets:** a leading tag naming a country (`country_tags`, or a two-letter code in `market_countries[market]`) restricts every step to that country ("|NIGERIA| AIT" is Nigeria's AIT). Without a tag, each lookup method pools all the market's countries, so a name found in two countries is ambiguous.
+4. Look up, in order:
    - exact normalised name, alternative name, or "base + feed" name of a channel in `market_countries[market]`, in list order (own country first), allowing a no-spaces fallback;
    - then decoration-only equality;
    - then channels whose feeds broadcast into those countries.
-4. One channel id is **high** confidence. Several ids are **ambiguous**: never apply them automatically.
-5. Precedence: below user manual mappings, provider tvg-id exact and `channels.source_crosswalk`.
-6. A resolved id may select a guide whose channel id equals it (many guides use these ids), or link through `identity` members.
-7. **Closed channels** never supply a guide; they only explain a name via `replaced_by`.
-8. For channels without any guide, `name`, `network`, `categories` and `website` may be shown as an information card.
-9. Attribution "Channel dictionary from the iptv-org database" (Unlicense) is listed in `rights.attribution`.
+   Cyrillic and Greek names and alternative names are also indexed in Latin script (published transliteration: Cyrillic per-letter with ya/ia, yu/iu, kh/h variants; Greek both look-alike letters "EPT" and sound "ERT").
+5. Only when nothing is found, the fallbacks in `rules.fallbacks`, in order: aliases, singular/plural, language variant, **(4)** a trailing code of the channel's own market ("ZDF HD DE"), **(5)** a closed channel's live successor (below). In US/CA/CARIB a **station callsign** in brackets ("NBC 5 (KXXX) City") matches feeds named after it; when several networks share the callsign, the one named in the provider name wins (`rules.callsign`).
+6. One channel id is **high** confidence. Several ids are **ambiguous**: never apply them automatically.
+7. Precedence: below user manual mappings, provider tvg-id exact and `channels.source_crosswalk`.
+8. A resolved id may select a guide whose channel id equals it (many guides use these ids), or link through `identity` members.
+9. **Closed channels** never supply their own guide. Since 0.3.18 a name whose closed channel(s) all name the same live successor (`replaced_by`, followed up to three times) resolves to that successor with method `replaced_by` ("FOX" in a Turkish list → NOW; "C More Hits" → TV4 Hits): the provider stream now carries it. Closures without a live successor are only explained.
+10. For channels without any guide, `name`, `network`, `categories` and `website` may be shown as an information card.
+11. Attribution "Channel dictionary from the iptv-org database" (Unlicense) is listed in `rights.attribution`.
 
 ### 4.1 Using the identity graph (B1G reader)
 

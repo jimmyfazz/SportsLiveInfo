@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from sportsliveinfo import dictionary, feed
+from sportsliveinfo import guide, dictionary, feed
 from sportsliveinfo.engine import Engine
 from sportsliveinfo.server import UI
 from sportsliveinfo.storage import Store
@@ -78,8 +78,11 @@ class DictionaryTests(unittest.TestCase):
         hit = self.resolver.resolve("BBC One Scotland HD", "GB")
         self.assertEqual(hit["ids"][0], ("BBCOne.uk", "Scotland"))
 
-    def test_closed_channels_explain_but_never_resolve(self):
-        self.assertIsNone(self.resolver.resolve("L'Equipe 21", "FR"))
+    def test_closed_channels_resolve_only_to_a_live_successor(self):
+        # 0.3.18: a rebrand recorded as replaced_by gives the successor's guide (the provider stream
+        # carries it now); a closure without a successor still never resolves (see the fallback tests).
+        self.assertEqual(self.resolver.resolve("L'Equipe 21", "FR"),
+                         {"ids": [("LEquipe.fr", None)], "method": "replaced_by", "confidence": "high"})
         self.assertEqual(self.resolver.describe("LEquipe21.fr")["replaced_by"], "LEquipe.fr")
         self.assertEqual(self.resolver.describe("CanalPlusSport.fr")["categories"], ["sports"])
 
@@ -139,6 +142,86 @@ OldChannel.fr,Old Channel,,,,FR,general,FALSE,,2025-03-01,NewChannel.fr,
         self.assertIn("fallbacks", document["rules"])
 
 
+class WorldResolutionTests(unittest.TestCase):
+    """0.3.18: optional world regions, provider grammar, callsigns, country tags, scripts, successors (synthetic)."""
+    CH = """id,name,alt_names,network,owners,country,categories,is_nsfw,launched,closed,replaced_by,website
+ExampleNet.us,Example Net,,,,US,general,FALSE,,,,
+ExampleKids.us,Example Kids,,,,US,kids,FALSE,,,,
+SunExample.in,Sun Example,,,,IN,general,FALSE,,,,
+AzteExample.mx,Azte Example,,,,MX,general,FALSE,,,,
+CaribNews.tt,Carib News,,,,TT,news,FALSE,,,,
+PeakNational.ng,Peak National,PNT,,,NG,news,FALSE,,,,
+PeakTV.gh,PNT TV,,,,GH,news,FALSE,,,,
+DesertOne.iq,Desert One,,,,IQ,general,FALSE,,,,
+DesertOne.sa,Desert One,,,,SA,general,FALSE,,,,
+Rodina1.ru,Rodina 1,Родина 1,,,RU,general,FALSE,,,,
+Ellas1.gr,ELT1,ΕΛΤ1,,,GR,general,FALSE,,,,
+OldBrand.tr,Old Brand,,,,TR,general,FALSE,,2024-02-12,NewBrand.tr,
+NewBrand.tr,New Brand,,,,TR,general,FALSE,,,,
+Gone.tr,Gone,,,,TR,general,FALSE,,2025-01-01,,
+"""
+    FD = """channel,id,name,alt_names,is_main,broadcast_area,timezones,languages,format
+ExampleNet.us,KXMP,KXMP,,FALSE,ct/USXYZ,America/Chicago,eng,1080i
+ExampleKids.us,KXMP,KXMP,,FALSE,ct/USXYZ,America/Chicago,eng,480i
+ExampleNet.us,WXMQ,WXMQ-TV,,FALSE,ct/USABC,America/New_York,eng,1080i
+"""
+    REG = "code,name,countries\n"
+
+    def setUp(self):
+        regions = list(dictionary.REGIONS)
+        self.resolver = dictionary.Resolver(dictionary.build_document(self.CH, self.FD, self.REG, regions))
+
+    def ids(self, name, market):
+        hit = self.resolver.resolve(name, market)
+        return (hit["ids"][0], hit["method"], hit["confidence"]) if hit else None
+
+    def test_world_regions_are_opt_in(self):
+        europe = dictionary.build_document(self.CH, self.FD, self.REG)
+        self.assertNotIn("ExampleNet.us", {c["id"] for c in europe["channels"]})
+        self.assertEqual(europe["regions"], [])
+        world = dictionary.build_document(self.CH, self.FD, self.REG, ["north_america"])
+        self.assertIn("ExampleNet.us", {c["id"] for c in world["channels"]})
+        self.assertNotIn("SunExample.in", {c["id"] for c in world["channels"]})
+        self.assertIn("North America", world["scope"])
+
+    def test_provider_grammar_of_world_sections(self):
+        self.assertEqual(self.ids("US Example Net HD", "US")[0][0], "ExampleNet.us")
+        self.assertEqual(self.ids("IN-TM | Sun Example FHD", "IN")[0][0], "SunExample.in")
+        self.assertEqual(self.ids("(MX) (IZ) Azte Example", "LATAM")[0][0], "AzteExample.mx")
+        self.assertEqual(self.ids("Claro Azte Example", "LATAM")[0][0], "AzteExample.mx")
+        self.assertEqual(self.ids("Carib (FLOW) Carib News", "CARIB")[0][0], "CaribNews.tt")
+        self.assertEqual(guide.market_key("Al Jazeera", "AL"), "al jazeera")          # other markets' codes kept
+        self.assertEqual(guide.market_key("CA CBC Example (FL)", "CA"), "cbc example")
+
+    def test_callsigns_pick_the_named_network(self):
+        self.assertEqual(self.ids("US Example Net 5 (KXMP) Springfield", "US"),
+                         (("ExampleNet.us", "KXMP"), "callsign", "high"))
+        self.assertEqual(self.ids("US Example Kids (KXMP)", "US")[0][0], "ExampleKids.us")
+        self.assertEqual(self.ids("US Other 7 (KXMP) Springfield", "US")[2], "ambiguous")   # name says neither
+        self.assertEqual(self.ids("US Example 9 (WXMQ-TV) Town", "US")[0], ("ExampleNet.us", "WXMQ"))
+        self.assertIsNone(self.ids("Example 9 (WXMQ) Town", "GB"))                    # US/CA/Caribbean only
+
+    def test_country_tag_narrows_group_markets(self):
+        self.assertEqual(self.ids("|NIGERIA| PNT", "AFRICA")[0][0], "PeakNational.ng")   # never Ghana's PNT TV
+        self.assertEqual(self.ids("IRQ: Desert One HD", "MENA")[0][0], "DesertOne.iq")
+        self.assertEqual(self.ids("SA: Desert One", "MENA")[0][0], "DesertOne.sa")
+        self.assertEqual(self.ids("Desert One", "MENA")[2], "ambiguous")                  # untagged: owner review
+
+    def test_cyrillic_and_greek_names_match_latin_spellings(self):
+        self.assertEqual(self.ids("RU | RODINA 1 HD", "RU")[0][0], "Rodina1.ru")
+        self.assertIn("rodina 1", [t.lower() for t in dictionary.transliterate("Родина 1")])
+        self.assertIn("ELT1", dictionary.transliterate("ΕΛΤ1"))
+        self.assertEqual(self.ids("GR | ELT 1", "GR")[0][0], "Ellas1.gr")
+
+    def test_successor_only_when_the_closure_names_a_live_one(self):
+        self.assertEqual(self.ids("TR | Old Brand HD", "TR"), (("NewBrand.tr", None), "replaced_by", "high"))
+        self.assertIsNone(self.ids("TR | Gone", "TR"))
+        self.assertEqual(self.resolver.explain_closed("TR | Gone", "TR")[0]["id"], "Gone.tr")
+
+    def test_own_market_suffix(self):
+        self.assertEqual(self.ids("US Example Net HD US", "US")[0][0], "ExampleNet.us")
+
+
 class DictionaryRefreshTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -193,7 +276,7 @@ class DictionaryRefreshTests(unittest.TestCase):
     def test_sources_page_offers_the_toggle(self):
         handler = UI.__new__(UI)
         handler.server = SimpleNamespace(store=self.store, csrf="x")
-        self.assertIn("Channel identity dictionary (UK and Europe)", handler._dictionary_card(self.store.config()))
+        self.assertIn("Channel identity dictionary</h3>", handler._dictionary_card(self.store.config()))
 
     def test_retired_guides_disappear_from_saved_choices(self):
         raw = self.store._get("config")

@@ -70,6 +70,7 @@ class GoldenFixtureContractTests(unittest.TestCase):
         for path, data in files.items():
             self.assertEqual(data, (FIXTURES / path).read_bytes(), path)
         self.assertEqual(fixtures_tool.matching_cases(), json.loads((FIXTURES / "matching-cases.json").read_text()))
+        self.assertEqual(fixtures_tool.dictionary_cases(), json.loads((FIXTURES / "dictionary-cases.json").read_text()))
 
     def test_matching_cases_cover_positive_and_hard_negative_identities(self):
         cases = {(c["source_id"], c["name"]): c["canonical_id"] for c in json.loads((FIXTURES / "matching-cases.json").read_text())["cases"]}

@@ -162,7 +162,59 @@ MATCH_CASES = [
     ("fr_xmltv", "", "L'Équipe"), ("epgshare_ie", "", "RTE2"), ("epgshare_us", "", "ESPN2"), ("iptvorg_foxtel_au", "", "Fox Footy"),
     ("epgshare_hk", "", "HK: Now Sports Premier League"), ("epgshare_my", "", "MYS | Astro Premier League FHD"),
     ("iptv_epg_ge", "", "Setanta Sports 2 HD"), ("epgtalk_sports", "", "Sky Sports Main Event"), ("unknown_source", "", "BBC One"),
+    # 0.3.18: a mixed guide's foreign id is never this market's service; NZ/AU sport guides.
+    ("fr_mena_grab", "beINSports1.qa@MENA", "beIN SPORTS 1"), ("fr_mena_grab", "beINSPORTS1.fr", "FR - beIN SPORTS 1"),
+    ("iptv_epg_gb", "RTEOne.ie", "RTE One"), ("mjh_skysportnow_nz", "341", "Sky Sport 1"),
+    ("iptv_epg_de", "", "Sky Sport 1"), ("mjh_kayo_au", "53211", "Fox Sports 503"),
 ]
+
+# Dictionary resolution cases (synthetic database, every 0.3.18 rule). B1G's resolver must give the same answers.
+WORLD_CHANNELS = """id,name,alt_names,network,owners,country,categories,is_nsfw,launched,closed,replaced_by,website
+ExampleNet.us,Example Net,,,,US,general,FALSE,,,,
+ExampleKids.us,Example Kids,,,,US,kids,FALSE,,,,
+SunExample.in,Sun Example,,,,IN,general,FALSE,,,,
+AzteExample.mx,Azte Example,,,,MX,general,FALSE,,,,
+CaribNews.tt,Carib News,,,,TT,news,FALSE,,,,
+PeakNational.ng,Peak National,PNT,,,NG,news,FALSE,,,,
+PeakTV.gh,PNT TV,,,,GH,news,FALSE,,,,
+DesertOne.iq,Desert One,,,,IQ,general,FALSE,,,,
+DesertOne.sa,Desert One,,,,SA,general,FALSE,,,,
+Rodina1.ru,Rodina 1,Родина 1,,,RU,general,FALSE,,,,
+Ellas1.gr,ELT1,ΕΛΤ1,,,GR,general,FALSE,,,,
+OldBrand.tr,Old Brand,,,,TR,general,FALSE,,2024-02-12,NewBrand.tr,
+NewBrand.tr,New Brand,,,,TR,general,FALSE,,,,
+Gone.tr,Gone,,,,TR,general,FALSE,,2025-01-01,,
+ExampleTV.de,Example TV,,,,DE,general,FALSE,,,,
+"""
+WORLD_FEEDS = """channel,id,name,alt_names,is_main,broadcast_area,timezones,languages,format
+ExampleNet.us,KXMP,KXMP,,FALSE,ct/USXYZ,America/Chicago,eng,1080i
+ExampleKids.us,KXMP,KXMP,,FALSE,ct/USXYZ,America/Chicago,eng,480i
+ExampleNet.us,WXMQ,WXMQ-TV,,FALSE,ct/USABC,America/New_York,eng,1080i
+"""
+DICTIONARY_CASES = [
+    ("US Example Net HD", "US"), ("US USA Example Net", "US"), ("IN-TM | Sun Example FHD", "IN"),
+    ("(MX) (IZ) Azte Example", "LATAM"), ("Claro Azte Example", "LATAM"), ("Carib (FLOW) Carib News", "CARIB"),
+    ("US Example Net 5 (KXMP) Springfield", "US"), ("US Example Kids (KXMP)", "US"), ("US Other 7 (KXMP) Town", "US"),
+    ("US Example 9 (WXMQ-TV) Town", "US"), ("|NIGERIA| PNT", "AFRICA"), ("IRQ: Desert One HD", "MENA"),
+    ("Desert One", "MENA"), ("RU | RODINA 1 HD", "RU"), ("GR | ELT 1", "GR"), ("TR | Old Brand HD", "TR"),
+    ("TR | Gone", "TR"), ("DE ||VIP| Example TV HD DE", "DE"), ("Al Example", "AL"),
+]
+
+
+def dictionary_cases():
+    from sportsliveinfo import dictionary
+    from sportsliveinfo.guide import market_key
+    resolver = dictionary.Resolver(dictionary.build_document(WORLD_CHANNELS, WORLD_FEEDS, "", list(dictionary.REGIONS)))
+    cases = []
+    for name, market in DICTIONARY_CASES:
+        hit = resolver.resolve(name, market)
+        cases.append({"name": name, "market": market, "market_key": market_key(name, market),
+                      "ids": [list(i) for i in hit["ids"]] if hit else [], "method": hit["method"] if hit else None,
+                      "confidence": hit["confidence"] if hit else None})
+    return {"schema": "sli.dictionary-cases/1",
+            "note": "B1G's dictionary resolver must return exactly these results for this synthetic database "
+                    "(channels/feeds CSV in tools/generate_feed_fixtures.py, all optional regions on)",
+            "cases": cases}
 
 
 def matching_cases():
@@ -182,6 +234,7 @@ def write(out=OUT):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
     (out / "matching-cases.json").write_text(json.dumps(matching_cases(), ensure_ascii=False, indent=1) + "\n")
+    (out / "dictionary-cases.json").write_text(json.dumps(dictionary_cases(), ensure_ascii=False, indent=1) + "\n")
     return manifest
 
 

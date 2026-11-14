@@ -7,6 +7,18 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 14 November 2026 — 0.3.18 channel identification and EPG source research
+
+- Full report: [RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md](RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md).
+- **Real results:** owner's list (private, 21,250 linear channels), measured with the app's own resolver:
+  - UK + Europe 55.4 → 60.4 %; UK + Europe sport channels 57.8 → 64.8 %;
+  - whole list 20.0 → 49.1 % with all optional regions.
+  - Precision: two hand-checked samples (70 and 85 new matches); the country errors were fixed and one short-brand mismatch remains.
+- **New sources** (off by default): eight GitHub-hosted guides were downloaded and parsed by `decode_xmltv` within their limits. 32 EPG Share / IPTV-EPG.org country files are **verify** (hosts blocked from the cloud session: NOT RUN).
+- **Source rights:** no source licenses programme data for republication; all are private use only. The iptv-org database is public domain.
+- **Tests:** 250 passed locally. New `dictionary-cases.json` and matching cases for B1G.
+- **Blocked or NOT RUN:** live tests of the verify sources; B1G use; on-device checks.
+
 ## 13 November 2026 — 0.3.5 source connections and coverage
 
 Baseline: main at `7253381` (App 0.3.4). Local EPG refreshes reserve space for the remaining scheduled slots before midnight UTC. An exhausted local budget is a deferral. Guide revalidation uses HTTP validators while saved programmes still cover upcoming airings. Sports collection reuses recent future-date results, retries failed dates and backs off after upstream throttling. The tennis connection test checks upcoming ATP, upcoming WTA and the live board. PandaScore is an optional, disabled-by-default private esports fixture source. [PandaScore upcoming matches reference](https://developers.pandascore.co/reference/get_matches_upcoming).

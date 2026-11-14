@@ -259,5 +259,18 @@ class BroadcastMatcherSafetyTests(unittest.TestCase):
         self.assertEqual(found, [])
 
 
+class ForeignGuideIdTests(unittest.TestCase):
+    """0.3.18 hard negative: a mixed guide's foreign id never becomes this market's service."""
+
+    def test_mena_bein_in_a_french_guide_is_not_bein_france(self):
+        from sportsliveinfo.guide import canonical_channel
+        self.assertIsNone(canonical_channel("fr_mena_grab", "beINSports1.qa@MENA", "beIN SPORTS 1"))
+        self.assertIsNone(canonical_channel("fr_mena_grab", "CanalPlusSport.ch", "Canal+ Sport"))
+        self.assertEqual(canonical_channel("fr_mena_grab", "beINSPORTS1.fr", "FR - beIN SPORTS 1"), "fr.bein.sports.1")
+        # Irish channels in UK guides and source-specific ids keep working.
+        self.assertEqual(canonical_channel("iptv_epg_gb", "RTEOne.ie", "RTE One"), "ie.rte.one")
+        self.assertEqual(canonical_channel("epgshare_ca", "TSN.4.HD.ca2", "TSN 4 HD"), "ca.tsn.4")
+
+
 if __name__ == "__main__":
     unittest.main()

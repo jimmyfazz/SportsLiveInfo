@@ -2,6 +2,25 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.18 — Channel identification worldwide; renames; new sport and FAST guides
+
+Results of a broad research pass over the owner's channel list (private, never committed), the public-domain iptv-org database and EPG site lists, and free guide sources. Full report: [channel identification and EPG source research](../docs/RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md).
+
+- **Provider name grammar for every market** (`market_key`): leading market and platform tags such as "|SENEGAL| ", "IN-TM | ", "EG: ", "JOYN DE: ", "DE ||VIP| ", "Shahid | ", "(MX) (IZ) ", "Carib (FLOW) ", "Claro ", trailing "(FL)"/"(C)"/"|TN|", and quality glued to a number ("DAZN 1HD"). The market's own code is removed only once ("US USA Network" keeps "USA"), and other markets' codes never ("Al Jazeera").
+- **Renames followed:** a closed channel whose database entry names a live successor now resolves to it ("FOX" in a Turkish list → NOW, "C More Hits" → TV4 Hits, "Viasat Sport" → V Sport, "C More Sport" (FI) → MTV Urheilu, L'Équipe 21 → L'Équipe). Closures with no successor (C8, Game One) are still only explained. Russian Viasat channels → viju (alias). Premier Sports 1/2 (listed as Irish in the database) now resolve in UK lists.
+- **Own-market suffix:** "ZDF HD DE" in a German list resolves as ZDF.
+- **Cyrillic and Greek** names in the database also match Latin spellings ("Rossiya 1", "EPT 1").
+- **Optional world regions for the channel dictionary** (Sources page, all off by default): North America; Latin America and the Caribbean; Middle East and North Africa; South Asia; Sub-Saharan Africa; Asia-Pacific. With them: US/Canadian **station callsigns** ("NBC 5 (KFYR) Minot" → NBC's KFYR feed), and **country tags** in multi-country sections ("|NIGERIA| AIT" is Nigeria's AIT, never Ghana's). An untagged name found in two countries of such a section is ambiguous, never guessed.
+- **New guides, all off by default, private use only:**
+  - New Zealand sport · Sky Sport Now (Sky Sport 1–9, Premier League, Select, ESPN), Australia sport · Kayo (Fox Sports 503–506, Fox Cricket/League/Footy);
+  - UK free streaming channels · Plex, Samsung TV Plus, Pluto TV (Stingray, Qwest TV, Vevo, Rakuten TV, Sky Sports Stories/Classics);
+  - Spain including Movistar Plus+ (M+ LaLiga, Liga de Campeones, Vamos) and DAZN · EPG dobleM; France + beIN Sports MENA/FR/EN, OSN and MBC · Fazzani/grab; Portugal (Sport TV 1–7, DAZN PT) · M3UPT;
+  - to verify with *Test EPG*: EPG Share DE, ES, IT, NL, CH, SE, NO, DK, FI, TR, RO, BG, HU, CZ, SK, HR, BA, AL, SA, EG and beIN MENA; IPTV-EPG.org SE, NO, DK, TR, PT, PL, RU, AL, BG, CZ, HU, RO.
+- **Channel registry:** Sky Sport NZ 1–9/Premier League/Select and Fox Sports AU 503–507/More/News.
+- **Hard negative:** a guide channel whose own id names another country ("beINSports1.qa@MENA" in the France + MENA guide) never becomes this market's service (beIN Sports 1 France).
+- Feed format 1.4: the dictionary asset adds `regions`, `group_markets`, `country_tags` and the rules above; new cross-language fixture `schemas/fixtures/sli-v1/dictionary-cases.json` for B1G.
+- **Measured on the owner's 21,250 linear channels:** UK/Europe (default settings) 60.4 % identified (55.4 % before), UK/Europe sport channels 64.8 % (57.8 %); with all world regions 49.1 % of the whole list (20.0 %). Ambiguous results are never applied. Two hand-checked samples (70 and 85 new matches) found the errors described in the report. The country errors were fixed before release; one short-brand mismatch remains.
+
 ## 0.3.17 — Connection tests run in the background
 
 - *Test saved GitHub connection* and *Test private feed connection* now start the test in the background and return at once; refresh the Publishing page to see "Last test: Passed/Failed" with the reason. Running up to three GitHub requests inside the page request let Home Assistant remote access drop the connection before the answer arrived ("unexpectedly closed the connection"), so the result was never shown.

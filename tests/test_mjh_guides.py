@@ -39,5 +39,20 @@ class MattHuismanGuideTests(unittest.TestCase):
                          "Source URL is not on the approved HTTPS provider list")
 
 
+    def test_sport_guides_are_opt_in_and_map_to_canonical_services(self):
+        for source, market in (("mjh_skysportnow_nz", "NZ"), ("mjh_kayo_au", "AU")):
+            providers.verify_url(providers.EPG[source][1])
+            self.assertIn("raw.githubusercontent.com/matthuisman/i.mjh.nz/master/", providers.EPG[source][1])
+            self.assertEqual(providers.EPG_FAMILY[source], "mjh")
+            self.assertEqual(COUNTRY_BY_SOURCE[source], market)
+        from sportsliveinfo.guide import canonical_channel
+        self.assertEqual(canonical_channel("mjh_skysportnow_nz", "341", "Sky Sport 1"), "nz.sky.sport.1")
+        self.assertEqual(canonical_channel("mjh_skysportnow_nz", "355", "Sky Sport Premier League"),
+                         "nz.sky.sport.premier_league")
+        self.assertEqual(canonical_channel("mjh_kayo_au", "53211", "Fox Sports 503"), "au.fox.sports.503")
+        # "Sky Sport 1" in a German or UK guide is never the NZ channel.
+        self.assertIsNone(canonical_channel("iptv_epg_de", "x", "Sky Sport 1"))
+
+
 if __name__ == "__main__":
     unittest.main()
