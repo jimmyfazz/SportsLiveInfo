@@ -8,7 +8,7 @@
 |---|---|---|
 | SportsLiveInfo (SLI) Home Assistant app | `jimmyfazz/SportsLiveInfo` (public source) → owner's Home Assistant, slug `106c7bd5_sportsliveinfo` | **0.3.17** installed, auto-update on |
 | Public feed | `jimmyfazz/LiveSports-EPG` (public), `v1/manifest.json` | `sli/1.3`; ~4,400 events; D8 channel links on ~50 events; published on the schedule 04:00/12:00/17:00 Europe/London |
-| Private feed | `jimmyfazz/LiveSports-EPG-private` (private) | Code ready (0.3.14); **owner still to enable** on the Publishing page |
+| Private feed | `jimmyfazz/LiveSports-EPG-private` (private, `main` exists) | Enabled; **connection test passed 14 Nov 09:41 UTC** (token authenticated, repository confirmed private, write access confirmed). First publication pending: *Publish now* or the next scheduled run |
 | B1G Android app | `jimmyfazz/B1`, `platforms/android/` | Does **not** read SLI yet; next project (§6) |
 
 Home Assistant backups of the app are taken before every update (named "SportsLiveInfo <old> before <new> update"; e.g. `f4d5a9e9` before 0.3.15).
@@ -46,7 +46,7 @@ All in `sportsliveinfo/src/sportsliveinfo/`; B1G must reproduce the published ru
 ## 5. Outstanding
 
 **Owner actions**
-1. Enable the private feed: edit the *SportsLiveInfo Publisher* fine-grained token on GitHub to include `LiveSports-EPG-private` (Contents: Read and write); then Publishing → Private feed → repository `LiveSports-EPG-private` (a GitHub link also works from 0.3.16), Enable, Save, *Test private feed connection* (refresh for the result), *Publish now*.
+1. ~~Enable the private feed~~ — done 14 Nov (token has the repository; settings saved; connection test passed). Remaining: the first private publication (*Publish now*, or wait for 12:00/17:00/04:00 UK). Verify: a new commit "SportsLiveInfo private feed …" on `LiveSports-EPG-private` and an App log line "Private feed publication finished".
 2. Check Home Assistant results (Collect now → Live today / Sports events), especially **French live sport** (Ligue 1, Top 14, cyclisme on Canal+/beIN/RMC): French guide listings could not be fetched from the cloud session, so French listing formats are unit-tested only.
 3. When the B1G reader exists: create a TV token — fine-grained, **Contents: Read-only**, `LiveSports-EPG-private` only.
 
@@ -76,3 +76,78 @@ The full terminal prompt for this work was given to the owner on 14 November; it
 - **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (241 tests at 0.3.17).
 - **Benchmarks** used public UK guides (farleyflex, Freeview, EPGTalk UK), feed revisions from `LiveSports-EPG`, the iptv-org CSVs and the owner's private channel list; scripts and data are kept outside the repositories. Only GitHub-hosted guides are reachable from cloud sessions; iptv-epg.org, epgshare01 and xmltvfr.fr are blocked there.
 - **Privacy:** never commit the owner's channel list, credentials, tokens, LAN addresses or personal details; use synthetic names in tests.
+
+## 8. Prompt for ChatGPT Codex (terminal, local B1 checkout with the emulator)
+
+```text
+You are working in the B1G repository (github.com/jimmyfazz/B1), Android app in platforms/android/.
+Goal: make B1G read the SportsLiveInfo (SLI) feed and use it for (1) live sport with the correct
+channel and (2) better guide matching — as a READ-ONLY client. Work in small PRs on your own branch;
+never push to main or merge without the owner; squash-merge only.
+
+READ FIRST (in order)
+1. B1: CLAUDE.md, AGENTS.md, docs/B1G_DELIVERY_PLAN_FOR_ALL_AGENTS.md,
+   docs/ANDROID_BUILD_AND_INSTALL_CHECKLIST.md, docs/SPORTSLIVEINFO_SHARED_EPG_AND_SPORTS_B1G_HANDOVER_2026-11-12.md.
+2. SLI (github.com/jimmyfazz/SportsLiveInfo, main — the contract owner; do NOT edit it):
+   docs/HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md (start here), docs/FEED_CONTRACTS_AND_PUBLICATION.md
+   (esp. §6.1 D8 broadcast_links, §6.2 private feed), sportsliveinfo/CHANGELOG.md (0.3.8–0.3.17),
+   schemas/*.schema.json, schemas/fixtures/sli-v1/ (golden feed + matching-cases.json),
+   sportsliveinfo/src/sportsliveinfo/{guide.py,dictionary.py,linking.py} (reference algorithms).
+3. Existing B1G code: ui/HomeSportsEvents.kt, data/SportsPriorityStore.kt, ui/EpgResolver.kt,
+   data/ChannelVisibilityStore.kt, data/EpgChannelMappingStore.kt, ui/BroadcasterEpgAliases.kt,
+   ui/SkyHomeScene.kt, ui/SkyGuideScene.kt, data/CatalogueCache.kt, data/XtreamClient.kt,
+   data/PersistentProgrammeCache.kt (all under platforms/android/app/src/main/java/com/b1giptv/player/).
+
+FEEDS
+- Public: https://raw.githubusercontent.com/jimmyfazz/LiveSports-EPG/main/v1/manifest.json
+  (format sli/1.3). Assets are content-addressed: verify sha256 and size before use; keep the
+  last good feed; obey compatibility rules (unknown fields/assets ignored; major mismatch -> keep last good).
+- Private (optional): jimmyfazz/LiveSports-EPG-private, same layout, manifest "visibility":"private".
+  Superset: all events + guide-listed live sport (origin "guide_listing") + channel_name and
+  programme times in broadcast_links. Access with a fine-grained READ-ONLY token entered by the owner
+  in Settings, stored encrypted (Android Keystore), never logged, never in URLs/commits. Prefer the
+  private manifest when readable; fall back to public; never write to GitHub from a TV.
+
+PHASES (one PR each; tests + real emulator evidence each time)
+P0 Baseline: git status/branch/latest main; build and run unit tests; record the reference-APK
+   gate status (follow the plan's instruction). Report anything NOT RUN.
+P1 Feed client: fetch/verify/cache manifest + assets (public, optional private), staleness display,
+   background refresh at reader_poll_minutes, offline last-good. Unit tests against SLI golden fixtures.
+P2 Channel identity: map the CURRENT ACCOUNT's live channels to SLI canonical ids using the channels
+   asset (services, normalisation steps, regional_services rules with parent/region, source_crosswalk)
+   and the dictionary asset (aliases, language_variants, fallbacks, closed channels).
+   Precedence: user manual mapping > provider epg_channel_id exact > crosswalk > service name >
+   dictionary. Never auto-merge regional versions, +1/+2, Sky Sports+ or numbered variants.
+   Respect ChannelVisibilityStore hidden categories/channels. Reproduce matching-cases.json exactly
+   (cross-language test). Store mappings locally only.
+P3 Sports Today rail: ingest events (events:<date> + today assets) and broadcast_links; map each
+   link's canonical id to the account's channel(s); honour coverage/not_on/parent_channel_id with a
+   new setting "TV region" (England/Scotland/Wales/Northern Ireland; default England) so regional
+   matches go to the right channel. Rank with SportsPriorityStore; keep PPV card behaviour.
+   Label links "listed in TV guide (unverified)"; never say "Live now" just because a programme
+   started; "Watch" only for a mapped, visible channel.
+P4 On-device guide-listed live sport: port SLI linking._guide_live_events (+ _allocate_regions,
+   _listing_parts, _guide_listing, _guide_sport, fixture/variant/team rules) to Kotlin and run it on
+   the PROVIDER's own EPG cache for the current account; merge with feed events (attach channels to
+   a feed event when it is the same fixture; otherwise create a local event). Local only, never
+   uploaded. Use SLI tests/test_guide_listed_events.py and test_broadcast_matcher_safety.py as specs.
+P5 Event-slot channels: bind provider event-slot channels whose names carry a fixture/time
+   (e.g. "EPL 03 | Everton vs Coventry (Fri 20:00 UK)") to feed events by teams + time; local only.
+P6 Guide matching: use canonical ids/dictionary to improve EpgResolver fallback for channels with no
+   usable provider guide id; show "channel closed (date, replacement)" for closed channels.
+
+NON-NEGOTIABLE
+- Do not decompile TiviMate; no DRM circumvention; stream proxy stays token-gated.
+- No credentials, personal names, LAN addresses, emails or the owner's channel list in commits.
+- No paid APIs; TMDB/OMDb/artwork stays local to B1G. No LLM calls at runtime.
+- One persistent player (never remount); D-pad: cross-region in MainActivity.dispatchKeyEvent +
+  global focus listener, in-scene SpatialFocusNavigator; focus visuals are Sky hairline drawables
+  (no scale/raise); keep rail geometry and one-rail-per-DOWN.
+- Provider guide stays primary; SLI never republishes programme text.
+
+BUILD/TEST
+cd platforms/android && ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
+Install: tools/android-install-latest.sh (debug package .debug, versionName carries the commit).
+Evidence per PR: unit test output, emulator screenshots of the rail/guide, install proof,
+and a list of what was NOT RUN and why. Commit format per CLAUDE.md with your own attribution.
+```

@@ -4,7 +4,7 @@
 
 - **Installed:** 0.3.17 on the owner's Home Assistant (auto-update on), backed up before each update.
 - **Public feed:** `sli/1.3`, about 4,400 events from owner-approved sources, channel registry with UK regional services, UK/Europe channel dictionary with fallback rules, and D8 channel links (`broadcast_links`: canonical ids and confidence only, never verified).
-- **Private feed:** implemented (0.3.14); every collected event plus guide-listed live sport with channel names and times. The owner has created the repository; enabling it on the Publishing page is outstanding.
+- **Private feed:** implemented (0.3.14); every collected event plus guide-listed live sport with channel names and times. Enabled and connection test passed on 14 Nov 09:41 UTC; the first private publication is pending.
 - **Live sport allocation (three public UK guides, 14–20 Nov):** 234 of 244 live UK sports broadcasts have a channel (25 of 251 before 0.3.12); 14 of 14 labelled fixtures match; no radio, shopping, +1 or radio-commentary candidates; regional opt-outs allocated correctly.
 - **Channel identification (owner's list):** France 65.5 %, UK + Europe 55.3 % by the dictionary; France 68.9 % with guide names.
 - **Not verified:** French guide listing formats (French guides unreachable from the cloud session), Docker/Supervisor build internals, and B1G device acceptance (B1G does not read SLI yet).
