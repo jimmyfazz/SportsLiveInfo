@@ -62,6 +62,28 @@ class GitHubOnboardingTests(unittest.TestCase):
         with client.open(urllib.request.Request(client.base, body, method="POST")) as response:
             self.assertIn("Invalid GitHub repository name", response.read().decode())
 
+    def test_connection_test_runs_in_background_and_reports_on_the_page_and_log(self):
+        import urllib.parse, urllib.request
+        from ingress_test_support import IngressTestClient
+        self.store.configure({"setup_complete": True, "github": {"token": "dummy-secret"},
+                              "private_feed": {"repository": "LiveSports-EPG-private", "enabled": True}})
+        client = IngressTestClient(self.store, "csrf-test", memory=True)
+        replies = [_Response({"full_name": "jimmyfazz/LiveSports-EPG-private", "private": True,
+                              "permissions": {"push": True}}), _Response({"ref": "refs/heads/main"}),
+                   _Response({"sha": "0123abcd"})]
+        body = urllib.parse.urlencode({"action": "test_private_github", "csrf": "csrf-test"}).encode()
+        with patch("sportsliveinfo.engine._github_open", side_effect=replies), \
+                self.assertLogs("sportsliveinfo", level="INFO") as logs:
+            with client.open(urllib.request.Request(client.base, body, method="POST")) as response:
+                self.assertIn("connection test started", response.read().decode())
+            client.server.engine._test_threads["private"].join(timeout=5)
+        self.assertTrue(any("connection test (private feed) succeeded" in line for line in logs.output))
+        self.assertFalse(any("dummy-secret" in line for line in logs.output))
+        with client.open(client.base + "?page=publishing") as response:
+            page = response.read().decode()
+        self.assertIn("Last test: Passed", page)
+        self.assertIn("confirmed private", page)
+
     def test_private_feed_check_refuses_a_public_repository_and_accepts_a_private_one(self):
         self.store.configure({"github": {"token": "dummy-secret"},
                               "private_feed": {"repository": "LiveSports-EPG-private", "enabled": True}})

@@ -174,6 +174,7 @@ class Engine:
         self._publish_start = threading.Lock()
         self._publish_thread = None
         self._publish_outcome = None
+        self._test_threads = {}
         # A publication cannot survive an app restart; never leave "running" shown forever.
         status = store._get("publish_status")
         if isinstance(status, dict) and status.get("state") == "running":
@@ -1029,6 +1030,42 @@ class Engine:
                     "write access confirmed (no commit or file was created).")
         return ("GitHub token authenticated, public feed branch readable and write access confirmed "
                 "(no commit or file was created). Publishing still requires approved sources.")
+
+    def start_connection_test(self, private=False):
+        """Run the GitHub connection test in the background; False if one for this target is running.
+
+        The test makes up to three GitHub requests. Inside the Ingress request, a slow
+        network or Home Assistant remote access could drop the connection before the
+        answer arrived, so the result was never seen. The page and App log show it instead.
+        """
+        target = "private" if private else "public"
+        with self._publish_start:
+            thread = self._test_threads.get(target)
+            if thread is not None and thread.is_alive():
+                return False
+            self._set_test_status(target, "running", "Connection test in progress")
+            thread = threading.Thread(target=self._connection_test_job, args=(private,),
+                                      name="sportsliveinfo-test-" + target, daemon=True)
+            self._test_threads[target] = thread
+            thread.start()
+        return True
+
+    def _set_test_status(self, target, state, message):
+        self.store._put("connection_test:" + target, {"state": state, "message": str(message)[:300], "at": utcnow()})
+
+    def _connection_test_job(self, private):
+        target = "private" if private else "public"
+        try:
+            message = self.test_github_destination(private=private)
+            state = "succeeded"
+            LOGGER.info("GitHub connection test (%s feed) succeeded: %s", target, message)
+        except (ValueError, RuntimeError, OSError) as exc:
+            message, state = str(exc)[:300], "failed"
+            LOGGER.warning("GitHub connection test (%s feed) failed: %s", target, message)
+        except Exception as exc:
+            LOGGER.exception("GitHub connection test (%s feed) failed", target)
+            message, state = "Unexpected %s; see the App log" % type(exc).__name__, "failed"
+        self._set_test_status(target, state, message)
 
     def start_publish(self):
         """Start a manual publication in the background; False if one is already running.

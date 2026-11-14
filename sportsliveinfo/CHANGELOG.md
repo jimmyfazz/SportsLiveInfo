@@ -2,6 +2,11 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.17 — Connection tests run in the background
+
+- *Test saved GitHub connection* and *Test private feed connection* now start the test in the background and return at once; refresh the Publishing page to see "Last test: Passed/Failed" with the reason. Running up to three GitHub requests inside the page request let Home Assistant remote access drop the connection before the answer arrived ("unexpectedly closed the connection"), so the result was never shown.
+- Each test result is also written to the App log (never the token), so it can be checked from Home Assistant's logs.
+
 ## 0.3.16 — Radio commentary excluded; repository fields accept links
 
 - Listings for radio or audio-only commentary on a TV channel (for example a club channel's "Live: Radio Commentary") are no longer offered as a channel for the match, either as a fixture link or as a guide-listed event.
