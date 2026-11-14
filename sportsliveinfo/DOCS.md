@@ -32,6 +32,20 @@ New guide sources and newly added sports adapters are opt-in. API-Sports product
 
 Sports source tests make one quota-accounted request. EPG tests download and parse a bounded guide. Tests may update diagnostics/quota usage but do not replace source snapshots or authorize publishing. A successful test is not a completeness or rights check.
 
+## Channel coverage (your channel list, kept on Home Assistant)
+
+1. Open **Channel coverage**. Import your provider's M3U playlist or a text file with one channel per line.
+   - The list is stored only in this App's database. It is never published or sent to GitHub.
+   - Stream addresses (which contain your provider login) are discarded while the file is read.
+2. The report shows, for every channel (entertainment, movies, kids, news, documentaries, music, sport …):
+   - whether it is identified;
+   - which guide carries it;
+   - which guides and dictionary regions to switch on.
+
+   **Download the per-channel table (CSV)** keeps a copy on your device. It is also the reference that B1G's channel matching is checked against.
+3. **Survey every guide** downloads each guide in the catalogue once, including those marked "verify". It keeps only channel names and counts and switches nothing on. Allow 20–40 minutes and about 1 GB.
+4. **Delete channel list** removes the list and the report.
+
 ## Important limits
 
 The current `sli/1.0` output has events, taxonomy, channel/guide metadata, Today grouping and health, **no EPG programme rows**. The local suggestion evaluator in `supplement.py` does not implement a public programme supplement or a B1G Guide reader. Keep provider EPG primary and preserve local account, manual mapping and hidden choices. Provisional candidates are not verified broadcasts or playable streams.

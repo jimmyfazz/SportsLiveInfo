@@ -318,20 +318,46 @@ def _dictionary_hit(resolver, source_id, display_name, channel_id=None):
     hit = resolver.resolve(display_name, market)
     if not hit or hit.get("confidence") != "high":
         return None
-    if {"ts1", "ts2"} & name_signature(display_name)[0] or any(
-            entry and entry[1] and _TIMESHIFT_FEED.search(str(entry[1])) for entry in hit.get("ids", [])):
+    if {"ts1", "ts2"} & name_signature(display_name)[0]:
         return None                       # a timeshift feed must never resolve to its base channel id
-    ids = {entry[0] for entry in hit.get("ids", []) if entry and entry[0]}
-    if len(ids) != 1:
+    # One channel; a regional feed keeps its region ("France3.fr@Alsace"), a timeshift feed gives nothing.
+    service = channel_dictionary.service_identity(hit)
+    if not service:
         return None
-    channel_id = next(iter(ids))
-    channel = resolver.channels.get(channel_id, {})
+    channel = resolver.channels.get(service.split("@", 1)[0], {})
     if channel.get("closed"):
         return None
-    return channel_id, tuple(channel.get("categories", []))
+    return service, tuple(channel.get("categories", []))
 
 
-def _channel_identity_index(epg_guides, dictionary_document=None, identity_document=None):
+def guide_channel_map(guides, channel_identities, now, days=7):
+    """{source_id: [{"id", "name", "service", "method", "programmes_7d"}]}: what each guide channel is.
+
+    Ids, names and counts only (no programme text). B1G uses it to pick the guide channel for a provider
+    channel it has identified (provider tvg-id, SLI service id or dictionary id), see the feed contract.
+    """
+    until = now + timedelta(days=days)
+    out = {}
+    for source_id, guide in guides:
+        counts = defaultdict(int)
+        for programme in guide.get("programmes") or []:
+            try:
+                if _dt(programme["start_utc"]) < until and _dt(programme["end_utc"]) > now:
+                    counts[str(programme.get("channel_id", ""))] += 1
+            except (KeyError, ValueError, TypeError):
+                continue
+        rows = []
+        for channel_id, name in sorted((guide.get("channels") or {}).items()):
+            identity = channel_identities.get((source_id, str(channel_id)))
+            row = {"id": str(channel_id), "name": str(name)[:120], "programmes_7d": counts.get(str(channel_id), 0)}
+            if identity and identity[0]:
+                row["service"], row["method"] = identity[0], identity[1]
+            rows.append(row)
+        out[source_id] = rows
+    return out
+
+
+def _channel_identity_index(epg_guides, dictionary_document=None, identity_document=None, aliases_out=None):
     """Resolve guide channels through the curated registry, identity graph and dictionary.
 
     Identity auto-ids are revision-scoped, so only curated identity ids or a
@@ -370,6 +396,8 @@ def _channel_identity_index(epg_guides, dictionary_document=None, identity_docum
                     registry_for_dictionary[hit[0]].add(registry_id)
     alias = {dict_id: next(iter(ids)) for dict_id, ids in registry_for_dictionary.items() if len(ids) == 1}
     index = {}
+    if aliases_out is not None:          # published in guide_map: a TV that identifies a channel by its
+        aliases_out.update(alias)        # dictionary id must also find rows reported under the service id
     for source_id, guide in guides:
         for channel_id, name in (guide.get("channels") or {}).items():
             key = (source_id, str(channel_id))
@@ -745,7 +773,7 @@ def _allocate_regions(found, matched, observed):
 
 
 def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_document=None, identity_document=None,
-                         guide_events=None, guide_days=8):
+                         guide_events=None, guide_days=8, guide_map=None, service_aliases=None):
     """Return {event_id: (status, [candidate...])} for the given events.
 
     When ``guide_events`` is a list, live sport listed on recognised channels that
@@ -775,7 +803,10 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
         window_start, window_end = min(window_start, now), max(window_end, now + timedelta(days=guide_days))
     # Bound each lookup by the longest accepted programme and the kickoff tolerance.
     coverage = {} if gaps is not None else None
-    channel_identities, guides = _channel_identity_index(epg_guides or {}, dictionary_document, identity_document)
+    channel_identities, guides = _channel_identity_index(epg_guides or {}, dictionary_document, identity_document,
+                                                         aliases_out=service_aliases)
+    if guide_map is not None:
+        guide_map.update(guide_channel_map(guides, channel_identities, now))
     rows = _programme_index(guides, window_start, window_end,
                             include_non_matches=gaps is not None, coverage=coverage,
                             channel_identities=channel_identities)

@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import __version__, dictionary, linking, providers, taxonomy
+from . import __version__, coverage, dictionary, linking, providers, taxonomy
 from .storage import utcnow
 
 LOGGER = logging.getLogger(__name__)
@@ -92,6 +92,40 @@ h1{font-size:21px}.card{padding:12px}.desktop-nav{display:none}
 .refresh-actions button:first-child{grid-column:1/-1}
 }
 """
+
+
+LINEUP_UPLOAD_LIMIT = 40_000_000
+
+
+def _multipart_form(content_type, body):
+    """{field: [value]} from a multipart/form-data body (text fields and one uploaded file, decoded as text)."""
+    from email.parser import BytesParser
+    from email.policy import HTTP
+    message = BytesParser(policy=HTTP).parsebytes(b"Content-Type: " + content_type.encode("latin-1", "replace")
+                                                  + b"\r\n\r\n" + body)
+    form = {}
+    for part in message.iter_parts() if message.is_multipart() else ():
+        name = part.get_param("name", header="content-disposition")
+        if not name:
+            continue
+        payload = part.get_payload(decode=True) or b""
+        form.setdefault(name, []).append(payload.decode("utf-8", errors="replace").strip()
+                                         if name != "lineup" else payload.decode("utf-8", errors="replace"))
+    return form
+
+
+def _coverage_csv(store):
+    import csv
+    import io
+    report = (store.snapshot(coverage.REPORT_PRODUCT) or {}).get("data") or {}
+    out = io.StringIO()
+    fields = ["market", "category", "name", "genre", "kind", "state", "identity", "identity_method", "match",
+              "guide_source", "guide_channel", "programmes"]
+    writer = csv.DictWriter(out, fieldnames=fields, extrasaction="ignore")
+    writer.writeheader()
+    for row in report.get("rows", []):
+        writer.writerow(row)
+    return out.getvalue()
 
 
 def e(value):
@@ -224,6 +258,10 @@ class UI(BaseHTTPRequestHandler):
             self._headers(200, "application/json")
             self.wfile.write(json.dumps({"ok": True, "version": __version__, "scheduler_heartbeat": beat}).encode())
             return
+        if route.path == "/coverage.csv":
+            self._headers(200, "text/csv; charset=utf-8")
+            self.wfile.write(_coverage_csv(self.store).encode("utf-8"))
+            return
         if route.path not in ("/", ""):
             self._headers(404)
             return
@@ -246,10 +284,15 @@ class UI(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             self._headers(400)
             return
-        if size < 0 or size > 12_000:
+        content_type = self.headers.get("Content-Type", "")
+        upload = content_type.startswith("multipart/form-data")
+        if size < 0 or size > (LINEUP_UPLOAD_LIMIT if upload else 12_000):
             self._headers(413)
             return
-        form = urllib.parse.parse_qs(self.rfile.read(size).decode("utf-8", errors="replace"), keep_blank_values=True)
+        if upload:
+            form = _multipart_form(content_type, self.rfile.read(size))
+        else:
+            form = urllib.parse.parse_qs(self.rfile.read(size).decode("utf-8", errors="replace"), keep_blank_values=True)
         value = lambda key: form.get(key, [""])[0].strip()
         # Compare bytes: str compare_digest raises TypeError on non-ASCII input.
         if not secrets.compare_digest(value("csrf").encode("utf-8"), self.server.csrf.encode("utf-8")):
@@ -262,7 +305,9 @@ class UI(BaseHTTPRequestHandler):
                 "epg": "sources", "test_source": "sources", "dictionary": "sources", "github": "publishing",
                 "test_github": "publishing", "approvals": "publishing", "publish": "publishing",
                 "private_feed": "publishing", "test_private_github": "publishing",
-                "preview_feed": "publishing", "schedule": "scheduler"}.get(action, page)
+                "preview_feed": "publishing", "schedule": "scheduler", "lineup_upload": "coverage",
+                "lineup_delete": "coverage", "coverage_survey": "coverage", "coverage_rebuild": "coverage",
+                "tv_export_upload": "coverage", "tv_export_delete": "coverage"}.get(action, page)
         try:
             page, message = self._action(action, form, value, page, message)
         except (ValueError, RuntimeError) as exc:
@@ -279,6 +324,25 @@ class UI(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _action(self, action, form, value, page, message):
+        if action == "lineup_upload":
+            count = self.engine.import_lineup(form.get("lineup", [""])[0])
+            return "coverage", "Channel list stored on this Home Assistant only (%d entries); report is being built" % count
+        if action == "lineup_delete":
+            self.engine.delete_lineup()
+            return "coverage", "Channel list and report deleted"
+        if action == "tv_export_upload":
+            count = self.engine.import_tv_export(form.get("tv_export", [""])[0])
+            return "coverage", "B1G export stored on this Home Assistant only (%d channels); comparing" % count
+        if action == "tv_export_delete":
+            self.engine.delete_tv_export()
+            return "coverage", "B1G export and comparison deleted"
+        if action == "coverage_survey":
+            started = self.engine.start_coverage(survey=True)
+            return "coverage", ("Guide survey started: every guide is downloaded once (this can take 20-40 minutes "
+                                "and about 1 GB); refresh this page for progress" if started else "Already running")
+        if action == "coverage_rebuild":
+            started = self.engine.start_coverage(survey=False)
+            return "coverage", "Report is being rebuilt" if started else "Already running"
         if action == "sports":
             name = value("provider")
             if name not in providers.SPORTS:
@@ -414,7 +478,7 @@ class UI(BaseHTTPRequestHandler):
 
     def render(self, page, config, notice, query=None):
         query = query or {}
-        tabs = [("dashboard", "Overview"), ("today", "Live today"), ("sources", "Sources & API keys"), ("events", "Sports events"), ("guide", "EPG coverage"), ("scheduler", "Scheduler"), ("publishing", "Publishing"), ("health", "Diagnostics")]
+        tabs = [("dashboard", "Overview"), ("today", "Live today"), ("sources", "Sources & API keys"), ("events", "Sports events"), ("guide", "EPG coverage"), ("coverage", "Channel coverage"), ("scheduler", "Scheduler"), ("publishing", "Publishing"), ("health", "Diagnostics")]
         if page not in {key for key, _ in tabs}:
             page = "dashboard" if config["setup_complete"] else "sources"
         # While a publication runs, the Publishing page refreshes itself so the
@@ -444,6 +508,8 @@ class UI(BaseHTTPRequestHandler):
             body = self.events(query)
         elif page == "guide":
             body = self.guide()
+        elif page == "coverage":
+            body = self.coverage_page(query)
         elif page == "scheduler":
             body = self.schedule(config)
         elif page == "publishing":
@@ -890,6 +956,107 @@ class UI(BaseHTTPRequestHandler):
                     e(row.get("a_name")), e((row.get("a") or ["?"])[0]), e(row.get("b_name")),
                     e((row.get("b") or ["?"])[0]), round(100 * float(row.get("schedule_agreement", 0))))
             body += '</table></details>'
+        return body + '</section>'
+
+    def coverage_page(self, query):
+        """Owner channel list (local only) against every guide: what is identified, what has a guide."""
+        lineup = (self.store.snapshot(coverage.LINEUP_PRODUCT) or {}).get("data") or {}
+        report = (self.store.snapshot(coverage.REPORT_PRODUCT) or {}).get("data") or {}
+        status = self.store._get("coverage:status") or {}
+        running = status.get("state") == "running"
+        body = ('<section class="card"><h2>Channel coverage</h2><p>Import your provider\'s channel list to see, '
+                'for every channel (entertainment, movies, kids, news, documentaries, music, sport …), whether it '
+                'is identified and which guide carries it, and which guides to switch on. <b>The list stays on this '
+                'Home Assistant</b>: it is never published or sent to GitHub, and stream addresses (which contain '
+                'your provider login) are discarded while the file is read.</p>')
+        upload = ('<label>M3U playlist or text file (one channel per line) <input type="file" name="lineup" '
+                  'accept=".m3u,.m3u8,.txt,.csv" required></label><button type="submit">Import channel list</button>')
+        body += ('<form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="%s">'
+                 '<input type="hidden" name="action" value="lineup_upload">%s</form>') % (e(self.server.csrf), upload)
+        if lineup.get("entries"):
+            body += '<p class="sub">%d entries imported %s.</p>' % (len(lineup["entries"]), e(when(lineup.get("imported_at"))))
+            body += self._form("coverage_survey", '<button type="submit"%s>Survey every guide</button>' % (
+                " disabled" if running else ""), '<p class="help">Downloads each guide in the catalogue once '
+                '(including those marked "verify"), keeps only channel names and counts, and never switches '
+                'anything on. Allow 20-40 minutes and about 1 GB.</p>')
+            body += self._form("coverage_rebuild", '<button type="submit"%s>Rebuild report</button>' % (
+                " disabled" if running else ""))
+            body += self._form("lineup_delete", '<button type="submit">Delete channel list</button>')
+        if status:
+            body += '<p class="sub">%s: %s (%s)</p>' % (e(status.get("state", "")), e(status.get("message", "")),
+                                                         e(when(status.get("at"))))
+        body += '</section>'
+        if not report.get("rows"):
+            return body
+        totals = report["totals"]
+        def pct(c, key):
+            return "%.0f %%" % (100.0 * c.get(key, 0) / c["channels"]) if c.get("channels") else "–"
+        def guide_pct(c):
+            n = c.get("guide_enabled", 0) + c.get("guide_available", 0) + c.get("slot_from_name", 0)
+            return "%.0f %%" % (100.0 * n / c["channels"]) if c.get("channels") else "–"
+        def table(prefix, title):
+            rows = sorted(((k[len(prefix):], v) for k, v in totals.items() if k.startswith(prefix)),
+                          key=lambda kv: -kv[1]["channels"])
+            html_rows = "".join('<tr><td>%s</td><td>%d</td><td>%s</td><td>%s</td><td>%s</td><td>%d</td></tr>' % (
+                e(name if name != "?" else "unknown"), v["channels"], pct(v, "identified"), pct(v, "guide_enabled"),
+                guide_pct(v), v.get("ambiguous", 0)) for name, v in rows)
+            return ('<section class="card"><h3>%s</h3><table><tr><th></th><th>Channels</th><th>Identified</th>'
+                    '<th>Guide now</th><th>Guide possible</th><th>Ambiguous</th></tr>%s</table></section>') % (
+                e(title), html_rows)
+        overall = totals.get("*all", {})
+        body += ('<section class="card"><h3>Overall</h3><p>%d linear and event channels: %s identified, %s with a guide '
+                 'you have switched on, %s with a guide available. Built %s.</p>') % (
+            overall.get("channels", 0), pct(overall, "identified"), pct(overall, "guide_enabled"), guide_pct(overall),
+            e(when(report.get("built_at"))))
+        if report.get("recommendations"):
+            items = "".join("<li><b>%s</b> (%s): +%d channels</li>" % (
+                e(r["source_id"]), e(providers.EPG.get(r["source_id"], ("", ""))[0]), r["adds_channels"])
+                for r in report["recommendations"])
+            body += "<p>Switch on these guides (Sources page), in this order, for the most new coverage:</p><ol>%s</ol>" % items
+        if report.get("region_recommendations"):
+            items = "".join("<li>%s: %d channels</li>" % (e(r["label"]), r["channels"])
+                            for r in report["region_recommendations"])
+            body += "<p>Dictionary regions to switch on (Sources page) to identify more channels:</p><ul>%s</ul>" % items
+        if not report.get("dictionary"):
+            body += '<p class="help">The channel dictionary is off: identification uses guide names only.</p>'
+        body += '<p><a href="coverage.csv">Download the per-channel table (CSV)</a> — stays on your device.</p></section>'
+        body += table("genre:", "By type of channel") + table("market:", "By market")
+        return body + self._tv_comparison_card()
+
+    def _tv_comparison_card(self):
+        """Acceptance: B1G's per-channel export against SportsLiveInfo's result for the same channels (local only)."""
+        comparison = (self.store.snapshot(coverage.COMPARISON_PRODUCT) or {}).get("data") or {}
+        body = ('<section class="card"><h3>Compare with B1G</h3><p>On the TV, export B1G\'s per-channel result '
+                '(same columns as the CSV above) and import it here. Each channel in your imported list is checked '
+                'against what SportsLiveInfo computes from the same published feed. The file stays on this Home '
+                'Assistant.</p>')
+        upload = ('<label>B1G channel export (CSV) <input type="file" name="tv_export" accept=".csv" required></label>'
+                  '<button type="submit">Compare</button>')
+        body += ('<form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="%s">'
+                 '<input type="hidden" name="action" value="tv_export_upload">%s</form>') % (e(self.server.csrf), upload)
+        if not comparison.get("counts"):
+            return body + '</section>'
+        c = comparison["counts"]
+        verdict = "passes" if comparison.get("passes") else "does not pass yet"
+        agreement = comparison.get("identity_agreement")
+        body += ('<p><b>Result: %s.</b> %d channels compared (%d in the export are not in your imported list). '
+                 'Identity agreement %s on %d channels both identified (target 99 %%); %d identified only by '
+                 'SportsLiveInfo, %d only by B1G. <b>Wrong region or +1: %d</b> (must be 0). Guide channel '
+                 'acceptable for %d of %d. Type %d, market %d, genre %d agree. Built %s.</p>') % (
+            e(verdict), c.get("compared", 0), c.get("not_in_list", 0),
+            ("%.2f %%" % agreement) if agreement is not None else "–", c.get("identity_both", 0),
+            c.get("identity_only_sli", 0), c.get("identity_only_tv", 0), c.get("serious", 0),
+            c.get("guide_ok", 0), c.get("guide_checked", 0), c.get("kind_agree", 0), c.get("market_agree", 0),
+            c.get("genre_agree", 0), e(when(comparison.get("built_at"))))
+        rows = sorted(comparison.get("differences") or [], key=lambda d: (not d.get("serious"), d["field"]))
+        if rows:
+            body += ('<details><summary>%d differences (serious first)</summary><table><tr><th>Category</th>'
+                     '<th>Channel</th><th>Field</th><th>SportsLiveInfo</th><th>B1G</th></tr>%s</table></details>') % (
+                c.get("differences", 0), "".join(
+                    '<tr><td>%s</td><td>%s%s</td><td>%s</td><td>%s</td><td>%s</td></tr>' % (
+                        e(d["category"]), "<b>!</b> " if d.get("serious") else "", e(d["name"]), e(d["field"]),
+                        e(d["sli"]), e(d["tv"])) for d in rows))
+        body += self._form("tv_export_delete", '<button type="submit">Delete B1G export</button>')
         return body + '</section>'
 
     def guide(self):

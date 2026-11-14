@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "schemas" / "fixtures" / "sli-v1"
 SCHEMAS = {"sli.manifest/1": "sli-manifest", "sli.taxonomy/1": "sli-taxonomy", "sli.channels/1": "sli-channels",
            "sli.events-day/1": "sli-events-day", "sli.today/1": "sli-today", "sli.health/1": "sli-health",
-           "sli.identity/1": "sli-identity", "sli.dictionary/1": "sli-dictionary"}
+           "sli.identity/1": "sli-identity", "sli.dictionary/1": "sli-dictionary", "sli.guide-map/1": "sli-guide-map"}
 NOW = datetime(2026, 11, 14, 14, 0, tzinfo=timezone.utc)
 _spec = importlib.util.spec_from_file_location("feed_fixtures", ROOT / "tools" / "generate_feed_fixtures.py")
 fixtures_tool = importlib.util.module_from_spec(_spec)
@@ -72,6 +72,31 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertEqual(fixtures_tool.matching_cases(), json.loads((FIXTURES / "matching-cases.json").read_text()))
         self.assertEqual(fixtures_tool.dictionary_cases(), json.loads((FIXTURES / "dictionary-cases.json").read_text()))
         self.assertEqual(fixtures_tool.slot_cases(), json.loads((FIXTURES / "slot-cases.json").read_text()))
+        self.assertEqual(fixtures_tool.guide_choice_cases(), json.loads((FIXTURES / "guide-choice-cases.json").read_text()))
+        self.assertEqual(fixtures_tool.reconcile_cases(), json.loads(
+            (FIXTURES / "dictionary-conformance" / "reconcile-cases.json").read_text(encoding="utf-8")))
+        self.assertEqual(fixtures_tool.standalone_cases(),
+                         json.loads((FIXTURES / "standalone" / "expected.json").read_text(encoding="utf-8")))
+        self.assertEqual(fixtures_tool.dictionary_rules(),
+                         json.loads((FIXTURES / "standalone" / "dictionary-rules.json").read_text(encoding="utf-8")))
+        self.assertEqual(fixtures_tool.slot_conformance_cases(),
+                         json.loads((FIXTURES / "slot-conformance.json").read_text(encoding="utf-8")))
+        self.assertEqual(fixtures_tool.dictionary_conformance_cases(),
+                         json.loads((FIXTURES / "dictionary-conformance" / "cases.json").read_text(encoding="utf-8")))
+
+    def test_an_asset_over_the_tv_limit_is_never_published(self):
+        big = {"schema": "sli.dictionary/1", "channels": [{"id": "X%05d.uk" % i, "name": "x" * 40, "country": "UK"}
+                                                           for i in range(2000)]}
+        with patch.object(feed, "MAX_READER_ASSET_BYTES", 60_000), patch.object(feed, "dictionary_document",
+                                                                                return_value=big):
+            manifest, _files = fixtures_tool.build()
+        kinds = {a["kind"] for a in manifest["assets"]}
+        self.assertNotIn("dictionary", kinds)                     # optional: skipped, the TV keeps everything else
+        self.assertIn("guide_map", kinds)
+        self.assertTrue(all(a["bytes"] <= 60_000 for a in manifest["assets"]))
+        with patch.object(feed, "MAX_READER_ASSET_BYTES", 1_000):
+            with self.assertRaises(ValueError):                   # required: fail loudly, never publish a dead feed
+                fixtures_tool.build()
 
     def test_matching_cases_cover_positive_and_hard_negative_identities(self):
         cases = {(c["source_id"], c["name"]): c["canonical_id"] for c in json.loads((FIXTURES / "matching-cases.json").read_text())["cases"]}
@@ -95,7 +120,14 @@ class GoldenFixtureContractTests(unittest.TestCase):
             schema = load_schema(asset["schema"])
             validate(json.loads(data), schema, schema)
             kinds.add(asset["kind"].split(":")[0])
-        self.assertEqual(kinds, {"taxonomy", "channels", "identity", "dictionary", "events", "today", "health"})
+        self.assertEqual(kinds, {"taxonomy", "channels", "identity", "dictionary", "guide_map", "events", "today",
+                                 "health"})
+        guide_map = self.asset("guide_map")
+        channels = {(g["source_id"], c["id"]): c for g in guide_map["guides"] for c in g["channels"]}
+        self.assertEqual(channels[("epgtalk_uk", "SkySpMainEvHD.uk")]["service"], "gb.sky.sports.main_event")
+        self.assertNotIn("service", channels[("epgtalk_uk", "SkySpMainEv1.uk")])     # +1 is never the base service
+        self.assertNotIn("title", json.dumps(guide_map))                            # no programme text
+        self.assertEqual(guide_map["service_aliases"], {"SkySportsMainEvent.uk": "gb.sky.sports.main_event"})
         self.assertEqual(sum(a["kind"].startswith("events:") for a in self.manifest["assets"]), 8)
 
     def asset(self, kind):

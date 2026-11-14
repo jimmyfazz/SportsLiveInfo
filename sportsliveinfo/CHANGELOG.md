@@ -2,6 +2,42 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.20 — Channel coverage on Home Assistant; guide channel map; B1G reconciliation spec
+
+- **New *Channel coverage* page (local only).** Import your provider's channel list (M3U or text).
+  - **Privacy:** it is stored only in the App's database on Home Assistant, never published or sent to GitHub. Stream addresses, which contain your provider login, are discarded while the file is read; only category, name and the provider's own guide id (`tvg-id`) are kept.
+  - **What the report shows, for every linear channel** (entertainment, movies, kids, news, documentaries, music, sport, religious …):
+    - whether it is identified (the provider's `tvg-id` first, then the channel dictionary);
+    - which guide carries it, from the guides you have on or the guides available.
+  - **Breakdowns** by type of channel and by market.
+  - **Recommendations:** which guides to switch on, in order of new channels covered, and which dictionary regions you need.
+  - **Download:** a per-channel CSV that stays on your device.
+- **Guide survey** (button on the same page): every guide in the catalogue, including those marked "verify", is downloaded once in the background. Only channel ids, names and programme counts are kept. Nothing is switched on, and unreachable guides are reported, not retried in a loop. This measures Scandinavian, Eastern European, Turkish, Middle East and Indian guides that cannot be tested from outside your network.
+- **Guide channel map** (feed format 1.5, asset `guide_map`, public and private feeds):
+  - **Contents:** for every guide you have enabled, each guide channel's id, name, the service it is and its programme count for the next 7 days. Ids and names only, never programme text.
+  - **Use in B1G:** to reconcile a provider channel to the right guide channel by id instead of by name.
+- **[B1G channel and guide reconciliation specification](../docs/B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md):** one binding order of work for the TV.
+  - **Precedence:** provider guide primary; user mapping, then provider `tvg-id`, crosswalk, service name, dictionary, event slots, local stations, fingerprint; ambiguous results never applied.
+  - **Guide choice:** feed-aware, never another region, country or +1.
+  - **Conformance:** fixtures, plus acceptance by comparing B1G's per-channel result with the Home Assistant CSV (≥ 99 % agreement, zero region/+1/foreign errors).
+- **Regional versions never merge with the national service (fix).** A guide channel identified through the dictionary as a regional feed was reported as the national channel ("France 3 Alsace" as France 3, "ITV1 Granada" as ITV1, "BBC One Wales" as BBC One wherever the curated list did not catch it first). The identity is now `id@Region` ("France3.fr@Alsace"). One rule, `dictionary.service_identity`, is used for guide channels, for the coverage report and by B1G:
+  - the main or a picture-quality feed ("HD", "UKHD") is the channel itself;
+  - exactly one regional feed keeps its region;
+  - a timeshift feed, several channels or several regions give no identity (ambiguous, review only).
+  - A side effect: each BBC One / ITV region now gets its own dictionary-to-service alias, where before the regions collided and none was published.
+- **Guide choice reference for B1G** (`coverage.choose_guide_channels`): picks guide channels from the published `guide_map` by provider `tvg-id`, then service, then the same iptv-org channel in guides that did not identify it. Regions must agree exactly ("London" never takes "London East"); never +1, never another country's feed, never a guide channel with no programmes in the next 7 days. The coverage report uses the same exact-region rule.
+- **`guide_map.service_aliases`:** dictionary id → SLI service id where SLI reports a dictionary channel under a curated service (`ITV1.uk` → `gb.itv.one`), so a TV that identifies a channel by its dictionary id finds the same guide rows.
+- **Feed assets stay within B1G's 8 MB limit.** The dictionary no longer carries feed languages, picture format or owners (none identify a channel): with every world region switched on it is 6.7 MB (was 8.8 MB, which B1G rejected); UK/Europe only is 2.2 MB (was 2.8 MB). An optional asset over 8 MB is now left out of the feed instead of being published; a required one stops the build with an error.
+- **The TV's per-channel order of work as reference code** (`coverage.reconcile_channel`): skip VOD/radio/adult/24-7, provider `tvg-id`, dictionary name rules in the channel's market, event-slot names, then guide choice. Output columns `coverage.TV_FIELDS` (the coverage CSV plus slot, slot start and linked event). Fixture `dictionary-conformance/reconcile-cases.json` (6,162 channels).
+- **Compare with B1G** (Channel coverage page, local only): import the TV's per-channel export; every channel in your imported list is checked against what SportsLiveInfo computes from the same published feed. It shows identity agreement (target 99 %), wrong region or +1 (must be 0), guide channels outside SportsLiveInfo's choice, and type/market/genre agreement, with a table of differences, serious ones first.
+- **B1G can build the dictionary itself** when this App's feed is missing or stale: `standalone/dictionary-rules.json` holds the rule tables and scope definitions B1G bundles, and `standalone/expected.json` is `build_document` over a fixed public slice of the iptv-org database (3,743 channels, 6,057 feeds, three region choices), which B1G's own build must reproduce exactly.
+- **B1G conformance fixtures** (exact answers from SportsLiveInfo's reference code, all public or synthetic):
+  - `dictionary-conformance/`: 15,794 provider-style names over 3,138 public iptv-org channels, with ids, method, confidence and identity;
+  - `slot-conformance.json`: 2,500 generated event-slot names (fictional teams) across five clocks, including both 2026 UK clock changes;
+  - `guide-choice-cases.json`: 1,200 guide choices covering regions, +1, foreign feeds, aliases and disabled guides;
+  - `dictionary-cases.json` now embeds its dictionary document.
+- Measured on the owner's list with the guides available from GitHub: the report builds in about 8 s for 25,700 channels. Its recommendations put the Sky guide first, then France + beIN, Portugal, EPGTalk US and Spain.
+
 ## 0.3.19 — EPGTalk UK fixed; 8× faster channel matching; Sky guide reads its ids
 
 - **EPGTalk UK guide failed at every refresh** since it grew past 100,000 programmes (14 Nov: 102,312, 10.7 MB). Its limits are now 20 MB / 180,000 programmes, and the current file imports.

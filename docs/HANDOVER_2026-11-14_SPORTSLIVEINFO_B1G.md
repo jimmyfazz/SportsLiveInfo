@@ -36,7 +36,7 @@ Home Assistant backups of the app are taken before every update (named "SportsLi
 
 ## 4. How matching works (reference for B1G)
 
-All in `sportsliveinfo/src/sportsliveinfo/`; B1G must reproduce the published rules exactly.
+All in `sportsliveinfo/src/sportsliveinfo/`; B1G must reproduce the published rules exactly. **The binding order of work for B1G is [B1G channel and guide reconciliation — authoritative specification](B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md)** (0.3.20): provider guide primary; user mapping > provider tvg-id (incl. `guide_map` guide ids) > crosswalk > service name > dictionary > event slots > local stations > fingerprint; ambiguous never applied; acceptance against the Home Assistant `coverage.csv`.
 
 1. **Channel registry** (`guide.py`): `SERVICES` names per market, `SOURCE_ID_CROSSWALK`, `REGIONAL_RULES` + `REGIONAL_PARENTS` (published as `regional_services` in the channels asset). English regions → network id; nations are separate services.
 2. **Dictionary** (`dictionary.py`, iptv-org database, public domain): exact/compact → decoration → broadcast area; then fallbacks: aliases → singular/plural → language variants (only with a market code or a distinctive name) → own-market suffix → live successor of a closed channel (`replaced_by`). US/CA/CARIB callsigns; country tags in group markets (MENA, AFRICA, CARIB, LATAM, KU), whose untagged names pool every country; Cyrillic/Greek transliteration; optional world regions (0.3.18). Closures without a live successor are explained, never matched. Rules published in the dictionary asset; B1G must pass `schemas/fixtures/sli-v1/dictionary-cases.json`. See [feed contract §4.0](FEED_CONTRACT_SLI_V1.md) and the [0.3.18 research](RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md).
@@ -82,7 +82,7 @@ The full terminal prompt for this work was given to the owner on 14 November; it
 ## 7. Operating notes
 
 - **Release:** bump `sportsliveinfo/config.yaml`, `sportsliveinfo/Dockerfile` (`BUILD_VERSION`) and `sportsliveinfo/src/sportsliveinfo/__init__.py`; changelog entry; `PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py`; full test suite; PR; CI green; Home Assistant backup of the app; squash-merge; on Home Assistant refresh the app store (it caches the repository) and update.
-- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (263 tests at 0.3.19).
+- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (269 tests at 0.3.20).
 - **Benchmarks** used public UK guides (farleyflex, Freeview, EPGTalk UK), feed revisions from `LiveSports-EPG`, the iptv-org CSVs and the owner's private channel list; scripts and data are kept outside the repositories. Only GitHub-hosted guides are reachable from cloud sessions; iptv-epg.org, epgshare01 and xmltvfr.fr are blocked there.
 - **Privacy:** never commit the owner's channel list, credentials, tokens, LAN addresses or personal details; use synthetic names in tests.
 

@@ -19,7 +19,7 @@ from functools import partial
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import dictionary, feed, identity, linking, providers, taxonomy
+from . import coverage, dictionary, feed, identity, linking, providers, taxonomy
 from .storage import utcnow
 from .guide import analyze_guide
 
@@ -733,11 +733,12 @@ class Engine:
         identity_snapshot = self.store.snapshot("channel-identity") or {}
         dictionary_document = (dictionary_snapshot.get("data") or {}).get("document")
         identity_document = (identity_snapshot.get("data") or {}).get("document")
-        guide_listed = []
+        guide_listed, guide_map, service_aliases = [], {}, {}
         links = linking.broadcast_candidates(eligible, guide_sources, now, gaps=gaps,
                                              dictionary_document=dictionary_document,
                                              identity_document=identity_document,
-                                             guide_events=guide_listed)
+                                             guide_events=guide_listed, guide_map=guide_map,
+                                             service_aliases=service_aliases)
         for event in eligible:
             status, candidates = links.get(event["id"], ("none", []))
             event["broadcast_status"] = status
@@ -761,6 +762,8 @@ class Engine:
             "today": today,
             "epg": {"schema_version": "0.3", "generated_at": generated_at, "sources": guides,
                     "note": "Private source-specific schedules; publication rights not cleared"},
+            "guide-map": {"generated_at": generated_at, "guides": guide_map,
+                          "service_aliases": dict(sorted(service_aliases.items()))},
         })
 
     def _guide_sources(self, conf, summaries, include_programmes):
@@ -1033,6 +1036,127 @@ class Engine:
                     "write access confirmed (no commit or file was created).")
         return ("GitHub token authenticated, public feed branch readable and write access confirmed "
                 "(no commit or file was created). Publishing still requires approved sources.")
+
+    # ---- Owner channel-list coverage (local only; nothing here is ever published) ----------
+    def import_lineup(self, text):
+        """Store the owner's channel list (M3U or text) locally; stream URLs are discarded while reading."""
+        entries = coverage.parse_lineup(text)
+        if not entries:
+            raise ValueError("No channels found in that file (expected an M3U playlist or one channel per line)")
+        self.store.save_snapshot(coverage.LINEUP_PRODUCT, {"entries": entries, "imported_at": utcnow()})
+        LOGGER.info("Channel list imported locally (%d entries)", len(entries))
+        self.start_coverage(survey=False)
+        return len(entries)
+
+    def delete_lineup(self):
+        self.store.save_snapshots({coverage.LINEUP_PRODUCT: {"entries": []}, coverage.REPORT_PRODUCT: {},
+                                   coverage.TV_EXPORT_PRODUCT: {"rows": []}, coverage.COMPARISON_PRODUCT: {}})
+
+    def import_tv_export(self, text):
+        """Store B1G's per-channel export (local CSV from the TV) and compare it with SportsLiveInfo's result."""
+        rows = coverage.parse_tv_export(text)
+        if not rows:
+            raise ValueError("That B1G export has no channels")
+        self.store.save_snapshot(coverage.TV_EXPORT_PRODUCT, {"rows": rows, "imported_at": utcnow()})
+        LOGGER.info("B1G channel export imported locally (%d rows)", len(rows))
+        self.start_coverage(survey=False)
+        return len(rows)
+
+    def delete_tv_export(self):
+        self.store.save_snapshots({coverage.TV_EXPORT_PRODUCT: {"rows": []}, coverage.COMPARISON_PRODUCT: {}})
+
+    def start_coverage(self, survey=False):
+        """Rebuild the coverage report (and first survey every guide when asked) in the background."""
+        with self._publish_start:
+            thread = self._test_threads.get("coverage")
+            if thread is not None and thread.is_alive():
+                return False
+            self.store._put("coverage:status", {"state": "running", "at": utcnow(),
+                                                "message": "Surveying guides" if survey else "Building report"})
+            thread = threading.Thread(target=self._coverage_job, args=(survey,), name="sportsliveinfo-coverage",
+                                      daemon=True)
+            self._test_threads["coverage"] = thread
+            thread.start()
+        return True
+
+    def _coverage_job(self, survey):
+        try:
+            surveyed = self._survey_guides() if survey else None
+            self._build_coverage()
+            message = "Report ready" + ("; %d guides surveyed" % surveyed if surveyed is not None else "")
+            self.store._put("coverage:status", {"state": "done", "at": utcnow(), "message": message})
+        except Exception as exc:
+            LOGGER.exception("Coverage job failed")
+            self.store._put("coverage:status", {"state": "failed", "at": utcnow(),
+                                                "message": "Failed (%s); see the App log" % type(exc).__name__})
+
+    def _survey_guides(self):
+        """Download every catalogue guide not enabled (at most once a day each) and keep a compact
+        channel index: ids, names, programme counts. Programmes themselves are not kept."""
+        enabled = {n for n, on in self.store.config()["epg"].items() if on}
+        done = 0
+        for name, (_label, url) in providers.EPG.items():
+            if name in enabled:
+                continue
+            previous = self.store.snapshot(coverage.SURVEY_PREFIX + name)
+            if previous and previous.get("updated_at", "") > (datetime.now(timezone.utc) - timedelta(hours=20)).isoformat():
+                continue
+            self.store._put("coverage:status", {"state": "running", "at": utcnow(),
+                                                "message": "Surveying guides: %s (%d done)" % (name, done)})
+            max_bytes, max_programmes = providers.EPG_LIMITS.get(name, providers.DEFAULT_EPG_LIMIT)
+            try:
+                self._reserve_epg(name)
+                guide = providers.decode_xmltv(providers.fetch(url, max_bytes=max_bytes), name,
+                                               max_programmes=max_programmes)
+                index = coverage.guide_index(name, guide)
+                index["status"] = "ok"
+                del guide
+            except QuotaExhausted as exc:
+                index = {"source_id": name, "status": "deferred", "reason": str(exc)[:200], "channels": {},
+                         "programmes": {}}
+            except Exception as exc:   # one unreachable guide never stops the survey
+                reason = (_guide_failure(exc) if isinstance(exc, (ValueError, RuntimeError, TimeoutError))
+                          else type(exc).__name__)
+                index = {"source_id": name, "status": "failed", "reason": reason[:200], "channels": {},
+                         "programmes": {}}
+            self.store.save_snapshot(coverage.SURVEY_PREFIX + name, index)
+            done += 1
+        return done
+
+    def _build_coverage(self):
+        lineup = (self.store.snapshot(coverage.LINEUP_PRODUCT) or {}).get("data") or {}
+        if not lineup.get("entries"):
+            self.store.save_snapshot(coverage.REPORT_PRODUCT, {})
+            return
+        config = self.store.config()
+        enabled_indexes, surveyed_indexes = [], []
+        for name in providers.EPG:
+            if config["epg"].get(name):
+                snapshot = self.store.snapshot("epg:" + name)
+                if snapshot and snapshot.get("data"):
+                    enabled_indexes.append(coverage.guide_index(name, snapshot["data"]))
+            else:
+                snapshot = self.store.snapshot(coverage.SURVEY_PREFIX + name)
+                if snapshot and (snapshot.get("data") or {}).get("status") == "ok":
+                    surveyed_indexes.append(snapshot["data"])
+        dictionary_snapshot = self.store.snapshot("channel-dictionary")
+        document = ((dictionary_snapshot or {}).get("data") or {}).get("document")
+        report = coverage.build_report(lineup["entries"], dictionary_document=document,
+                                       enabled_indexes=enabled_indexes, surveyed_indexes=surveyed_indexes,
+                                       now=datetime.now(timezone.utc))
+        report["built_at"] = utcnow()
+        report["dictionary"] = bool(document)
+        self.store.save_snapshot(coverage.REPORT_PRODUCT, report)
+        tv_export = (self.store.snapshot(coverage.TV_EXPORT_PRODUCT) or {}).get("data") or {}
+        if tv_export.get("rows"):
+            # The TV sees the published dictionary and guide map, so compare against exactly those.
+            published = feed.dictionary_document(self.store, config)
+            resolver = dictionary.Resolver(published) if published else None
+            comparison = coverage.compare_tv_export(lineup["entries"], tv_export["rows"], resolver=resolver,
+                                                    guide_map=feed.guide_map_document(self.store),
+                                                    now=datetime.now(timezone.utc))
+            comparison["built_at"] = utcnow()
+            self.store.save_snapshot(coverage.COMPARISON_PRODUCT, comparison)
 
     def start_connection_test(self, private=False):
         """Run the GitHub connection test in the background; False if one for this target is running.

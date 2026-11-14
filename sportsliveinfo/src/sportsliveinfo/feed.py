@@ -21,10 +21,14 @@ from zoneinfo import ZoneInfo
 from . import __version__, providers, taxonomy
 from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, REGIONAL_PARENTS, REGIONAL_RULES, SERVICES, SOURCE_ID_CROSSWALK
 
-FORMAT_MAJOR, FORMAT_MINOR = 1, 4  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset;
+FORMAT_MAJOR, FORMAT_MINOR = 1, 5  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset;
 # 1.3: optional event `broadcast_links` (owner decision D8); 1.4: dictionary `regions`, `group_markets`,
-# `country_tags` and the 0.3.18 lookup rules (country tag, callsign, transliteration, successor, own-market suffix)
+# `country_tags` and the 0.3.18 lookup rules (country tag, callsign, transliteration, successor, own-market suffix);
+# 1.5: optional `guide_map` asset (what each guide channel is)
 ROOT = "v1"
+# B1G refuses any asset above this size (SliFeedContract.MAX_ASSET_BYTES, sized for 32-bit Fire TV sticks).
+# An optional asset over it is not published; a required one fails the build loudly.
+MAX_READER_ASSET_BYTES = 8 * 1024 * 1024
 LONDON = ZoneInfo("Europe/London")
 
 EVENT_FIELDS = (
@@ -198,6 +202,29 @@ def identity_document(store):
                                    for s in used if s in providers.EPG])
 
 
+def guide_map_document(store):
+    """Published guide channel map: for every enabled guide, each channel's id, name, the service it is
+    (SLI service id or dictionary id, with the method) and its programme count for the next 7 days.
+    Ids, names and counts only: never programme text."""
+    snapshot = store.snapshot("guide-map")
+    data = (snapshot or {}).get("data") or {}
+    guides = data.get("guides") or {}
+    if not guides:
+        return None
+    return {"schema": "sli.guide-map/1", "generated_at": data.get("generated_at"),
+            "guides": [{"source_id": source_id, "source_url": providers.EPG[source_id][1],
+                        "market": COUNTRY_BY_SOURCE.get(source_id), "channels": channels}
+                       for source_id, channels in sorted(guides.items()) if source_id in providers.EPG],
+            "service_aliases": {str(k): str(v) for k, v in sorted((data.get("service_aliases") or {}).items())},
+            "rules": {"service": "SLI service id (registry/identity methods) or iptv-org dictionary id "
+                                 "(dictionary methods); absent when the guide channel is not identified",
+                      "use": "after B1G identifies a provider channel (user mapping > provider tvg-id > service id > "
+                             "dictionary id), take the guide channel with that id or service, preferring the one with "
+                             "the most programmes_7d; never a guide channel of another service, region or +1",
+                      "service_aliases": "dictionary id -> SLI service id where SportsLiveInfo reports that "
+                                         "dictionary channel under a curated service; look up both"}}
+
+
 def dictionary_document(store, conf):
     """Published UK/Europe channel dictionary (public-domain iptv-org database), when the owner enabled it."""
     if not conf.get("dictionary", {}).get("iptvorg"):
@@ -307,6 +334,10 @@ def build_feed(store, now=None, previous_revision=None, private=False):
 
     def add(kind, obj, schema, required, **extra):
         data = _json(obj)
+        if len(data) > MAX_READER_ASSET_BYTES:
+            if required:
+                raise ValueError("required feed asset %s exceeds the reader limit" % kind.split(":")[0])
+            return                     # e.g. a dictionary with every world region switched on
         digest = hashlib.sha256(data).hexdigest()
         path = "%s/assets/%s/%s.json" % (ROOT, kind.split(":")[0], digest[:24])
         files[path] = data
@@ -321,6 +352,9 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     dictionary_doc = dictionary_document(store, conf)
     if dictionary_doc:
         add("dictionary", dictionary_doc, "sli.dictionary/1", False)
+    guide_map_doc = guide_map_document(store)
+    if guide_map_doc:
+        add("guide_map", guide_map_doc, "sli.guide-map/1", False)
     for day in window:
         rows = sorted(by_day.get(day, []), key=lambda e: (e["start_utc"], e["id"]))
         add("events:" + day, {"schema": "sli.events-day/1", "date": day, "timezone": "Europe/London", "events": rows},
@@ -370,6 +404,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                          "today", "source_health", "fixture_corroboration"]
                         + (["channel_identity"] if identity_doc else [])
                         + (["channel_dictionary"] if dictionary_doc else [])
+                        + (["guide_map"] if guide_map_doc else [])
                         + (["verified_broadcasts"] if any(e["broadcast_verified"] for e in events) else [])
                         + (["broadcast_links"] if any(e.get("broadcast_links") for e in events) else []),
         "assets": assets,

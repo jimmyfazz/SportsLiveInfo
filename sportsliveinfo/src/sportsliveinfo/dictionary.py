@@ -184,10 +184,8 @@ def build_document(channels_csv, feeds_csv, regions_csv="", extra_regions=()):
             feed["alt_names"] = _split(row.get("alt_names"))
         if areas:
             feed["areas"] = areas
-        if _split(row.get("languages")):
-            feed["languages"] = _split(row.get("languages"))
-        if row.get("format"):
-            feed["format"] = row["format"]
+        # Feed languages and picture format are not used to identify channels and are not published:
+        # the asset must stay under B1G's 8 MB limit with every world region switched on.
         if row.get("is_main") == "TRUE":
             feed["main"] = True
         feeds_by_channel[row.get("channel", "")].append(feed)
@@ -204,7 +202,7 @@ def build_document(channels_csv, feeds_csv, regions_csv="", extra_regions=()):
                 continue
         entry = {"id": row["id"], "name": row.get("name", ""), "country": home}
         for field, value in (("alt_names", _split(row.get("alt_names"))), ("network", row.get("network")),
-                             ("owners", _split(row.get("owners"))), ("categories", _split(row.get("categories"))),
+                             ("categories", _split(row.get("categories"))),
                              ("website", row.get("website")), ("launched", row.get("launched")),
                              ("closed", row.get("closed")), ("replaced_by", row.get("replaced_by"))):
             if value:
@@ -266,6 +264,36 @@ def build_document(channels_csv, feeds_csv, regions_csv="", extra_regions=()):
         },
         "channels": channels,
     }
+
+
+# Feed names that are the channel itself, not a region or a timeshift ("HD", "UKHD", "UltraHDR").
+_MAIN_FEED = re.compile(r"(?:|HD|SD|FHD|UHD|4K|UltraHD|UltraHDR|UK|UKHD|Main)", re.I)
+_TIMESHIFT_FEED = re.compile(r"(?:plus\s*[12]|\+\s*[12]|timeshift|1hr|2hr)", re.I)
+
+
+def service_identity(hit):
+    """The one service a dictionary hit names, or None.
+
+    "id" for the main feed or a picture-quality feed; "id@Region" for exactly one regional feed ("BBC One Wales"
+    -> "BBCOne.uk@Wales", "France 3 Alsace" -> "France3.fr@Alsace") so that regional versions never merge with
+    the national service; None below "high", for several channels, several regions or a timeshift feed.
+    B1G applies the same rule to its own resolver hits (conformance: dictionary-conformance/cases.json).
+    """
+    if not hit or hit.get("confidence") != "high":
+        return None
+    entries = [entry for entry in hit.get("ids") or [] if entry and entry[0]]
+    if len({entry[0] for entry in entries}) != 1:
+        return None
+    regions = set()
+    for _channel, feed in entries:
+        feed = str(feed or "")
+        if _TIMESHIFT_FEED.search(feed):
+            return None
+        regions.add("" if _MAIN_FEED.fullmatch(feed) else re.sub(r"(?:HD|SD)$", "", feed))
+    if len(regions) != 1:
+        return None
+    region = regions.pop()
+    return entries[0][0] + ("@" + region if region else "")
 
 
 class Resolver:

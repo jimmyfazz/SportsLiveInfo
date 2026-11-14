@@ -8,6 +8,7 @@ these files drift from the code; regenerate and copy them to the B1 repo's
 reader test resources whenever the feed changes.
 """
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -245,20 +246,385 @@ def slot_cases():
             "now": SLOT_NOW, "events": SLOT_EVENTS, "cases": cases}
 
 
+SLOT_TEAMS = ["Northtown United", "Southport Rovers", "Lake City", "River Wanderers", "Hill Hawks", "Bay Bears",
+              "Eastfield Athletic", "Kingsbridge Town", "Saint Marys", "Harbour Albion", "Redwood FC", "Glenmoor",
+              "Ashford County", "Northtown United Women", "Southport Rovers Women", "Ironvale", "Marsh Harriers",
+              "Cobalt Kings", "Valley Vipers", "Summit Stags"]
+SLOT_ZONES = [("UK", "Europe/London"), ("ET", "America/New_York"), ("CET", "Europe/Paris"), ("PT", "America/Los_Angeles"),
+              ("GMT", "UTC"), ("", None)]
+
+
+def slot_conformance_cases():
+    """Thousands of generated event-slot channel names (fictional teams) with Python's parse and match.
+    Several clocks ("now") and event sets, every time format the parser knows, swapped sides, wrong
+    times, repeat fixtures on consecutive days and non-fixture channel names."""
+    import random
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+    from sportsliveinfo import event_slots
+    rng = random.Random(15112026)
+    groups = []
+    for now_text in ("2026-11-14T16:00:00+00:00", "2026-03-29T00:30:00+00:00", "2026-07-01T21:45:00+00:00",
+                     "2026-12-31T23:10:00+00:00", "2026-10-25T00:50:00+00:00"):
+        now = datetime.fromisoformat(now_text)
+        events = []
+        for index in range(14):
+            a, b = rng.sample(SLOT_TEAMS, 2)
+            start = now + timedelta(minutes=15 * rng.randint(-20, 150))
+            events.append({"id": "e%d" % index, "participants": [a, b],
+                           "start_utc": start.isoformat()})
+            if rng.random() < 0.2:                       # same fixture tomorrow: clock-time-only stays unresolved
+                events.append({"id": "e%dr" % index, "participants": [a, b],
+                               "start_utc": (start + timedelta(days=1)).isoformat()})
+        cases = []
+        for _ in range(500):
+            event = rng.choice(events)
+            a, b = event["participants"]
+            if rng.random() < 0.15:
+                a, b = rng.sample(SLOT_TEAMS, 2)
+            start = datetime.fromisoformat(event["start_utc"]) + timedelta(minutes=rng.choice([0, 0, 0, 0, 30, -90, 300]))
+            label, zone_name = rng.choice(SLOT_ZONES)
+            default_tz = rng.choice(["Europe/London", "America/New_York", "Europe/Paris"])
+            local = start.astimezone(ZoneInfo(zone_name or default_tz))
+            zone = (" " + label) if label else ""
+            h12 = "%d:%02d %s" % ((local.hour % 12) or 12, local.minute, "AM" if local.hour < 12 else "PM")
+            h12c = h12.replace(" ", "")
+            h24 = "%02d:%02d" % (local.hour, local.minute)
+            dow, mon = local.strftime("%a"), local.strftime("%b")
+            when = rng.choice([
+                "(%s %s%s)" % (dow, h24, zone), "%s %d %s %s" % (dow, local.day, mon, h12), "(%s)" % local.strftime("%Y-%m-%d %H:%M:%S"),
+                "@ %s %d %s" % (mon, local.day, h12), "(%d.%d %s%s)" % (local.month, local.day, h12, zone), h12c,
+                "%s,%d %s %s%s" % (dow, local.day, mon, h24, zone), "start:%s stop:%s" % (
+                    start.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                    (start + timedelta(hours=2)).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")),
+                "", "%d%02d%s" % ((local.hour % 12) or 12, local.minute, "PM" if local.hour >= 12 else "AM")])
+            slot = rng.choice(["EPL %02d" % rng.randint(1, 20), "NFL %02d" % rng.randint(1, 16), "CA-DAZN %d" % rng.randint(1, 80),
+                               "PL+ %03d" % rng.randint(1, 120), "L1 Pass %02d" % rng.randint(1, 9), "NBA  %02d" % rng.randint(1, 15),
+                               "PPV EVENT %02d" % rng.randint(1, 20), "Fite TV %d HD" % rng.randint(1, 9), "GaaTv%02d" % rng.randint(1, 9)])
+            sep = rng.choice([" vs ", " v ", " vs. ", " @ ", " x ", " V ", " versus "])
+            comp = rng.choice(["", "Premier League", "Example Cup 2025/26", "Player Cam", "WTA Finals"])
+            fixture = a + sep + b + rng.choice(["", "", " (Lake)", " [4K]", " HD", " - Player Cam"])
+            shape = rng.randrange(8)
+            if shape == 0:
+                name = "%d. %s | %s %s" % (rng.randint(1, 99), slot, fixture, when)
+            elif shape == 1:
+                name = "%s: %s| %s| %s" % (slot, comp or "Example League", fixture, when)
+            elif shape == 2:
+                name = "%s: %s %s" % (slot, when, fixture)
+            elif shape == 3:
+                name = "%s %s :%s" % (fixture, when, slot)
+            elif shape == 4:
+                name = "%s: %s: %s - %s" % (slot, comp or "Example League", fixture, when)
+            elif shape == 5:
+                name = "%s | %s // UK %s" % (slot, fixture, when) if when else "%s %s" % (slot, fixture)
+            elif shape == 6:
+                name = "%s | %s - %s %s" % (slot, comp or "Example Cup", fixture, when)
+            else:
+                name = rng.choice(["NO: V SPORT 1 HD", "AL: X Premium 2 HD", "UK: Sky Sports Main Event", "CA V Montreal",
+                                   "%s | Coming soon" % slot, "%s" % slot, "%s: %s" % (slot, when)])
+            name = name.replace("  |", " |").strip()
+            if rng.random() < 0.05:
+                name = name.replace(" ", "\u00a0", 1)
+            parsed = event_slots.parse_slot(name, now=now, default_tz=default_tz)
+            found = event_slots.match_slot(parsed, events, now=now) if parsed else None
+            cases.append({"name": name, "default_tz": default_tz, "parsed": parsed,
+                          "event_id": found["id"] if found else None})
+        groups.append({"now": now_text, "events": events, "cases": cases})
+    return {"schema": "sli.slot-conformance/1",
+            "note": "Generated event-slot names (fictional teams). B1G's port must give exactly these parses and links.",
+            "groups": groups}
+
+
+GUIDE_CHOICE_MAP = {
+    "schema": "sli.guide-map/1",
+    "service_aliases": {"BBCOne.uk": "gb.bbc.one", "BBCOne.uk@Wales": "gb.bbc.one.wales", "ITV1.uk": "gb.itv.one",
+                        "SkySportsMainEvent.uk": "gb.sky.sports.main_event"},
+    "guides": [
+        {"source_id": "farleyflex", "market": "GB", "channels": [
+            {"id": "bbcone.uk", "name": "BBC One", "service": "gb.bbc.one", "method": "registry", "programmes_7d": 120},
+            {"id": "BBCOne.uk@Wales", "name": "BBC One Wales", "service": "gb.bbc.one.wales", "method": "registry",
+             "programmes_7d": 118},
+            {"id": "ITV1.uk", "name": "ITV1", "service": "gb.itv.one", "method": "registry", "programmes_7d": 95},
+            {"id": "ITV1.uk@Granada", "name": "ITV1 Granada", "service": "ITV1.uk@Granada", "method": "dictionary",
+             "programmes_7d": 90},
+            {"id": "ITV1.uk@Plus1", "name": "ITV1 +1", "programmes_7d": 95},
+            {"id": "SkySportsMainEvent.uk@HD", "name": "Sky Sports Main Event HD", "service": "gb.sky.sports.main_event",
+             "method": "registry", "programmes_7d": 40},
+            {"id": "DAZN1.uk@GermanyHD", "name": "DAZN 1", "programmes_7d": 50},
+            {"id": "Empty.uk", "name": "Empty", "service": "Empty.uk", "method": "dictionary", "programmes_7d": 0}]},
+        {"source_id": "epgtalk_uk", "market": "GB", "channels": [
+            {"id": "BBCOne.uk@HD", "name": "BBC One HD", "programmes_7d": 150},
+            {"id": "BBCOne.uk@WalesHD", "name": "BBC One Wales HD", "programmes_7d": 100},
+            {"id": "BBCOne.uk@LondonEast", "name": "BBC One London East", "programmes_7d": 80},
+            {"id": "BBCOne.uk@London", "name": "BBC One London", "programmes_7d": 60},
+            {"id": "SkySpMainEvHD.uk", "name": "Sky Sports Main Event", "service": "gb.sky.sports.main_event",
+             "method": "registry", "programmes_7d": 40},
+            {"id": "DAZN1.uk", "name": "DAZN 1", "service": "DAZN1.uk", "method": "dictionary", "programmes_7d": 20}]},
+        {"source_id": "fr_xmltv", "market": "FR", "channels": [
+            {"id": "France3.fr@Alsace", "name": "France 3 Alsace", "service": "France3.fr@Alsace",
+             "method": "dictionary", "programmes_7d": 70},
+            {"id": "France3.fr", "name": "France 3", "service": "France3.fr", "method": "dictionary", "programmes_7d": 70},
+            {"id": "beINSports1.qa@France", "name": "beIN Sports 1", "programmes_7d": 60},
+            {"id": "beINSports1.qa@MENA", "name": "beIN Sports 1 MENA", "programmes_7d": 60}]},
+        {"source_id": "iptv_epg_de", "market": "DE", "channels": [
+            {"id": "DAZN1.de", "name": "DAZN 1", "service": "DAZN1.de", "method": "dictionary", "programmes_7d": 30},
+            {"id": "SkySportsMainEvent.uk@GermanyHD", "name": "Sky Sports Main Event", "programmes_7d": 30}]},
+    ],
+}
+
+
+def guide_choice_cases():
+    """Every combination of identity, provider tvg-id, market and enabled guides over a guide map built to
+    hold the hard cases (regions, +1, foreign feeds, aliases, empty guides), with Python's choice."""
+    from sportsliveinfo import coverage
+    identities = [None, "gb.bbc.one", "BBCOne.uk", "BBCOne.uk@Wales", "BBCOne.uk@London", "gb.bbc.one.wales",
+                  "ITV1.uk", "ITV1.uk@Granada", "gb.itv.one", "SkySportsMainEvent.uk", "gb.sky.sports.main_event",
+                  "France3.fr", "France3.fr@Alsace", "beINSports1.qa", "beINSports1.qa@France", "DAZN1.uk",
+                  "DAZN1.de", "Empty.uk", "Unknown.uk", "ITV1.uk@Plus1"]
+    cases = []
+    for identity in identities:
+        for tvg_id in (None, "bbcone.uk", "ITV1.uk@Plus1", "Empty.uk", "nothere"):
+            for market in (None, "GB", "FR", "DE"):
+                for enabled in (None, ["farleyflex"], ["epgtalk_uk", "fr_xmltv"]):
+                    how, hits = coverage.choose_guide_channels(GUIDE_CHOICE_MAP, identity, tvg_id=tvg_id,
+                                                               market=market, enabled=enabled)
+                    cases.append({"identity": identity, "tvg_id": tvg_id, "market": market, "enabled": enabled,
+                                  "how": how, "hits": [list(hit) for hit in hits]})
+    return {"schema": "sli.guide-choice-cases/1",
+            "note": "B1G's guide chooser must give exactly these results for guide_map (coverage.choose_guide_channels)",
+            "guide_map": GUIDE_CHOICE_MAP, "cases": cases}
+
+
+RECONCILE_CATEGORIES = {
+    "GB": ["UK | ENTERTAINMENT", "UK| SPORTS", "UK | KIDS", "UK: MOVIES", "|UK| NEWS", "United Kingdom"],
+    "IE": ["IE | IRELAND", "Irish TV"], "FR": ["FR| GENERAL", "FRANCE SPORT", "|FR| CINEMA", "SK: France"],
+    "DE": ["DE | Deutschland", "GERMANY SPORT"], "ES": ["ES | ESPAÑA", "Spain"], "IT": ["IT | ITALIA", "Italy Sport"],
+    "NL": ["NL | Nederland"], "PT": ["PT | PORTUGAL"], "PL": ["PL | POLSKA"], "SE": ["Nordic | Sweden", "SE | SVERIGE"],
+    "TR": ["TR | TÜRKIYE", "Turkish"], "US": ["USA | ENTERTAINMENT", "US: SPORTS"], "CA": ["CA | Canada"],
+    "MENA": ["AR | Gulf", "Arabic | MBC"], "RU": ["RU | Russia"], "GR": ["GR | Greece"], "IN": ["IN | Hindi"],
+}
+RECONCILE_OTHER = [("VOD Movies", "Some Film (2024)"), ("Radio UK", "Radio: Heart"), ("24/7 Cartoons", "24/7 Classic"),
+                   ("XXX ADULT", "Adult One"), ("Series VOD", "Some Series S01"), ("LIVE | DAZN CA", "DAZN CA 05"),
+                   ("PPV EVENTS", "PPV EVENT 09: Lake City vs. River Wanderers (11.14 7:15 PM ET)"),
+                   ("PPV EVENTS", "EPL 05 | Northtown United vs Southport Rovers (Sat 17:30 UK)"),
+                   ("PPV EVENTS", "NFL 01: 7:15PM River Wanderers @ Lake City"), ("PPV EVENTS", "Event 12"),
+                   ("SPORTS EVENTS", "NHL 01 | Bay Bears @ Hill Hawks (Sat 22:00 UK)"), ("", "Unknown Channel"),
+                   ("MISC", "Channel 5 HD"), ("ENTERTAINMENT", "Some Network")]
+
+
+CLASSIFIER_CATEGORIES = [
+    "UK | ENTERTAINMENT", "UK| SPORTS", "|UK| KIDS", "UK: DOCUMENTARIES", "UK MUSIC", "England", "Scotland HD",
+    "Wales", "British Classics", "IE | IRELAND", "FR| GENERAL", "|FR| CINEMA", "SK: France", "Français", "DE | Deutschland",
+    "Deutsch HD", "AT | Austria", "Swiss TV", "ES | ESPAÑA", "España Deportes", "IT | ITALIA", "NL | Nederland", "Dutch",
+    "Belgium", "PT | PORTUGAL", "PL | POLSKA", "GR | Greece", "Nordic | Sweden", "NO | Norway", "Danish", "Suomi",
+    "RU | Russia", "Ukraine", "TR | TÜRKIYE", "Türk Sinema", "AL | Albania", "Kosova", "RO | Romania", "Bulgaria",
+    "HU | Hungary", "CZ/SK", "Croatia", "Serbia", "Slovenia", "Bosnia", "Macedonia", "CA | Canada", "Mexico",
+    "Latino", "Argentina", "Caribbean", "AR | Gulf", "Arabic | MBC", "Middle East", "Egypt", "Kurdistan", "Iran",
+    "Persian", "IN | Hindi", "Tamil", "Punjabi", "Pakistan", "Nepal", "Vietnam", "Pinoy TV", "Africa", "DSTV",
+    "Australia", "Kayo Sports", "New Zealand", "USA | ENTERTAINMENT", "US: LOCAL", "American Sports", "SW | Sport",
+    "UKR | TV", "TRK | Ulusal", "INR | Movies", "NPL | News", "AF | Movies", "CARIB | Local", "MX | Deportes",
+    "VOD Movies", "Movies VOD", "Series", "TV Series", "Radio UK", "XXX ADULT", "+18 Night", "24/7 Cartoons",
+    "PPV EVENTS", "LIVE | NFL", "Fite TV", "FloSports", "ESPN+ Events", "Peacock Events", "Paramount+", "TSN+",
+    "DAZN CA", "Tennis Channel", "beIN MAX", "PL+ UK", "Ligue 1 Pass", "TrillerTV", "Now HK", "Kayo",
+    "SuperLeague+", "Stan Sport", "OneFootball", "Events", "", "MISC", "GENERAL", "Channels VOD"]
+CLASSIFIER_NAMES = [
+    "Sky Sports Main Event", "BBC One HD", "CNN International", "Euronews", "BFM TV", "France 24", "DW", "Al Jazeera",
+    "Nick Jr", "Disney Junior", "Cartoon Network", "Baby TV", "CBeebies", "Gulli", "Boomerang", "Cine+ Premier",
+    "HBO Max", "Sky Cinema Action", "Film4", "Kino Polska", "AMC", "TCM", "MTV Hits", "VH1", "Stingray Djazz",
+    "Trace Urban", "Kiss FM", "Discovery Channel", "Nat Geo Wild", "History", "Animal Planet", "Viasat Explore",
+    "Planete+", "Crime + Investigation", "Daystar", "TBN", "EWTN", "Peace TV", "Food Network", "HGTV", "TLC",
+    "QVC", "Travel Channel", "Eurosport 1", "DAZN 2", "beIN Sports 3", "Arena Sport 1", "Setanta Sports",
+    "SuperSport Football", "ESPN 2", "TSN 4", "NBA TV", "NFL Network", "Premier League TV", "Golf Channel",
+    "Racing TV", "UFC Fight Pass", "Some Network", "TV 24", "Info Kanal", "Haber Turk", "+18 Night Show",
+    "Radio: Heart", "24/7 The Simpsons", "Event 12", "PPV Event 3", "Live Event Only", "Events Only Feed",
+    "UK: ITV 1", "DE | ZDF", "FR: TF1", "|AR| MBC 1", "IN-TM | Sun TV", "USA: FOX 5 New York"]
+
+
+def reconcile_cases():
+    """The TV's per-channel result (coverage.reconcile_channel) for thousands of provider-style channels over the
+    public conformance dictionary and a synthetic guide map built from it. No owner channel list is used."""
+    import random
+    from datetime import datetime
+    from sportsliveinfo import coverage, dictionary
+    rng = random.Random(16112026)
+    document = json.loads((CONFORMANCE_DIR / "dictionary.json").read_text(encoding="utf-8"))
+    resolver = dictionary.Resolver(document)
+    channels = sorted(resolver.channels)
+    guides = {"guide_a": ("GB", []), "guide_b": ("FR", []), "guide_c": ("DE", []), "guide_d": (None, [])}
+    aliases = {}
+    for channel_id in channels:
+        if rng.random() < 0.45:
+            continue
+        channel = resolver.channels[channel_id]
+        source = rng.choice(sorted(guides))
+        feeds = [f.get("id") for f in channel.get("feeds", []) if f.get("id")]
+        variants = [channel_id, channel_id + "@HD"] + [channel_id + "@" + f for f in feeds[:3]]
+        if rng.random() < 0.1:
+            variants.append(channel_id + "@Plus1")
+        if rng.random() < 0.05:
+            variants.append(channel_id + "@GermanyHD")
+        for gid in rng.sample(variants, min(len(variants), rng.randint(1, 3))):
+            row = {"id": gid, "name": channel.get("name", ""), "programmes_7d": rng.choice([0, 3, 40, 120, 160])}
+            if rng.random() < 0.6 and "@Plus1" not in gid:
+                service = coverage.identity_from_id(gid, resolver)
+                if service:
+                    row.update(service=service, method="dictionary")
+            guides[source][1].append(row)
+        if rng.random() < 0.03:
+            sli_id = "zz.service." + channel_id.lower().replace(".", "_")
+            aliases[channel_id] = sli_id
+            guides["guide_a"][1].append({"id": "reg-" + channel_id.lower(), "name": channel.get("name", ""),
+                                         "service": sli_id, "method": "registry", "programmes_7d": 90})
+    guide_map = {"schema": "sli.guide-map/1", "service_aliases": dict(sorted(aliases.items())),
+                 "guides": [{"source_id": source, "market": market, "channels": rows}
+                            for source, (market, rows) in sorted(guides.items())]}
+    guide_ids = [c["id"] for g in guide_map["guides"] for c in g["channels"]]
+    conformance = dictionary_conformance_cases()["cases"]
+    entries = []
+    for case in rng.sample(conformance, 5000):
+        categories = RECONCILE_CATEGORIES.get(case["market"])
+        if not categories:
+            continue
+        entry = {"category": rng.choice(categories), "name": case["name"], "tvg_id": ""}
+        roll = rng.random()
+        if roll < 0.15:
+            entry["tvg_id"] = rng.choice(guide_ids)
+        elif roll < 0.25:
+            entry["tvg_id"] = rng.choice(channels) + rng.choice(["", "@HD", "@SD", "@Plus1", "@WalesHD"])
+        elif roll < 0.28:
+            entry["tvg_id"] = "provider-%d" % rng.randint(1, 999)
+        entries.append(entry)
+    entries += [{"category": c, "name": n, "tvg_id": ""} for c, n in RECONCILE_OTHER]
+    grid = [(c, n) for c in CLASSIFIER_CATEGORIES for n in CLASSIFIER_NAMES]
+    entries += [{"category": c, "name": n, "tvg_id": ""} for c, n in rng.sample(grid, 2500)]
+    now = datetime.fromisoformat(SLOT_NOW)
+    cases = []
+    for entry in entries:
+        for enabled in ([None, ["guide_a", "guide_b"]] if rng.random() < 0.2 else [None]):
+            row = coverage.reconcile_channel(entry, resolver=resolver, guide_map=guide_map, enabled=enabled,
+                                             now=now, events=SLOT_EVENTS)
+            cases.append({"entry": entry, "enabled": enabled, "row": row})
+    return {"schema": "sli.reconcile-cases/1",
+            "note": "coverage.reconcile_channel over dictionary-conformance/dictionary.json, guide_map, now and events; "
+                    "B1G's reconciler must give exactly these rows",
+            "now": SLOT_NOW, "events": SLOT_EVENTS, "guide_map": guide_map, "cases": cases}
+
+
+STANDALONE_DIR = OUT / "standalone"
+
+
+def dictionary_rules():
+    """The dictionary's rule tables without channels, plus the scope definitions: what B1G bundles to build the
+    dictionary itself from the iptv-org database when the SportsLiveInfo feed is unavailable."""
+    from sportsliveinfo import dictionary
+    document = dictionary.build_document("id,name,country\n", "channel,id,name\n")
+    document.pop("channels")
+    document.update(schema="sli.dictionary-rules/1", europe=sorted(dictionary.EUROPE),
+                    region_definitions={key: {"label": label, "countries": sorted(countries.split())}
+                                        for key, (label, countries) in sorted(dictionary.REGIONS.items())},
+                    sources={"channels": dictionary.CHANNELS_URL, "feeds": dictionary.FEEDS_URL,
+                             "regions": dictionary.REGIONS_URL})
+    return document
+
+
+def standalone_cases():
+    """build_document over a fixed public slice of the iptv-org database (standalone/*.csv), for B1G's own build."""
+    from sportsliveinfo import dictionary
+    read = lambda name: (STANDALONE_DIR / name).read_text(encoding="utf-8")
+    cases = []
+    for regions in ([], sorted(dictionary.REGIONS)[:2], sorted(dictionary.REGIONS)):
+        document = dictionary.build_document(read("channels.csv"), read("feeds.csv"), read("regions.csv"), regions)
+        cases.append({"regions": regions, "channels": document["channels"]})
+    return {"schema": "sli.standalone-cases/1",
+            "note": "dictionary.build_document over standalone/channels.csv, feeds.csv and regions.csv",
+            "cases": cases}
+
+
+CONFORMANCE_DIR = OUT / "dictionary-conformance"
+
+
+def dictionary_conformance_cases():
+    """Thousands of provider-style names built from a fixed public subset of the dictionary
+    (`dictionary-conformance/dictionary.json`, iptv-org data, public domain) with Python's answers.
+    B1G's port of the resolver must give exactly these results. No owner channel list is used."""
+    import random
+    from sportsliveinfo import dictionary
+    document = json.loads((CONFORMANCE_DIR / "dictionary.json").read_text(encoding="utf-8"))
+    resolver = dictionary.Resolver(document)
+    home_market = {}
+    for market, countries in document["market_countries"].items():
+        for country in countries[:1]:
+            home_market.setdefault(country, market)
+    code_of = {market: sorted(codes)[0] for market, codes in document["bare_market_codes"].items()}
+    rng = random.Random(14112026)
+    names = []
+    for channel in sorted(document["channels"], key=lambda c: c["id"]):
+        market = home_market.get(channel["country"])
+        if not market:
+            continue
+        code = code_of.get(market, market)
+        name = channel["name"]
+        variants = [name, "%s | %s HD" % (code, name), "|%s| %s FHD" % (code, name), "%s: %s" % (code, name),
+                    name.upper() + " 4K", name + " +1", name + " (UHD/4K)", name + " HEVC"]
+        variants += [alt for alt in channel.get("alt_names", [])[:2]]
+        variants += ["%s %s" % (name, feed["name"]) for feed in channel.get("feeds", [])[:2] if feed.get("name")]
+        if re.search(r"\bsports?\b", name, re.I):
+            variants.append(re.sub(r"(?i)\bsports\b", "Sport", name) if re.search(r"(?i)\bsports\b", name)
+                            else re.sub(r"(?i)\bsport\b", "Sports", name))
+        if re.search(r"\s2$", name):
+            variants.append(name[:-1] + "1")
+        if any(ord(ch) > 127 for ch in name):
+            try:
+                variants.append(name.encode("utf-8").decode("latin-1"))       # mis-encoded export
+            except UnicodeDecodeError:
+                pass
+        if "&" in name:
+            variants.append(name.replace("&", "&amp;"))
+        if market == "DE":
+            variants.append("DE ||VIP| %s HD DE" % name)
+        if market in ("US", "LATAM") and channel["country"] == "MX":
+            variants.append("(MX) (IZ) " + name)
+        for feed in channel.get("feeds", []):
+            if re.fullmatch(r"[KW][A-Z]{2,3}(?:-?(?:TV|DT|CD|LD))?", feed.get("name", "")):
+                variants.append("US %s 5 (%s) City" % (name, feed["name"]))
+                break
+        rng.shuffle(variants)
+        for variant in variants[:6]:
+            names.append((variant, market))
+    names += [("|NIGERIA| AIT", "AFRICA"), ("IRQ: Al Iraqia HD", "MENA"), ("Desert One", "MENA"),
+              ("Carib (FLOW) CNC3", "CARIB"), ("Claro HBO Plus", "LATAM"), ("Al Jazeera", "AL"),
+              ("TRK | beINSport 1 HD", "TR"), ("PL | Eleven Sports 1 FHD", "PL"), ("BG | Diema Sport 1", "BG"),
+              ("IT| Sky Sports UNO", "IT"), ("GR | NOVA SPORT 1", "GR"), ("SW | VIASAT SPORT PREMIUM HD", "SE")]
+    cases, seen = [], set()
+    for name, market in names:
+        if (name, market) in seen:
+            continue
+        seen.add((name, market))
+        hit = resolver.resolve(name, market)
+        cases.append({"name": name, "market": market,
+                      "ids": [list(i) for i in hit["ids"]] if hit else [], "method": hit["method"] if hit else None,
+                      "confidence": hit["confidence"] if hit else None,
+                      "identity": dictionary.service_identity(hit)})
+    return {"schema": "sli.dictionary-conformance/1",
+            "note": "B1G's dictionary resolver must return exactly these results for dictionary.json in this folder",
+            "cases": cases}
+
+
 def dictionary_cases():
     from sportsliveinfo import dictionary
     from sportsliveinfo.guide import market_key
-    resolver = dictionary.Resolver(dictionary.build_document(WORLD_CHANNELS, WORLD_FEEDS, "", list(dictionary.REGIONS)))
+    document = dictionary.build_document(WORLD_CHANNELS, WORLD_FEEDS, "", list(dictionary.REGIONS))
+    resolver = dictionary.Resolver(document)
     cases = []
     for name, market in DICTIONARY_CASES:
         hit = resolver.resolve(name, market)
         cases.append({"name": name, "market": market, "market_key": market_key(name, market),
                       "ids": [list(i) for i in hit["ids"]] if hit else [], "method": hit["method"] if hit else None,
-                      "confidence": hit["confidence"] if hit else None})
+                      "confidence": hit["confidence"] if hit else None, "identity": dictionary.service_identity(hit)})
     return {"schema": "sli.dictionary-cases/1",
-            "note": "B1G's dictionary resolver must return exactly these results for this synthetic database "
-                    "(channels/feeds CSV in tools/generate_feed_fixtures.py, all optional regions on)",
-            "cases": cases}
+            "note": "B1G's dictionary resolver must return exactly these results for `document` (built from the "
+                    "synthetic channels/feeds CSV in tools/generate_feed_fixtures.py, all optional regions on)",
+            "document": document, "cases": cases}
 
 
 def matching_cases():
@@ -272,7 +638,15 @@ def matching_cases():
 def write(out=OUT):
     from sportsliveinfo import feed
     manifest, files = build()
+    fixed = {}                                   # fixed inputs, not generated: kept across the rebuild
+    for path in [out / "dictionary-conformance" / "dictionary.json"] + [out / "standalone" / n for n in
+                                                                          ("channels.csv", "feeds.csv", "regions.csv")]:
+        if path.is_file():
+            fixed[path] = path.read_bytes()
     shutil.rmtree(out, ignore_errors=True)
+    for path, data in fixed.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
     for path, data in list(files.items()) + [("v1/manifest.json", feed._json(manifest))]:
         target = out / path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -280,6 +654,18 @@ def write(out=OUT):
     (out / "matching-cases.json").write_text(json.dumps(matching_cases(), ensure_ascii=False, indent=1) + "\n")
     (out / "dictionary-cases.json").write_text(json.dumps(dictionary_cases(), ensure_ascii=False, indent=1) + "\n")
     (out / "slot-cases.json").write_text(json.dumps(slot_cases(), ensure_ascii=False, indent=1) + "\n")
+    (out / "guide-choice-cases.json").write_text(json.dumps(guide_choice_cases(), ensure_ascii=False, indent=1) + "\n")
+    (out / "standalone" / "expected.json").write_text(
+        json.dumps(standalone_cases(), ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+    (out / "standalone" / "dictionary-rules.json").write_text(
+        json.dumps(dictionary_rules(), ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    (out / "slot-conformance.json").write_text(
+        json.dumps(slot_conformance_cases(), ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+    (out / "dictionary-conformance").mkdir(exist_ok=True)
+    (out / "dictionary-conformance" / "reconcile-cases.json").write_text(
+        json.dumps(reconcile_cases(), ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+    (out / "dictionary-conformance" / "cases.json").write_text(
+        json.dumps(dictionary_conformance_cases(), ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
     return manifest
 
 

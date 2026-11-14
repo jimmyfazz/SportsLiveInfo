@@ -7,6 +7,28 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 14 November 2026 — 0.3.20 channel coverage, guide survey, guide map, B1G spec
+
+- **Local *Channel coverage* page:** M3U/text import that discards URLs; per-channel identity and guide for every genre; recommendations; CSV export.
+- **Guide survey:** a background job, at most once a day per guide, that keeps channel indexes only.
+- **`guide_map` asset** (feed 1.5).
+- **B1G reconciliation spec.**
+- **Real results:**
+  - The report builds in about 8 s on the owner's 25,700-entry list.
+  - Region detection agrees with the research classifier on 92 %; the remaining differences are mostly the provider's "Latin" section, read as Latin America.
+- **Region identity fix:** dictionary-identified guide channels keep their region (`France3.fr@Alsace`); one rule (`dictionary.service_identity`) for SLI, the coverage report and B1G.
+- **Guide choice reference** (`coverage.choose_guide_channels`) and `guide_map.service_aliases`.
+- **Dictionary size:** 8.8 MB → 6.7 MB with every world region on (2.8 → 2.2 MB UK/Europe), measured on the current iptv-org database; assets over B1G's 8 MiB limit are never published.
+- **B1G conformance:** the Kotlin ports in B1 (`SliDictionaryResolver`, `SliEventSlots`, `SliGuideMap`) reproduce all 15,794 dictionary, 2,516 slot and 1,200 guide-choice cases (JVM unit tests, local Kotlin compiler; the Android Gradle build is NOT RUN in the cloud session).
+- **TV reference and comparison:** `coverage.reconcile_channel` (6,162-channel fixture; the B1G Kotlin port matches every row) and *Compare with B1G* on the coverage page.
+- **B1G memory (measured, JVM):** the dictionary is streamed record by record and indexed compactly. UK/Europe dictionary: parses within a 32 MB heap and keeps 11 MB (was 36 MB, failing at 64 MB). All regions: parses within 64 MB and keeps 33 MB (was 109 MB and needed more than 96 MB).
+- **Standalone dictionary for B1G:** fixtures for the TV's own build from the iptv-org database (the B1G port reproduces all three region choices exactly).
+- **Tests:** 282 pass, including:
+  - an end-to-end multipart upload through the real handler;
+  - a check that no channel-list text appears in any feed file;
+  - CSRF refusal.
+- **NOT RUN:** the survey against the live "verify" hosts (blocked in the cloud session; it runs on Home Assistant).
+
 ## 14 November 2026 — 0.3.19 import fix and performance
 
 - **Owner's Home Assistant log:** EPGTalk UK had failed at every refresh with "exceeded an import size or record limit": 102,312 programmes against a 100,000 cap. The limit is raised and the real file now imports.
