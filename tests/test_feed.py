@@ -75,6 +75,10 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertEqual(fixtures_tool.guide_choice_cases(), json.loads((FIXTURES / "guide-choice-cases.json").read_text()))
         self.assertEqual(fixtures_tool.reconcile_cases(), json.loads(
             (FIXTURES / "dictionary-conformance" / "reconcile-cases.json").read_text(encoding="utf-8")))
+        self.assertEqual(fixtures_tool.standalone_cases(),
+                         json.loads((FIXTURES / "standalone" / "expected.json").read_text(encoding="utf-8")))
+        self.assertEqual(fixtures_tool.dictionary_rules(),
+                         json.loads((FIXTURES / "standalone" / "dictionary-rules.json").read_text(encoding="utf-8")))
         self.assertEqual(fixtures_tool.slot_conformance_cases(),
                          json.loads((FIXTURES / "slot-conformance.json").read_text(encoding="utf-8")))
         self.assertEqual(fixtures_tool.dictionary_conformance_cases(),

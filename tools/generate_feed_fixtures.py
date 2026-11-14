@@ -510,6 +510,36 @@ def reconcile_cases():
             "now": SLOT_NOW, "events": SLOT_EVENTS, "guide_map": guide_map, "cases": cases}
 
 
+STANDALONE_DIR = OUT / "standalone"
+
+
+def dictionary_rules():
+    """The dictionary's rule tables without channels, plus the scope definitions: what B1G bundles to build the
+    dictionary itself from the iptv-org database when the SportsLiveInfo feed is unavailable."""
+    from sportsliveinfo import dictionary
+    document = dictionary.build_document("id,name,country\n", "channel,id,name\n")
+    document.pop("channels")
+    document.update(schema="sli.dictionary-rules/1", europe=sorted(dictionary.EUROPE),
+                    region_definitions={key: {"label": label, "countries": sorted(countries.split())}
+                                        for key, (label, countries) in sorted(dictionary.REGIONS.items())},
+                    sources={"channels": dictionary.CHANNELS_URL, "feeds": dictionary.FEEDS_URL,
+                             "regions": dictionary.REGIONS_URL})
+    return document
+
+
+def standalone_cases():
+    """build_document over a fixed public slice of the iptv-org database (standalone/*.csv), for B1G's own build."""
+    from sportsliveinfo import dictionary
+    read = lambda name: (STANDALONE_DIR / name).read_text(encoding="utf-8")
+    cases = []
+    for regions in ([], sorted(dictionary.REGIONS)[:2], sorted(dictionary.REGIONS)):
+        document = dictionary.build_document(read("channels.csv"), read("feeds.csv"), read("regions.csv"), regions)
+        cases.append({"regions": regions, "channels": document["channels"]})
+    return {"schema": "sli.standalone-cases/1",
+            "note": "dictionary.build_document over standalone/channels.csv, feeds.csv and regions.csv",
+            "cases": cases}
+
+
 CONFORMANCE_DIR = OUT / "dictionary-conformance"
 
 
@@ -608,12 +638,15 @@ def matching_cases():
 def write(out=OUT):
     from sportsliveinfo import feed
     manifest, files = build()
-    subset_path = out / "dictionary-conformance" / "dictionary.json"
-    subset = subset_path.read_bytes() if subset_path.is_file() else None   # fixed input, not generated
+    fixed = {}                                   # fixed inputs, not generated: kept across the rebuild
+    for path in [out / "dictionary-conformance" / "dictionary.json"] + [out / "standalone" / n for n in
+                                                                          ("channels.csv", "feeds.csv", "regions.csv")]:
+        if path.is_file():
+            fixed[path] = path.read_bytes()
     shutil.rmtree(out, ignore_errors=True)
-    if subset is not None:
-        subset_path.parent.mkdir(parents=True, exist_ok=True)
-        subset_path.write_bytes(subset)
+    for path, data in fixed.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
     for path, data in list(files.items()) + [("v1/manifest.json", feed._json(manifest))]:
         target = out / path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -622,6 +655,10 @@ def write(out=OUT):
     (out / "dictionary-cases.json").write_text(json.dumps(dictionary_cases(), ensure_ascii=False, indent=1) + "\n")
     (out / "slot-cases.json").write_text(json.dumps(slot_cases(), ensure_ascii=False, indent=1) + "\n")
     (out / "guide-choice-cases.json").write_text(json.dumps(guide_choice_cases(), ensure_ascii=False, indent=1) + "\n")
+    (out / "standalone" / "expected.json").write_text(
+        json.dumps(standalone_cases(), ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
+    (out / "standalone" / "dictionary-rules.json").write_text(
+        json.dumps(dictionary_rules(), ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     (out / "slot-conformance.json").write_text(
         json.dumps(slot_conformance_cases(), ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
     (out / "dictionary-conformance").mkdir(exist_ok=True)

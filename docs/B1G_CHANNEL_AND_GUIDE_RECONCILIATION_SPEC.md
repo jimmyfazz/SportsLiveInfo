@@ -49,6 +49,8 @@ Never auto-merge any of these, whatever the name says:
 - another country's feed (`.de`, `@GermanyHD`, `beINSports1.qa@MENA` in a French list);
 - Sky / BBC regional, France Canal+ / beIN / RMC, or the beIN MENA vs national channels.
 
+**Dictionary source on the TV:** SportsLiveInfo's `dictionary` asset while the feed is fresh; otherwise the TV builds it itself from the public iptv-org database (the same three CSV files on raw.githubusercontent.com, at most daily, with ETags), using SportsLiveInfo's rule tables (from the last cached dictionary, else the copy bundled in the app); otherwise a stale SportsLiveInfo copy. Conformance for the TV's own build: `standalone/expected.json`.
+
 ## 3. Choosing the guide for a reconciled channel
 
 1. **The provider's own guide stays primary.** If it has programmes for the channel over the next 24 hours, show it and stop. Any SLI-mapped guide is a non-destructive supplement only.
