@@ -6,14 +6,14 @@
 
 | Part | Where | State |
 |---|---|---|
-| SportsLiveInfo (SLI) Home Assistant app | `jimmyfazz/SportsLiveInfo` (public source) → owner's Home Assistant, slug `106c7bd5_sportsliveinfo` | **0.3.16** installed, auto-update on |
+| SportsLiveInfo (SLI) Home Assistant app | `jimmyfazz/SportsLiveInfo` (public source) → owner's Home Assistant, slug `106c7bd5_sportsliveinfo` | **0.3.17** installed, auto-update on |
 | Public feed | `jimmyfazz/LiveSports-EPG` (public), `v1/manifest.json` | `sli/1.3`; ~4,400 events; D8 channel links on ~50 events; published on the schedule 04:00/12:00/17:00 Europe/London |
 | Private feed | `jimmyfazz/LiveSports-EPG-private` (private) | Code ready (0.3.14); **owner still to enable** on the Publishing page |
 | B1G Android app | `jimmyfazz/B1`, `platforms/android/` | Does **not** read SLI yet; next project (§6) |
 
 Home Assistant backups of the app are taken before every update (named "SportsLiveInfo <old> before <new> update"; e.g. `f4d5a9e9` before 0.3.15).
 
-## 2. What changed 13–14 November (0.3.9 → 0.3.16)
+## 2. What changed 13–14 November (0.3.9 → 0.3.17)
 
 | Version | Change | Measured effect |
 |---|---|---|
@@ -24,6 +24,7 @@ Home Assistant backups of the app are taken before every update (named "SportsLi
 | 0.3.13 | **D8 approved**: public events carry `broadcast_links` (canonical ids, coverage, confidence, guide count; no guide text) | Public feed `sli/1.3` |
 | 0.3.14 | **Private feed** to a private repository: all events + guide-listed events + channel names/times | Awaiting owner enablement |
 | 0.3.15 | France/Europe channel identification: dictionary fallbacks (aliases, plural, guarded language variants), closed-channel explanation, UHD markers, FR/DE/ES/IT sport words | France 60.2 % → 65.5 % resolved; UK+Europe 53.4 % → 55.3 % |
+| 0.3.17 | Connection tests run in the background and log their result (remote access dropped the page before the answer) | — |
 | 0.3.16 | Radio/audio commentary listings on TV channels excluded (MUTV "Radio Commentary"); repository fields accept GitHub links (private feed settings appeared not to save) | UK benchmark unchanged |
 
 ## 3. Decisions (owner)
@@ -45,7 +46,7 @@ All in `sportsliveinfo/src/sportsliveinfo/`; B1G must reproduce the published ru
 ## 5. Outstanding
 
 **Owner actions**
-1. Enable the private feed: edit the *SportsLiveInfo Publisher* fine-grained token on GitHub to include `LiveSports-EPG-private` (Contents: Read and write); then Publishing → Private feed → repository `LiveSports-EPG-private` (a GitHub link also works from 0.3.16), Enable, Save, *Test private feed connection*, *Publish now*.
+1. Enable the private feed: edit the *SportsLiveInfo Publisher* fine-grained token on GitHub to include `LiveSports-EPG-private` (Contents: Read and write); then Publishing → Private feed → repository `LiveSports-EPG-private` (a GitHub link also works from 0.3.16), Enable, Save, *Test private feed connection* (refresh for the result), *Publish now*.
 2. Check Home Assistant results (Collect now → Live today / Sports events), especially **French live sport** (Ligue 1, Top 14, cyclisme on Canal+/beIN/RMC): French guide listings could not be fetched from the cloud session, so French listing formats are unit-tested only.
 3. When the B1G reader exists: create a TV token — fine-grained, **Contents: Read-only**, `LiveSports-EPG-private` only.
 
@@ -72,6 +73,6 @@ The full terminal prompt for this work was given to the owner on 14 November; it
 ## 7. Operating notes
 
 - **Release:** bump `sportsliveinfo/config.yaml`, `sportsliveinfo/Dockerfile` (`BUILD_VERSION`) and `sportsliveinfo/src/sportsliveinfo/__init__.py`; changelog entry; `PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py`; full test suite; PR; CI green; Home Assistant backup of the app; squash-merge; on Home Assistant refresh the app store (it caches the repository) and update.
-- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (240 tests at 0.3.16).
+- **Validation:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` (241 tests at 0.3.17).
 - **Benchmarks** used public UK guides (farleyflex, Freeview, EPGTalk UK), feed revisions from `LiveSports-EPG`, the iptv-org CSVs and the owner's private channel list; scripts and data are kept outside the repositories. Only GitHub-hosted guides are reachable from cloud sessions; iptv-epg.org, epgshare01 and xmltvfr.fr are blocked there.
 - **Privacy:** never commit the owner's channel list, credentials, tokens, LAN addresses or personal details; use synthetic names in tests.

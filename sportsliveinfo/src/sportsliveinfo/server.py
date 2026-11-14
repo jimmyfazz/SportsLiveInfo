@@ -353,8 +353,10 @@ class UI(BaseHTTPRequestHandler):
             self.store._put("approval_log", log)
             return "publishing", ("Publication approvals saved: %s" % ", ".join(chosen)) if chosen else "All publication approvals withdrawn"
         if action == "test_github":
-            # Authenticate and inspect the SAVED destination; never commit.
-            return "publishing", self.engine.test_github_destination()
+            # Authenticate and inspect the SAVED destination; never commit. Runs in the background.
+            started = self.engine.start_connection_test(private=False)
+            return "publishing", ("Connection test started: refresh this page in a few seconds for the result"
+                                  if started else "A connection test is already running")
         if action == "private_feed":
             from .engine import parse_github_repository, validate_github_target
             enabled = value("enabled") == "on"
@@ -372,7 +374,9 @@ class UI(BaseHTTPRequestHandler):
                                                    "enabled": enabled}})
             return "publishing", "Private feed settings saved" + (" and enabled" if enabled else "")
         if action == "test_private_github":
-            return "publishing", self.engine.test_github_destination(private=True)
+            started = self.engine.start_connection_test(private=True)
+            return "publishing", ("Private feed connection test started: refresh this page in a few seconds "
+                                  "for the result" if started else "A private feed connection test is already running")
         if action == "schedule":
             times = []
             for t in value("times").split(","):
@@ -967,6 +971,14 @@ class UI(BaseHTTPRequestHandler):
         text += '<p class="sub">Current London time: %s · Scheduler last active: %s</p>' % (e(local.strftime("%d %b %Y, %H:%M %Z")), e(when(beat)))
         return text
 
+    def _test_result(self, target):
+        result = self.store._get("connection_test:" + target)
+        if not result:
+            return ""
+        label = {"running": "Running", "succeeded": "Passed", "failed": "Failed"}.get(result.get("state"), "")
+        return '<p class="help"><strong>Last test: %s</strong> %s — %s</p>' % (
+            e(label), e(when(result.get("at"))), e(result.get("message", "")))
+
     def publishing(self, config):
         github = config["github"]
         owner, repository, branch = github.get("owner") or "", github.get("repository") or "", github.get("branch") or ""
@@ -1022,7 +1034,7 @@ class UI(BaseHTTPRequestHandler):
             'after saving. Any Home Assistant backup containing tokens is sensitive.</p></section>'
         )
         body += '<section class="card" style="margin-top:16px">' + self._form("github", form) + '<div class="divider"></div><p class="help">Saved token: %s.</p>' % ("yes" if github.get("token") else "no") + '</section>'
-        body += '<section class="card" style="margin-top:16px"><h3>Connection check (no upload)</h3><p>Save the token and destination first. Testing confirms the token can write, but never enables publication, commits or changes any file.</p>' + self._form("test_github", '<button class="secondary" type="submit">Test saved GitHub connection</button>') + '</section>'
+        body += '<section class="card" style="margin-top:16px"><h3>Connection check (no upload)</h3><p>Save the token and destination first. Testing confirms the token can write, but never enables publication, commits or changes any file.</p>' + self._form("test_github", '<button class="secondary" type="submit">Test saved GitHub connection</button>') + self._test_result("public") + '</section>'
         private = config.get("private_feed") or {}
         private_state = self.store._get("private_feed_state") or {}
         private_form = ('<label for="pf-owner">GitHub owner</label><input id="pf-owner" name="owner" type="text" value="%s">'
@@ -1048,7 +1060,7 @@ class UI(BaseHTTPRequestHandler):
                  + '<p class="help">%s The private repository must stay private: the connection test and publisher refuse a public one, '
                    'and it must differ from the public feed repository.</p>' % private_published
                  + self._form("test_private_github", '<button class="secondary" type="submit">Test private feed connection</button>')
-                 + '</section>')
+                 + self._test_result("private") + '</section>')
         # Rights register: the only place event publication can be authorised.
         rights = '<p>Tick only sources whose terms you have reviewed and that permit public redistribution of fixture facts (teams, times, competition). A fused event is published only when <em>every</em> contributing source is approved. EPG programme text is never published.</p><div class="grid">'
         for name, (label, _, _, _) in providers.SPORTS.items():
