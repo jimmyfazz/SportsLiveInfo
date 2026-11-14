@@ -24,6 +24,9 @@ from .guide import COUNTRY_BY_SOURCE, foreign_guide_channel, local_station_key, 
 
 LINEUP_PRODUCT = "coverage:lineup"
 REPORT_PRODUCT = "coverage:report"
+TV_EXPORT_PRODUCT = "coverage:tv-export"
+COMPARISON_PRODUCT = "coverage:comparison"
+MAX_DIFFERENCES = 400
 SURVEY_PREFIX = "survey:"
 MAX_LINEUP_ENTRIES = 60_000
 
@@ -313,6 +316,161 @@ class _Matcher:
                 if station and len(self.local.get(station, ())) == 1:
                     return "local_station", list(self.local[station])
         return None, []
+
+
+# ---- The TV's view: one provider channel through the B1G order of work ---------------------------------------
+SKIPPED_KINDS = frozenset({"vod", "radio", "adult", "loop"})
+TV_FIELDS = ["market", "category", "name", "genre", "kind", "state", "identity", "identity_method", "match",
+             "guide_source", "guide_channel", "programmes", "slot", "slot_start_utc", "event_id"]
+
+
+def identity_from_id(channel_id, resolver):
+    """Identity for an iptv-org style id the provider already gives ("BBCOne.uk@WalesHD" -> "BBCOne.uk@Wales",
+    "SkySportsMainEvent.uk@HD" -> "SkySportsMainEvent.uk"); None for an unknown channel or a timeshift feed."""
+    base, _, feed = str(channel_id or "").partition("@")
+    if not resolver or base not in resolver.channels or channel_dictionary._TIMESHIFT_FEED.search(feed):
+        return None
+    region = "" if channel_dictionary._MAIN_FEED.fullmatch(feed) else re.sub(r"(?:HD|SD)$", "", feed)
+    return base + ("@" + region if region else "")
+
+
+def reconcile_channel(entry, *, resolver=None, guide_map=None, enabled=None, now=None, events=()):
+    """Reference for B1G: one provider channel through the reconciliation spec, using only what a TV has
+    (the published dictionary, guide_map and events, and its own channel list). Columns: ``TV_FIELDS``.
+
+    Order: skip VOD/radio/adult/24-7 loops; provider ``tvg-id`` (a guide channel id, whose service is the
+    identity, else a dictionary id); dictionary name rules in the channel's market (``service_identity``:
+    regions kept, +1 and ambiguous refused); event-slot name for event feeds and unidentified channels;
+    then ``choose_guide_channels``. A user's manual mapping on the TV is applied before this and wins.
+    Conformance: ``schemas/fixtures/sli-v1/reconcile-cases.json``.
+    """
+    category, name = str(entry.get("category") or ""), str(entry.get("name") or "")
+    tvg = str(entry.get("tvg_id") or "").strip()
+    kind = entry.get("kind") or classify_kind(category, name)
+    market = market_of(category, name)
+    row = dict.fromkeys(TV_FIELDS, "")
+    row.update(category=category, name=name, market=market or "", kind=kind, programmes=0)
+    if kind in SKIPPED_KINDS:
+        row.update(genre=genre_of(category, name), state="skipped")
+        return row
+    identity, method, ambiguous = None, None, False
+    if tvg:
+        services = sorted({str(channel.get("service")) for guide in (guide_map or {}).get("guides") or []
+                           for channel in guide.get("channels") or []
+                           if channel.get("id") == tvg and channel.get("service")})
+        if len(services) == 1:
+            identity, method = services[0], "provider_id"
+        elif not services:
+            identity = identity_from_id(tvg, resolver)
+            method = "provider_id" if identity else None
+    if not identity and resolver and market:
+        hit = resolver.resolve(name, _dictionary_market(market))
+        service = channel_dictionary.service_identity(hit)
+        if service:
+            identity, method = service, hit["method"]
+        elif hit:
+            ambiguous = True
+    if kind == "event_slot" or not identity:
+        slot = event_slots.parse_slot(name, now=now, default_tz="America/New_York" if market in ("US", "CA")
+                                      else "Europe/London") if now else None
+        if slot:
+            found = event_slots.match_slot(slot, list(events or ()), now=now) if events else None
+            row.update(slot=slot["slot"], slot_start_utc=slot["start_utc"] or "",
+                       event_id=str(found["id"]) if found else "")
+    how, hits = choose_guide_channels(guide_map, identity, tvg_id=tvg or None, market=market,
+                                      enabled=enabled) if guide_map else (None, [])
+    base = (identity or "").partition("@")[0]
+    categories = tuple((resolver.channels.get(base) or {}).get("categories", ())) if resolver and base else ()
+    if hits:
+        state = "guide"
+    elif row["slot"]:
+        state = "slot_linked" if row["event_id"] else "slot_from_name"
+    elif kind == "event_slot":
+        state = "event_feed"
+    else:
+        state = "identified_no_guide" if identity else "ambiguous" if ambiguous else "unknown"
+    row.update(genre=genre_of(category, name, categories), state=state, identity=identity or "",
+               identity_method=method or ("ambiguous" if ambiguous else ""), match=how or "")
+    if hits:
+        row.update(guide_source=hits[0][0], guide_channel=hits[0][1], programmes=hits[0][2])
+    return row
+
+
+def parse_tv_export(text):
+    """Rows of B1G's local per-channel export (CSV in ``TV_FIELDS`` order). Only the compared columns are kept."""
+    import csv
+    import io
+    reader = csv.DictReader(io.StringIO(str(text or "").lstrip("\ufeff")))
+    if not reader.fieldnames or not {"category", "name", "identity"} <= set(reader.fieldnames):
+        raise ValueError("That is not a B1G channel export (expected the columns category, name and identity)")
+    keep = ("category", "name", "market", "genre", "kind", "identity", "guide_source", "guide_channel")
+    rows = []
+    for row in reader:
+        rows.append({key: str(row.get(key) or "")[:200] for key in keep})
+        if len(rows) >= MAX_LINEUP_ENTRIES:
+            break
+    return rows
+
+
+def compare_tv_export(lineup, tv_rows, *, resolver=None, guide_map=None, now=None):
+    """B1G's per-channel result against SportsLiveInfo's for the same channels and the same published inputs.
+
+    Channels are matched on (category, name) with the imported channel list, whose provider ``tvg-id`` is used.
+    Identity agreement is the acceptance figure (target 99 %); a *wrong region* is the same channel with another
+    region or a timeshift feed, and must be zero. Guide: B1G's guide channel must be one SportsLiveInfo would
+    also choose (from any guide, since the TV's own guide switches are not known here).
+    """
+    by_key = {}
+    for entry in lineup or ():
+        by_key.setdefault((entry.get("category", ""), entry.get("name", "")), entry)
+    result = Counter()
+    differences = []
+
+    def differ(row, field, sli, tv, serious=False):
+        result["differences"] += 1
+        result["serious"] += serious
+        if len(differences) < MAX_DIFFERENCES:
+            differences.append({"category": row["category"], "name": row["name"], "field": field,
+                                "sli": sli, "tv": tv, "serious": serious})
+
+    for tv in tv_rows:
+        entry = by_key.get((tv["category"], tv["name"]))
+        if entry is None:
+            result["not_in_list"] += 1
+            continue
+        result["compared"] += 1
+        expected = reconcile_channel(entry, resolver=resolver, guide_map=guide_map, now=now)
+        for field in ("kind", "market", "genre"):
+            if tv.get(field, "") == expected[field]:
+                result[field + "_agree"] += 1
+            else:
+                differ(tv, field, expected[field], tv.get(field, ""))
+        sli_id, tv_id = expected["identity"], tv.get("identity", "")
+        if sli_id and tv_id:
+            result["identity_both"] += 1
+            if sli_id == tv_id:
+                result["identity_agree"] += 1
+            else:
+                same_channel = sli_id.partition("@")[0] == tv_id.partition("@")[0]
+                result["wrong_region"] += same_channel
+                differ(tv, "identity", sli_id, tv_id, serious=same_channel)
+        elif sli_id or tv_id:
+            result["identity_only_sli" if sli_id else "identity_only_tv"] += 1
+            differ(tv, "identity", sli_id, tv_id, serious=bool(tv_id) and channel_dictionary._TIMESHIFT_FEED.search(
+                tv_id.partition("@")[2]) is not None)
+        if tv.get("guide_channel"):
+            result["guide_checked"] += 1
+            _how, hits = choose_guide_channels(guide_map, sli_id or None, tvg_id=entry.get("tvg_id") or None,
+                                               market=expected["market"] or None) if guide_map else (None, [])
+            if any(source == tv.get("guide_source") and cid == tv["guide_channel"] for source, cid, _n in hits):
+                result["guide_ok"] += 1
+            else:
+                differ(tv, "guide_channel", ", ".join(cid for _s, cid, _n in hits[:3]), tv["guide_channel"],
+                       serious=True)
+    both = result["identity_both"]
+    return {"counts": dict(result), "differences": differences,
+            "identity_agreement": round(100.0 * result["identity_agree"] / both, 2) if both else None,
+            "passes": bool(both) and result["identity_agree"] >= 0.99 * both and not result["serious"]}
 
 
 def _dictionary_market(market):

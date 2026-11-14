@@ -20,7 +20,9 @@
 - **Guide choice reference** (`coverage.choose_guide_channels`) and `guide_map.service_aliases`.
 - **Dictionary size:** 8.8 MB → 6.7 MB with every world region on (2.8 → 2.2 MB UK/Europe), measured on the current iptv-org database; assets over B1G's 8 MiB limit are never published.
 - **B1G conformance:** the Kotlin ports in B1 (`SliDictionaryResolver`, `SliEventSlots`, `SliGuideMap`) reproduce all 15,794 dictionary, 2,516 slot and 1,200 guide-choice cases (JVM unit tests, local Kotlin compiler; the Android Gradle build is NOT RUN in the cloud session).
-- **Tests:** 275 pass, including:
+- **TV reference and comparison:** `coverage.reconcile_channel` (6,162-channel fixture; the B1G Kotlin port matches every row) and *Compare with B1G* on the coverage page.
+- **B1G memory (measured, JVM):** the dictionary is streamed record by record and indexed compactly. UK/Europe dictionary: parses within a 32 MB heap and keeps 11 MB (was 36 MB, failing at 64 MB). All regions: parses within 64 MB and keeps 33 MB (was 109 MB and needed more than 96 MB).
+- **Tests:** 282 pass, including:
   - an end-to-end multipart upload through the real handler;
   - a check that no channel-list text appears in any feed file;
   - CSRF refusal.

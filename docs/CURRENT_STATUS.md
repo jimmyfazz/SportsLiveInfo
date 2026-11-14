@@ -17,4 +17,4 @@ python3 -m compileall -q sportsliveinfo/src tests
 PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests
 ```
 
-**Local result:** 275 tests passed (0.3.20, 14 Nov 2026); CI passes on every merged PR. See [implementation progress](IMPLEMENTATION_PROGRESS.md) for measurements and [document index](DOCUMENTATION_INDEX.md) for earlier records.
+**Local result:** 282 tests passed (0.3.20, 14 Nov 2026); CI passes on every merged PR. See [implementation progress](IMPLEMENTATION_PROGRESS.md) for measurements and [document index](DOCUMENTATION_INDEX.md) for earlier records.

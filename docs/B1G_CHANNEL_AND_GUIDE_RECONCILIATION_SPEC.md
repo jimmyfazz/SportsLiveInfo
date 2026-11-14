@@ -72,10 +72,12 @@ Never auto-merge any of these, whatever the name says:
 | `schemas/fixtures/sli-v1/guide-choice-cases.json` | guide channel choice from `guide_map` (1,200 combinations) |
 | golden feed `schemas/fixtures/sli-v1/v1/` | reading every asset, including `guide_map` |
 
+Reference for the whole order of work on the TV: `coverage.reconcile_channel` (fixture `dictionary-conformance/reconcile-cases.json`, columns `coverage.TV_FIELDS`). Steps 3–4 (crosswalk and service names from the `channels` asset), 7 (local stations) and 8 (fingerprint) are not yet in it.
+
 **Acceptance on the owner's real list (local):**
 1. SLI's Home Assistant *Channel coverage* page exports `coverage.csv`. It gives, per channel: market, genre, identity, guide source, guide channel and state. The file stays on the owner's device.
 2. B1G exports its own per-channel result in the same columns, locally (debug export on the TV).
-3. Compare the two.
+3. Compare the two: import B1G's export under *Compare with B1G* on the same page.
    - **Identity:** where both give a result, agreement ≥ 99 %.
    - **Wrong regions:** zero regional, +1 or foreign mismatches.
    - Every difference is reviewed and becomes either a B1G fix or an SLI rule change, with a new fixture case.

@@ -395,6 +395,121 @@ def guide_choice_cases():
             "guide_map": GUIDE_CHOICE_MAP, "cases": cases}
 
 
+RECONCILE_CATEGORIES = {
+    "GB": ["UK | ENTERTAINMENT", "UK| SPORTS", "UK | KIDS", "UK: MOVIES", "|UK| NEWS", "United Kingdom"],
+    "IE": ["IE | IRELAND", "Irish TV"], "FR": ["FR| GENERAL", "FRANCE SPORT", "|FR| CINEMA", "SK: France"],
+    "DE": ["DE | Deutschland", "GERMANY SPORT"], "ES": ["ES | ESPAÑA", "Spain"], "IT": ["IT | ITALIA", "Italy Sport"],
+    "NL": ["NL | Nederland"], "PT": ["PT | PORTUGAL"], "PL": ["PL | POLSKA"], "SE": ["Nordic | Sweden", "SE | SVERIGE"],
+    "TR": ["TR | TÜRKIYE", "Turkish"], "US": ["USA | ENTERTAINMENT", "US: SPORTS"], "CA": ["CA | Canada"],
+    "MENA": ["AR | Gulf", "Arabic | MBC"], "RU": ["RU | Russia"], "GR": ["GR | Greece"], "IN": ["IN | Hindi"],
+}
+RECONCILE_OTHER = [("VOD Movies", "Some Film (2024)"), ("Radio UK", "Radio: Heart"), ("24/7 Cartoons", "24/7 Classic"),
+                   ("XXX ADULT", "Adult One"), ("Series VOD", "Some Series S01"), ("LIVE | DAZN CA", "DAZN CA 05"),
+                   ("PPV EVENTS", "PPV EVENT 09: Lake City vs. River Wanderers (11.14 7:15 PM ET)"),
+                   ("PPV EVENTS", "EPL 05 | Northtown United vs Southport Rovers (Sat 17:30 UK)"),
+                   ("PPV EVENTS", "NFL 01: 7:15PM River Wanderers @ Lake City"), ("PPV EVENTS", "Event 12"),
+                   ("SPORTS EVENTS", "NHL 01 | Bay Bears @ Hill Hawks (Sat 22:00 UK)"), ("", "Unknown Channel"),
+                   ("MISC", "Channel 5 HD"), ("ENTERTAINMENT", "Some Network")]
+
+
+CLASSIFIER_CATEGORIES = [
+    "UK | ENTERTAINMENT", "UK| SPORTS", "|UK| KIDS", "UK: DOCUMENTARIES", "UK MUSIC", "England", "Scotland HD",
+    "Wales", "British Classics", "IE | IRELAND", "FR| GENERAL", "|FR| CINEMA", "SK: France", "Français", "DE | Deutschland",
+    "Deutsch HD", "AT | Austria", "Swiss TV", "ES | ESPAÑA", "España Deportes", "IT | ITALIA", "NL | Nederland", "Dutch",
+    "Belgium", "PT | PORTUGAL", "PL | POLSKA", "GR | Greece", "Nordic | Sweden", "NO | Norway", "Danish", "Suomi",
+    "RU | Russia", "Ukraine", "TR | TÜRKIYE", "Türk Sinema", "AL | Albania", "Kosova", "RO | Romania", "Bulgaria",
+    "HU | Hungary", "CZ/SK", "Croatia", "Serbia", "Slovenia", "Bosnia", "Macedonia", "CA | Canada", "Mexico",
+    "Latino", "Argentina", "Caribbean", "AR | Gulf", "Arabic | MBC", "Middle East", "Egypt", "Kurdistan", "Iran",
+    "Persian", "IN | Hindi", "Tamil", "Punjabi", "Pakistan", "Nepal", "Vietnam", "Pinoy TV", "Africa", "DSTV",
+    "Australia", "Kayo Sports", "New Zealand", "USA | ENTERTAINMENT", "US: LOCAL", "American Sports", "SW | Sport",
+    "UKR | TV", "TRK | Ulusal", "INR | Movies", "NPL | News", "AF | Movies", "CARIB | Local", "MX | Deportes",
+    "VOD Movies", "Movies VOD", "Series", "TV Series", "Radio UK", "XXX ADULT", "+18 Night", "24/7 Cartoons",
+    "PPV EVENTS", "LIVE | NFL", "Fite TV", "FloSports", "ESPN+ Events", "Peacock Events", "Paramount+", "TSN+",
+    "DAZN CA", "Tennis Channel", "beIN MAX", "PL+ UK", "Ligue 1 Pass", "TrillerTV", "Now HK", "Kayo",
+    "SuperLeague+", "Stan Sport", "OneFootball", "Events", "", "MISC", "GENERAL", "Channels VOD"]
+CLASSIFIER_NAMES = [
+    "Sky Sports Main Event", "BBC One HD", "CNN International", "Euronews", "BFM TV", "France 24", "DW", "Al Jazeera",
+    "Nick Jr", "Disney Junior", "Cartoon Network", "Baby TV", "CBeebies", "Gulli", "Boomerang", "Cine+ Premier",
+    "HBO Max", "Sky Cinema Action", "Film4", "Kino Polska", "AMC", "TCM", "MTV Hits", "VH1", "Stingray Djazz",
+    "Trace Urban", "Kiss FM", "Discovery Channel", "Nat Geo Wild", "History", "Animal Planet", "Viasat Explore",
+    "Planete+", "Crime + Investigation", "Daystar", "TBN", "EWTN", "Peace TV", "Food Network", "HGTV", "TLC",
+    "QVC", "Travel Channel", "Eurosport 1", "DAZN 2", "beIN Sports 3", "Arena Sport 1", "Setanta Sports",
+    "SuperSport Football", "ESPN 2", "TSN 4", "NBA TV", "NFL Network", "Premier League TV", "Golf Channel",
+    "Racing TV", "UFC Fight Pass", "Some Network", "TV 24", "Info Kanal", "Haber Turk", "+18 Night Show",
+    "Radio: Heart", "24/7 The Simpsons", "Event 12", "PPV Event 3", "Live Event Only", "Events Only Feed",
+    "UK: ITV 1", "DE | ZDF", "FR: TF1", "|AR| MBC 1", "IN-TM | Sun TV", "USA: FOX 5 New York"]
+
+
+def reconcile_cases():
+    """The TV's per-channel result (coverage.reconcile_channel) for thousands of provider-style channels over the
+    public conformance dictionary and a synthetic guide map built from it. No owner channel list is used."""
+    import random
+    from datetime import datetime
+    from sportsliveinfo import coverage, dictionary
+    rng = random.Random(16112026)
+    document = json.loads((CONFORMANCE_DIR / "dictionary.json").read_text(encoding="utf-8"))
+    resolver = dictionary.Resolver(document)
+    channels = sorted(resolver.channels)
+    guides = {"guide_a": ("GB", []), "guide_b": ("FR", []), "guide_c": ("DE", []), "guide_d": (None, [])}
+    aliases = {}
+    for channel_id in channels:
+        if rng.random() < 0.45:
+            continue
+        channel = resolver.channels[channel_id]
+        source = rng.choice(sorted(guides))
+        feeds = [f.get("id") for f in channel.get("feeds", []) if f.get("id")]
+        variants = [channel_id, channel_id + "@HD"] + [channel_id + "@" + f for f in feeds[:3]]
+        if rng.random() < 0.1:
+            variants.append(channel_id + "@Plus1")
+        if rng.random() < 0.05:
+            variants.append(channel_id + "@GermanyHD")
+        for gid in rng.sample(variants, min(len(variants), rng.randint(1, 3))):
+            row = {"id": gid, "name": channel.get("name", ""), "programmes_7d": rng.choice([0, 3, 40, 120, 160])}
+            if rng.random() < 0.6 and "@Plus1" not in gid:
+                service = coverage.identity_from_id(gid, resolver)
+                if service:
+                    row.update(service=service, method="dictionary")
+            guides[source][1].append(row)
+        if rng.random() < 0.03:
+            sli_id = "zz.service." + channel_id.lower().replace(".", "_")
+            aliases[channel_id] = sli_id
+            guides["guide_a"][1].append({"id": "reg-" + channel_id.lower(), "name": channel.get("name", ""),
+                                         "service": sli_id, "method": "registry", "programmes_7d": 90})
+    guide_map = {"schema": "sli.guide-map/1", "service_aliases": dict(sorted(aliases.items())),
+                 "guides": [{"source_id": source, "market": market, "channels": rows}
+                            for source, (market, rows) in sorted(guides.items())]}
+    guide_ids = [c["id"] for g in guide_map["guides"] for c in g["channels"]]
+    conformance = dictionary_conformance_cases()["cases"]
+    entries = []
+    for case in rng.sample(conformance, 5000):
+        categories = RECONCILE_CATEGORIES.get(case["market"])
+        if not categories:
+            continue
+        entry = {"category": rng.choice(categories), "name": case["name"], "tvg_id": ""}
+        roll = rng.random()
+        if roll < 0.15:
+            entry["tvg_id"] = rng.choice(guide_ids)
+        elif roll < 0.25:
+            entry["tvg_id"] = rng.choice(channels) + rng.choice(["", "@HD", "@SD", "@Plus1", "@WalesHD"])
+        elif roll < 0.28:
+            entry["tvg_id"] = "provider-%d" % rng.randint(1, 999)
+        entries.append(entry)
+    entries += [{"category": c, "name": n, "tvg_id": ""} for c, n in RECONCILE_OTHER]
+    grid = [(c, n) for c in CLASSIFIER_CATEGORIES for n in CLASSIFIER_NAMES]
+    entries += [{"category": c, "name": n, "tvg_id": ""} for c, n in rng.sample(grid, 2500)]
+    now = datetime.fromisoformat(SLOT_NOW)
+    cases = []
+    for entry in entries:
+        for enabled in ([None, ["guide_a", "guide_b"]] if rng.random() < 0.2 else [None]):
+            row = coverage.reconcile_channel(entry, resolver=resolver, guide_map=guide_map, enabled=enabled,
+                                             now=now, events=SLOT_EVENTS)
+            cases.append({"entry": entry, "enabled": enabled, "row": row})
+    return {"schema": "sli.reconcile-cases/1",
+            "note": "coverage.reconcile_channel over dictionary-conformance/dictionary.json, guide_map, now and events; "
+                    "B1G's reconciler must give exactly these rows",
+            "now": SLOT_NOW, "events": SLOT_EVENTS, "guide_map": guide_map, "cases": cases}
+
+
 CONFORMANCE_DIR = OUT / "dictionary-conformance"
 
 
@@ -510,6 +625,8 @@ def write(out=OUT):
     (out / "slot-conformance.json").write_text(
         json.dumps(slot_conformance_cases(), ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
     (out / "dictionary-conformance").mkdir(exist_ok=True)
+    (out / "dictionary-conformance" / "reconcile-cases.json").write_text(
+        json.dumps(reconcile_cases(), ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
     (out / "dictionary-conformance" / "cases.json").write_text(
         json.dumps(dictionary_conformance_cases(), ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
     return manifest

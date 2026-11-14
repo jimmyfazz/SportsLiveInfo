@@ -65,3 +65,55 @@ class ChooseGuideChannelsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReconcileChannelTest(unittest.TestCase):
+    """The TV's per-channel order of work (coverage.reconcile_channel)."""
+    MAP = {"guides": [{"source_id": "a", "channels": [
+        {"id": "France3.fr@Alsace", "service": "France3.fr@Alsace", "programmes_7d": 70},
+        {"id": "France3.fr", "service": "France3.fr", "programmes_7d": 70},
+        {"id": "f3plus", "service": "France3.fr", "programmes_7d": 5}]}]}
+
+    def setUp(self):
+        self.resolver = dictionary.Resolver(DOCUMENT)
+
+    def reconcile(self, **entry):
+        return coverage.reconcile_channel(entry, resolver=self.resolver, guide_map=self.MAP)
+
+    def test_regional_name_gets_the_regional_guide(self):
+        row = self.reconcile(category="FR| GENERAL", name="FR: France 3 Alsace HD")
+        self.assertEqual((row["identity"], row["state"], row["guide_channel"]),
+                         ("France3.fr@Alsace", "guide", "France3.fr@Alsace"))
+
+    def test_provider_id_wins_and_names_the_service(self):
+        row = self.reconcile(category="FR| GENERAL", name="Something else", tvg_id="France3.fr@AlsaceHD")
+        self.assertEqual((row["identity"], row["identity_method"]), ("France3.fr@Alsace", "provider_id"))
+        timeshift = self.reconcile(category="FR| GENERAL", name="Unknown", tvg_id="France3.fr@Plus1")
+        self.assertEqual(timeshift["identity"], "")
+
+    def test_vod_radio_adult_and_loops_are_skipped(self):
+        for category, name in (("VOD Movies", "France 3"), ("Radio FR", "France 3"), ("XXX", "x"), ("24/7 Films", "y")):
+            self.assertEqual(self.reconcile(category=category, name=name)["state"], "skipped")
+
+    def test_columns_are_the_tv_export_columns(self):
+        self.assertEqual(list(self.reconcile(category="FR", name="France 3")), coverage.TV_FIELDS)
+
+
+class CompareTvExportTest(unittest.TestCase):
+    def test_conforming_export_passes_and_a_region_swap_is_serious(self):
+        resolver = dictionary.Resolver(DOCUMENT)
+        lineup = [{"category": "FR| GENERAL", "name": "France 3 Alsace", "tvg_id": ""},
+                  {"category": "FR| GENERAL", "name": "France 3", "tvg_id": ""}]
+        rows = [coverage.reconcile_channel(e, resolver=resolver, guide_map=ReconcileChannelTest.MAP) for e in lineup]
+        good = coverage.compare_tv_export(lineup, rows, resolver=resolver, guide_map=ReconcileChannelTest.MAP)
+        self.assertTrue(good["passes"])
+        self.assertEqual(good["identity_agreement"], 100.0)
+        rows[0] = dict(rows[0], identity="France3.fr")                      # B1G merged the region: serious
+        bad = coverage.compare_tv_export(lineup, rows, resolver=resolver, guide_map=ReconcileChannelTest.MAP)
+        self.assertFalse(bad["passes"])
+        self.assertEqual(bad["counts"]["wrong_region"], 1)
+        self.assertEqual(bad["differences"][0]["field"], "identity")
+
+    def test_parse_rejects_other_files(self):
+        with self.assertRaises(ValueError):
+            coverage.parse_tv_export("a,b\n1,2\n")

@@ -130,6 +130,56 @@ class CoverageIngressTests(unittest.TestCase):
         self.assertNotIn("Example Kids", published)             # the channel list is never in any feed file
         self.assertNotIn("Exemple Cinema", published)
 
+    def upload(self, action, field, filename, content):
+        boundary = "----slitest"
+        body = ("--%s\r\nContent-Disposition: form-data; name=\"csrf\"\r\n\r\nx\r\n"
+                "--%s\r\nContent-Disposition: form-data; name=\"action\"\r\n\r\n%s\r\n"
+                "--%s\r\nContent-Disposition: form-data; name=\"%s\"; filename=\"%s\"\r\n"
+                "Content-Type: text/plain\r\n\r\n%s\r\n--%s--\r\n") % (
+            boundary, boundary, action, boundary, field, filename, content, boundary)
+        request = urllib.request.Request(self.client.base, data=body.encode(), method="POST",
+                                         headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
+        return self.client.open(request).read().decode()
+
+    def wait_for(self, product):
+        for _ in range(80):
+            if (self.store.snapshot(product) or {}).get("data"):
+                return self.store.snapshot(product)["data"]
+            time.sleep(0.1)
+        self.fail("%s was not built" % product)
+
+    def test_b1g_export_is_compared_channel_by_channel(self):
+        self.upload("lineup_upload", "lineup", "list.m3u", M3U)
+        self.wait_for(coverage.REPORT_PRODUCT)
+        entries = self.store.snapshot(coverage.LINEUP_PRODUCT)["data"]["entries"]
+        rows = [coverage.reconcile_channel(entry) for entry in entries]       # what a conforming TV exports
+        rows[0]["identity"] = "ExampleSport1.uk@Plus1"                       # one wrong: a +1 feed
+        import csv
+        import io
+        out = io.StringIO()
+        writer = csv.DictWriter(out, fieldnames=coverage.TV_FIELDS, lineterminator="\r\n")
+        writer.writeheader()
+        writer.writerows(rows)
+        page = self.upload("tv_export_upload", "tv_export", "b1g.csv", out.getvalue())
+        self.assertIn("stored on this Home Assistant only", page)
+        for _ in range(80):
+            comparison = (self.store.snapshot(coverage.COMPARISON_PRODUCT) or {}).get("data") or {}
+            if comparison.get("counts"):
+                break
+            time.sleep(0.1)
+        counts = comparison["counts"]
+        self.assertEqual(counts["compared"], 6)
+        self.assertEqual(counts["identity_only_tv"], 1)
+        self.assertEqual(counts["serious"], 1)                              # a +1 identity is a serious error
+        self.assertFalse(comparison["passes"])
+        page = self.client.open(self.client.base + "?page=coverage").read().decode()
+        self.assertIn("Compare with B1G", page)
+        self.assertIn("does not pass yet", page)
+        manifest, files = feed.build_feed(self.store, now=datetime(2026, 11, 14, 16, tzinfo=timezone.utc))
+        self.assertNotIn("Example Kids", b"".join(files.values()).decode("utf-8", errors="replace"))
+        self.upload("tv_export_upload", "tv_export", "bad.csv", "not,a,b1g,export\r\n1,2,3,4")
+        self.assertEqual(len(self.store.snapshot(coverage.TV_EXPORT_PRODUCT)["data"]["rows"]), 6)  # refused
+
     def test_wrong_csrf_upload_is_refused(self):
         boundary = "----slitest"
         body = ("--%s\r\nContent-Disposition: form-data; name=\"csrf\"\r\n\r\nWRONG\r\n"

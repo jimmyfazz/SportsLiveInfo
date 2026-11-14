@@ -1049,7 +1049,21 @@ class Engine:
         return len(entries)
 
     def delete_lineup(self):
-        self.store.save_snapshots({coverage.LINEUP_PRODUCT: {"entries": []}, coverage.REPORT_PRODUCT: {}})
+        self.store.save_snapshots({coverage.LINEUP_PRODUCT: {"entries": []}, coverage.REPORT_PRODUCT: {},
+                                   coverage.TV_EXPORT_PRODUCT: {"rows": []}, coverage.COMPARISON_PRODUCT: {}})
+
+    def import_tv_export(self, text):
+        """Store B1G's per-channel export (local CSV from the TV) and compare it with SportsLiveInfo's result."""
+        rows = coverage.parse_tv_export(text)
+        if not rows:
+            raise ValueError("That B1G export has no channels")
+        self.store.save_snapshot(coverage.TV_EXPORT_PRODUCT, {"rows": rows, "imported_at": utcnow()})
+        LOGGER.info("B1G channel export imported locally (%d rows)", len(rows))
+        self.start_coverage(survey=False)
+        return len(rows)
+
+    def delete_tv_export(self):
+        self.store.save_snapshots({coverage.TV_EXPORT_PRODUCT: {"rows": []}, coverage.COMPARISON_PRODUCT: {}})
 
     def start_coverage(self, survey=False):
         """Rebuild the coverage report (and first survey every guide when asked) in the background."""
@@ -1133,6 +1147,16 @@ class Engine:
         report["built_at"] = utcnow()
         report["dictionary"] = bool(document)
         self.store.save_snapshot(coverage.REPORT_PRODUCT, report)
+        tv_export = (self.store.snapshot(coverage.TV_EXPORT_PRODUCT) or {}).get("data") or {}
+        if tv_export.get("rows"):
+            # The TV sees the published dictionary and guide map, so compare against exactly those.
+            published = feed.dictionary_document(self.store, config)
+            resolver = dictionary.Resolver(published) if published else None
+            comparison = coverage.compare_tv_export(lineup["entries"], tv_export["rows"], resolver=resolver,
+                                                    guide_map=feed.guide_map_document(self.store),
+                                                    now=datetime.now(timezone.utc))
+            comparison["built_at"] = utcnow()
+            self.store.save_snapshot(coverage.COMPARISON_PRODUCT, comparison)
 
     def start_connection_test(self, private=False):
         """Run the GitHub connection test in the background; False if one for this target is running.
