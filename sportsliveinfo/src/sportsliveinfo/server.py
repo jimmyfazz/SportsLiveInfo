@@ -328,8 +328,9 @@ class UI(BaseHTTPRequestHandler):
             # One source only. No credentials or untrusted URLs enter logs.
             return "sources", self.engine.test_source(kind, name)
         if action == "github":
-            from .engine import validate_github_target
-            owner, repository, branch = validate_github_target(value("owner"), value("repository"), value("branch"))
+            from .engine import parse_github_repository, validate_github_target
+            owner, repository = parse_github_repository(value("owner"), value("repository"))
+            owner, repository, branch = validate_github_target(owner, repository, value("branch").strip() or "main")
             updates = {"owner": owner, "repository": repository, "branch": branch, "enabled": value("enabled") == "on",
                        "auto_publish": value("auto_publish") == "on"}
             if value("token") and value("remove") == "on":
@@ -355,12 +356,14 @@ class UI(BaseHTTPRequestHandler):
             # Authenticate and inspect the SAVED destination; never commit.
             return "publishing", self.engine.test_github_destination()
         if action == "private_feed":
-            from .engine import validate_github_target
+            from .engine import parse_github_repository, validate_github_target
             enabled = value("enabled") == "on"
-            if value("repository") or enabled:
-                owner, repository, branch = validate_github_target(value("owner"), value("repository"), value("branch"))
-            else:
-                owner, repository, branch = value("owner"), "", value("branch") or "main"
+            owner, repository = parse_github_repository(value("owner"), value("repository"))
+            branch = value("branch").strip() or "main"
+            if repository or enabled:
+                if not repository:
+                    raise ValueError("Enter the private repository name (e.g. LiveSports-EPG-private) before enabling")
+                owner, repository, branch = validate_github_target(owner, repository, branch)
             public = self.store.config()["github"]
             if repository and (owner.casefold(), repository.casefold()) == (public.get("owner", "").casefold(),
                                                                            public.get("repository", "").casefold()):

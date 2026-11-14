@@ -1,5 +1,7 @@
 # Handover: SportsLiveInfo ⇄ B1G (13 Nov 2026), for the next agent (ChatGPT/Codex)
 
+> **Superseded** by the [14 November handover](HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md) (state at 0.3.16, decisions D8 and private delivery, B1G plan). Kept for history.
+
 **Read this first, then the two project files `CLAUDE.md` / `AGENTS.md` in each repo.**
 
 **Repos:**

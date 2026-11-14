@@ -40,6 +40,28 @@ class GitHubOnboardingTests(unittest.TestCase):
             request.assert_not_called()
         self.assertFalse(self.store.config()["github"]["enabled"])
 
+    def test_private_feed_settings_accept_a_link_owner_slash_name_or_a_bare_name(self):
+        import urllib.parse, urllib.request
+        from ingress_test_support import IngressTestClient
+        self.store.configure({"setup_complete": True})
+        client = IngressTestClient(self.store, "csrf-test", memory=True)
+        for typed in ("https://github.com/jimmyfazz/LiveSports-EPG-private", "jimmyfazz/LiveSports-EPG-private",
+                      "LiveSports-EPG-private", " https://github.com/jimmyfazz/LiveSports-EPG-private.git/ "):
+            with self.subTest(typed=typed):
+                self.store.configure({"private_feed": {"repository": "", "enabled": False}})
+                body = urllib.parse.urlencode({"action": "private_feed", "csrf": "csrf-test", "owner": "jimmyfazz",
+                                               "repository": typed, "branch": "main", "enabled": "on"}).encode()
+                with client.open(urllib.request.Request(client.base, body, method="POST")) as response:
+                    page = response.read().decode()
+                self.assertIn("Private feed settings saved and enabled", page)
+                self.assertEqual(self.store.config()["private_feed"],
+                                 {"owner": "jimmyfazz", "repository": "LiveSports-EPG-private", "branch": "main",
+                                  "enabled": True})
+        body = urllib.parse.urlencode({"action": "private_feed", "csrf": "csrf-test", "owner": "jimmyfazz",
+                                       "repository": "bad name!", "branch": "main", "enabled": "on"}).encode()
+        with client.open(urllib.request.Request(client.base, body, method="POST")) as response:
+            self.assertIn("Invalid GitHub repository name", response.read().decode())
+
     def test_private_feed_check_refuses_a_public_repository_and_accepts_a_private_one(self):
         self.store.configure({"github": {"token": "dummy-secret"},
                               "private_feed": {"repository": "LiveSports-EPG-private", "enabled": True}})

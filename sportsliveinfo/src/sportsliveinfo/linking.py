@@ -58,7 +58,10 @@ _PROGRAMME_WORDS = {"live", "ppv", "premier", "league", "football", "rugby", "cr
                     "and", "on", "in", "at", "of", "game", "day", "matchday", "sports", "sport", "tv"}
 _SIDES = re.compile(r"\b(?:v|vs|versus)\b|\s+@\s+")
 _NEGATIVE = re.compile(r"\b(highlights|review|reaction|preview|classic|replay|rewind|magazine|best of|goals show|"
-                       r"build up|countdown|extra|debate|analysis|recap|delayed)\b")
+                       r"build up|countdown|extra|debate|analysis|recap|delayed|"
+                       # Audio-only coverage on a TV channel (e.g. a club channel's "Radio Commentary"):
+                       # the match is not shown, so it is never a viewing candidate.
+                       r"radio commentary|audio commentary|commentary only|radio coverage|audio only)\b")
 _MAX_PROGRAMME = timedelta(hours=9)
 _SESSION_WORDS = {"race": ("race", "grand prix"), "qualifying": ("qualifying",), "sprint": ("sprint",),
                   "sprint_qualifying": ("sprint qualifying", "sprint shootout"),
