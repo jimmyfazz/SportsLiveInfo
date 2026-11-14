@@ -103,6 +103,15 @@ class GuideListedEventTests(unittest.TestCase):
         self.assertEqual(linking._guide_sport("live grand slam of darts day 1", "Sky Sports Main Event"), "darts")
         self.assertEqual(linking._guide_sport("live 2026 synthetic open", "Sky Sports Golf"), "golf")
 
+    def test_french_german_spanish_and_italian_sport_words(self):
+        for text, sport in (("en direct cyclisme tour de france", "cycling"), ("basket betclic elite", "basketball"),
+                            ("formule 1 grand prix du bresil", "motorsport"), ("hippisme quinte", "horse_racing"),
+                            ("ski alpin coupe du monde", "other"), ("boxe championnat du monde", "boxing"),
+                            ("rugby pro d2", "rugby_union"), ("fussball bundesliga", "football"),
+                            ("gran premio del brasile", "motorsport"), ("grand prix de patinage", "other")):
+            with self.subTest(text=text):
+                self.assertEqual(linking._guide_sport(text, "Example Sport"), sport)
+
     def test_display_titles_drop_dates_tags_and_repeated_titles(self):
         self.assertEqual(linking._guide_listing("Live Synthetic Racing", "14/11/2026")[0], "Synthetic Racing")
         self.assertEqual(linking._guide_listing("Live Darts", "Darts Masters D1 S1")[0], "Darts Masters D1 S1")

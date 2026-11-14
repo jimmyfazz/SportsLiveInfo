@@ -244,13 +244,13 @@ CHANNEL_FAMILIES = [
 ]
 _FAMILY_PATTERNS = [(fid, label, re.compile(pattern)) for fid, label, pattern in CHANNEL_FAMILIES]
 
-DECORATION = re.compile(r"\s*[\[(](?:vip|sd|hd|fhd|uhd|4k|hdr|hevc|backup|back up|alt|b|raw|multi|50 ?fps|60 ?fps|1080p|720p)[\])]\s*", re.I)
+DECORATION = re.compile(r"\s*[\[(](?:vip|sd|hd|fhd|uhd|4k|uhd/4k|4k/uhd|hdr|hevc|backup|back up|alt|b|raw|multi|50 ?fps|60 ?fps|1080p|720p)[\])]\s*", re.I)
 # Provider annotations that never change the service. Exact forms only: a bracketed market
 # code or a city in brackets is market/location identity and must survive.
 ANNOTATION = re.compile(r"\s*\((?:uk|gb|x|d|m|from [^)]*|(?:live )?events? only|live event only)\)\s*", re.I)
 IRISH_FEED = re.compile(r"\s*\((?:ie|roi)\)\s*", re.I)
 TRAILING_JUNK = re.compile(r"\s+(?:vip|backup|raw|50 ?fps|60 ?fps)$", re.I)
-QUALITY_SUFFIX = re.compile(r"\s+(?:hd|fhd|sd|uhd|4k|hdr|hevc|h265|h264|2160p|1080p|720p|vip|backup|raw|50 ?fps|60 ?fps)$", re.I)
+QUALITY_SUFFIX = re.compile(r"\s+(?:hd|fhd|sd|sd\+|uhd|4k|4k ultra|ultra hd|uhd/4k|hdr|hevc|h265|h264|2160p|1080p|720p|vip|backup|raw|50 ?fps|60 ?fps)$", re.I)
 COUNTRY_PREFIX = re.compile(r"^(uk|gb|fr|france|ie|irl|us|usa|ca|can|au|aus|nz|hk|hkg|my|mys|sg|ge|geo|pt|pl|gr|in|pk|ar|ara|arabic|mena|int|sports)\s*(?:[|:\-])\s*", re.I)
 BRACKET_COUNTRY = re.compile(r"^\((uk|gb|fr|ie|us|ca|au|nz|hk|my|sg|ge|pt|pl|gr|in|pk)\)\s*", re.I)
 # European provider prefixes: only with "|" or ":" (or a spaced " - ") after the code, so
@@ -275,10 +275,12 @@ def repair_text(text):
     """Undo common mis-encoding ("DÃ©couverte" -> "Découverte") and broken-export junk."""
     value = str(text)
     if "\u00c3" in value or "\u00c2" in value:
-        try:
-            value = value.encode("latin-1").decode("utf-8")
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            pass
+        for codec in ("latin-1", "cp1252"):        # "ÃŽle" is UTF-8 read as cp1252
+            try:
+                value = value.encode(codec).decode("utf-8")
+                break
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                continue
     return _EXPORT_JUNK.sub("", value)
 
 

@@ -89,6 +89,56 @@ class DictionaryTests(unittest.TestCase):
         self.assertEqual(hit["confidence"], "ambiguous")
 
 
+class DictionaryFallbackTests(unittest.TestCase):
+    """0.3.15 fallbacks: aliases, singular/plural, language variants, closed channels (synthetic brands)."""
+    CH = """id,name,alt_names,network,owners,country,categories,is_nsfw,launched,closed,replaced_by,website
+NationalGeographicWild.fr,National Geographic Wild,,,,FR,documentary,FALSE,,,,
+TF1SeriesFilms.fr,TF1 Series Films,,,,FR,general,FALSE,,,,
+ExampleSport1.fr,Example Sport 1,,,,FR,sports,FALSE,,,,
+ExampleCinemas.fr,Example Cinemas,,,,FR,movies,FALSE,,,,
+ExampleNewsFrench.fr,Examplenews French,,,,FR,news,FALSE,,,,
+GlobeNews.fr,Globe News,,,,FR,news,FALSE,,,,
+GlobeNewsFrench.fr,Globe News French,,,,FR,news,FALSE,,,,
+OldChannel.fr,Old Channel,,,,FR,general,FALSE,,2025-03-01,NewChannel.fr,
+"""
+    FD = "channel,id,name,alt_names,is_main,broadcast_area,timezones,languages,format\n"
+
+    def setUp(self):
+        self.resolver = dictionary.Resolver(dictionary.build_document(self.CH, self.FD, ""))
+
+    def ids(self, name, market="FR"):
+        hit = self.resolver.resolve(name, market)
+        return (hit["ids"][0][0], hit["method"]) if hit else None
+
+    def test_aliases_singular_plural_and_uhd_markers(self):
+        self.assertEqual(self.ids("FR | Nat Geo Wild HD"), ("NationalGeographicWild.fr", "alias:exact"))
+        self.assertEqual(self.ids("HD1"), ("TF1SeriesFilms.fr", "alias:exact"))
+        self.assertEqual(self.ids("Example Sports 1 FHD"), None)            # plural only on a final word
+        self.assertEqual(self.ids("Example Cinema")[0], "ExampleCinemas.fr")
+        self.assertEqual(self.ids("FR | Example Sport 1 4K Ultra")[0], "ExampleSport1.fr")
+        self.assertEqual(self.ids("Example Sport 1 (UHD/4K)")[0], "ExampleSport1.fr")
+        # Aliases are scoped: the French-only HD1 rule does not apply in another market.
+        self.assertIsNone(self.ids("HD1", "DE"))
+
+    def test_language_variant_needs_a_market_code_or_a_distinctive_unknown_name(self):
+        self.assertEqual(self.ids("Examplenews"), ("ExampleNewsFrench.fr", "language_variant"))
+        self.assertEqual(self.ids("Globe News"), ("GlobeNews.fr", "exact"))          # the plain channel wins
+        self.assertEqual(self.ids("Globe News FR"), ("GlobeNewsFrench.fr", "language_variant"))  # explicit market code
+        self.assertIsNone(self.ids("XYZ"))                                       # short names never guess
+
+    def test_closed_channels_are_explained_never_matched(self):
+        self.assertIsNone(self.ids("Old Channel"))
+        explained = self.resolver.explain_closed("FR | Old Channel HD", "FR")
+        self.assertEqual(explained, [{"id": "OldChannel.fr", "name": "Old Channel", "closed": "2025-03-01",
+                                      "replaced_by": "NewChannel.fr"}])
+
+    def test_rules_are_published_for_the_reader(self):
+        document = dictionary.build_document(self.CH, self.FD, "")
+        self.assertIn({"pattern": "^hd1$", "replacement": "tf1 series films"}, document["aliases"]["FR"])
+        self.assertIn("french", document["language_variants"]["FR"])
+        self.assertIn("fallbacks", document["rules"])
+
+
 class DictionaryRefreshTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -328,6 +328,22 @@ The owner reported very few live events allocated to channels. A funnel over eve
 
 Not measured: the owner's 32 Home Assistant guides (only GitHub-hosted guides are reachable from the cloud session).
 
+### France and Europe channel identification — 14 November 2026 (0.3.15)
+
+Measured on the owner's private channel list (7,701 UK/European linear entries) with the production resolver, plus guide channel names from the published identity asset (clusters from the owner's 32 Home Assistant guides). French misses were dominated by spelling variants of names the guides already carry (Nickelodeon Junior, National Geographic, TF1 Séries Films for HD1, RMC Sport, Automoto la chaîne, LCI), UHD/4K markers, closed channels (C8, NRJ 12, J-One, Game One, MCM, OCS), numbered event slots (À La Carte, Canal Play) and Molotov virtual channels. Across Europe the largest miss class is international brands whose local version the public-domain database does not hold (Nat Geo Wild Portugal, Disney XD Sweden), which only guide-name matching in B1G can cover.
+
+| Market | Linear | Resolved before | Resolved 0.3.15 | Guide name or dictionary |
+|---|---|---|---|---|
+| France | 777 | 60.2 % | 65.5 % | 68.9 % |
+| Germany | 972 | 47.8 % | 49.7 % | 50.0 % |
+| Poland | 619 | 66.2 % | 68.2 % | 73.8 % |
+| Portugal | 598 | 49.3 % | 52.3 % | 52.3 % |
+| Spain | 526 | 58.6 % | 60.1 % | 60.1 % |
+| Netherlands | 108 | 73.1 % | 77.8 % | 77.8 % |
+| UK + Europe | 7,701 | 53.4 % | 55.3 % | — |
+
+French breakdown after 0.3.15: 509 resolved, 46 closed channels (now explained with closure date and replacement), 71 event slots or Molotov virtual channels, 151 unresolved. All new fallback matches were reviewed; a too-loose language-variant rule (stripping "TV" as a market code; guessing CNN → CNN Portugal) was tightened before release. French/German/Spanish/Italian sport vocabulary for guide-listed live sport is unit-tested but not yet measured on real French guide listings (not reachable from the cloud session); the owner should check French live events on Home Assistant.
+
 **Pending owner decision D8:** whether the public feed may carry these guide-listed but unverified event→channel links as canonical ids plus confidence (never programme text), or whether they must remain private on Home Assistant. No links have been published. HA backup and deployment have not been performed.
 
 ## Mobile Overview
