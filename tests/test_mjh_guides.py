@@ -89,6 +89,12 @@ class MattHuismanGuideTests(unittest.TestCase):
         self.assertIsNone(key("US - ABC News Springfield", guide=True))     # a news stream, not the station
         self.assertIsNone(key("US NBC Sports Bay Area"))                       # no callsign: not a local station
 
+    def test_epgtalk_uk_limits_fit_the_current_guide(self):
+        # 14 Nov 2026: 10.7 MB download, 102,312 programmes; the 100k default made every refresh fail.
+        size, programmes = providers.EPG_LIMITS["epgtalk_uk"]
+        self.assertGreaterEqual(size, 15_000_000)
+        self.assertGreaterEqual(programmes, 150_000)
+
 
 if __name__ == "__main__":
     unittest.main()

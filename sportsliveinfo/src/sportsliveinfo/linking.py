@@ -11,10 +11,12 @@ import re
 from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 from . import dictionary as channel_dictionary, taxonomy
-from .guide import COUNTRY_BY_SOURCE, REGIONAL_PARENTS, canonical_channel, channel_families, normalized_name
+from .guide import (COUNTRY_BY_SOURCE, REGIONAL_PARENTS, canonical_channel, channel_families, foreign_guide_channel,
+                    normalized_name)
 from .identity import name_signature
 from .providers import EPG_FAMILY, SPORT_FAMILY
 
@@ -309,9 +311,9 @@ def _identity_members(identity_document):
 _TIMESHIFT_FEED = re.compile(r"(?:plus\s*[12]|\+\s*[12]|timeshift|1hr|2hr)", re.I)
 
 
-def _dictionary_hit(resolver, source_id, display_name):
+def _dictionary_hit(resolver, source_id, display_name, channel_id=None):
     market = COUNTRY_BY_SOURCE.get(source_id)
-    if resolver is None or not market:
+    if resolver is None or not market or foreign_guide_channel(market, channel_id):
         return None
     hit = resolver.resolve(display_name, market)
     if not hit or hit.get("confidence") != "high":
@@ -351,7 +353,7 @@ def _channel_identity_index(epg_guides, dictionary_document=None, identity_docum
             name = names.get(member)
             if not name:
                 continue
-            hit = _dictionary_hit(resolver, member[0], name)
+            hit = _dictionary_hit(resolver, member[0], name, member[1])
             if hit:
                 dictionary_by_cluster[cluster_id].add(hit[0])
                 category_by_dictionary_id[hit[0]] = hit[1]
@@ -363,7 +365,7 @@ def _channel_identity_index(epg_guides, dictionary_document=None, identity_docum
         for source_id, guide in guides:
             for channel_id, name in (guide.get("channels") or {}).items():
                 registry_id = _registry_channel_id(source_id, channel_id, name)
-                hit = registry_id and _dictionary_hit(resolver, source_id, name)
+                hit = registry_id and _dictionary_hit(resolver, source_id, name, channel_id)
                 if hit:
                     registry_for_dictionary[hit[0]].add(registry_id)
     alias = {dict_id: next(iter(ids)) for dict_id, ids in registry_for_dictionary.items() if len(ids) == 1}
@@ -380,7 +382,7 @@ def _channel_identity_index(epg_guides, dictionary_document=None, identity_docum
             if cluster.get("curated") and cluster.get("id"):
                 index[key] = (str(cluster["id"]), "identity_registry", "high", ())
                 continue
-            hit = _dictionary_hit(resolver, source_id, name)
+            hit = _dictionary_hit(resolver, source_id, name, channel_id)
             if hit:
                 index[key] = (alias.get(hit[0], hit[0]), "dictionary", "high", hit[1])
                 continue
@@ -493,10 +495,14 @@ def _fixture_in(text, home, away, allowed):
 
 def _team_options(event):
     """Return conservative full/short name alternatives for the two fixture sides."""
-    participants = event.get("participants") or []
+    return [list(side) for side in _team_options_cached(tuple(str(p) for p in event.get("participants") or []),
+                                                         tuple(str(p or "") for p in event.get("participants_short") or []))]
+
+
+@lru_cache(maxsize=50_000)      # per fixture names; the same event is checked against every programme
+def _team_options_cached(participants, short):
     if len(participants) < 2:
-        return []
-    short = event.get("participants_short") or []
+        return ()
     options = []
     for index in range(2):
         names = [participants[index]]
@@ -510,8 +516,8 @@ def _team_options(event):
             if key and "tbc" not in key and set(key) - _GENERIC - _LOW_SIGNAL_TEAM_TOKENS:
                 if key not in keys:
                     keys.append(key)
-        options.append(keys)
-    return options if all(options) else []
+        options.append(tuple(keys))
+    return tuple(options) if all(options) else ()
 
 
 def _event_identity_variants(event):
@@ -519,9 +525,14 @@ def _event_identity_variants(event):
                     ("title", "competition", "round", "stage", "session"))
     text += " " + " ".join(str(name) for field in ("participants", "participants_short")
                             for name in (event.get(field) or []))
+    return set(_identity_variants_of(text))
+
+
+@lru_cache(maxsize=50_000)
+def _identity_variants_of(text):
     variants = _tournament_variants(taxonomy.norm(text))
-    return {"women" if item == "w" else re.sub(r"\s*[- ]\s*", "", item) for item in variants
-            if item == "w" or item.startswith("u") or item in _WOMENS_VARIANTS or item == "women"}
+    return frozenset("women" if item == "w" else re.sub(r"\s*[- ]\s*", "", item) for item in variants
+                     if item == "w" or item.startswith("u") or item in _WOMENS_VARIANTS or item == "women")
 
 
 def _programme_identity_variants(text):
@@ -532,8 +543,34 @@ def _programme_identity_variants(text):
             if item == "w" or item.startswith("u") or item in _WOMENS_VARIANTS or item == "women"}
 
 
+_IRISH_FEED_NAME = re.compile(r"\b(?:roi|ireland)\b|\(ie\)", re.I)
+
+
+def _display_name_for(canonical, current, candidate):
+    """The guide name shown for a UK service: a UK feed's name over an Irish feed's ("Sky Mix HD" over
+    "Sky Mix HD ROI"), otherwise the first name seen (deterministic: rows are in guide order)."""
+    if (str(canonical).startswith("gb.") and _IRISH_FEED_NAME.search(current or "")
+            and not _IRISH_FEED_NAME.search(candidate or "")):
+        return str(candidate)[:120]
+    return current
+
+
+def _eligibility_name(row):
+    """The guide's display name plus the recognised service ("SkySp ActionHD" + gb.sky.sports.nfl): abbreviated
+    names in id-based guides would otherwise look like non-sport channels."""
+    canonical = row[5] or ""
+    if not canonical:
+        return row[6]
+    return "%s %s" % (row[6], canonical.split(".", 1)[-1].replace(".", " ").replace("_", " "))
+
+
 def _channel_sport_eligible(sport, channel_name, dictionary_categories=()):
     """Reject non-viewing/sport-incompatible channels before a guide link is emitted."""
+    return _sport_eligible(str(sport or ""), str(channel_name or ""), tuple(str(c) for c in dictionary_categories or ()))
+
+
+@lru_cache(maxsize=100_000)     # one answer per (sport, channel): called for every programme row
+def _sport_eligible(sport, channel_name, dictionary_categories):
     name = taxonomy.norm(channel_name)
     if not name or _RADIO_OR_SHOPPING.search(name):
         return False
@@ -767,7 +804,7 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
         for row_index, row in sorted(overlapping):
             if row[5] and _regional_family(row[5]):
                 observed[row[5]].append((row[0], row[3], row[6]))
-            if not _channel_sport_eligible(event.get("sport", ""), row[6], row[10]):
+            if not _channel_sport_eligible(event.get("sport", ""), _eligibility_name(row), row[10]):
                 continue
             if not _matches(event, row):
                 continue
@@ -782,6 +819,7 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
                                                  "channel_identity_method": row[8],
                                                  "channel_identity_confidence": row[9],
                                                  "match_confidence": "high" if row[9] == "high" else "medium"})
+            entry["channel_name"] = _display_name_for(canonical, entry["channel_name"], row[6])
             entry["epg_live_flag"] = entry["epg_live_flag"] or row[4]
             if row[7] not in entry["epg_sources"]:
                 entry["epg_sources"].append(row[7])
@@ -969,7 +1007,7 @@ def _guide_live_events(by_start, programme_starts, matched_rows, now, timed=()):
             continue
         raw_title, raw_subtitle = row[11]
         sport = _guide_sport(text, row[6])
-        if not sport or not _channel_sport_eligible(sport, row[6], row[10]):
+        if not sport or not _channel_sport_eligible(sport, _eligibility_name(row), row[10]):
             continue
         title, competition, participants = _guide_listing(raw_title, raw_subtitle, sport)
         if not title.strip():
@@ -1003,6 +1041,7 @@ def _guide_live_events(by_start, programme_starts, matched_rows, now, timed=()):
                                               "epg_live_flag": False, "epg_sources": [], "match_basis": "epg_live_listing",
                                               "channel_identity_method": row[8], "channel_identity_confidence": row[9],
                                               "match_confidence": "guide_listed"})
+            entry["channel_name"] = _display_name_for(row[5], entry["channel_name"], row[6])
             entry["epg_live_flag"] = entry["epg_live_flag"] or row[4]
             if row[7] not in entry["epg_sources"]:
                 entry["epg_sources"].append(row[7])

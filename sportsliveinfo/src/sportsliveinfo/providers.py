@@ -148,6 +148,9 @@ EPG_LIMITS = {
     "epgshare_ie": (30_000_000, 200_000), "epgshare_us": (60_000_000, 300_000),
     "epgshare_hk": (30_000_000, 200_000), "epgshare_my": (30_000_000, 200_000),
     "fr_xmltv": (30_000_000, 250_000),
+    # EPGTalk UK grew past the 100k default on 14 Nov 2026 (10.7 MB, 102,312 programmes, 560 channels):
+    # every refresh failed with "exceeded an import size or record limit".
+    "epgtalk_uk": (20_000_000, 180_000),
     # Current public guide samples are 1.24 MB / 9.8k rows (NZ) and
     # 0.73 MB / 13.8k rows (Sydney); these caps allow growth without using
     # the much larger broad-feed defaults.
