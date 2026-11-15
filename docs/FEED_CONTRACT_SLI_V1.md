@@ -168,6 +168,21 @@ A cricket Test split into day records has only the day in play `live`; later day
 
 **Guide-corroborated links.** `broadcast_links[].status` is `guide_corroborated`, with `verification: independent_guides_v1`, when all of these hold: the strict title matcher found it (never the loose guide-listing matcher); the programme starts between kick-off − 60 min and + 20 min; the channel is a curated registry channel (not a dictionary-only id); and two or more independent guide families list it. Families come from `providers.EPG_FAMILY` after a lineage audit (15 Nov 2026): farleyflex is a mytelly.co.uk grab; Freeview-EPG (dp247) and every M3UPT file are built from Sky's own EPG and form one family; all EPGTalk files are Schedules Direct data; Matt Huisman's files are one family. Guides whose upstream could not be checked (EPG Share, IPTV-EPG.org, Fazzani/grab, dobleM) never count towards the two. `broadcast_verified` stays false: it is reserved for provider or official evidence. B1G binds a channel for Sports Today or "on now" only from `guide_corroborated` links or links with `confidence: high`; others are shown as "may be on <channel>".
 
+### 4.3 SportsLiveInfo decides, readers follow (since SportsLiveInfo 0.3.24)
+
+The owner's aim is that corrections and improvements are made once, in SportsLiveInfo, and reach every TV with the feed, with no B1G update. So decisions that B1G used to make itself are now published as data. All of it is additive; `sli/1.6` readers without these fields keep the §4.2 rules.
+
+- **Link order.** `broadcast_links` are published best first, each with `rank` (1 = best), and the manifest says `compatibility.link_order: "best_first"`. The order is, in turn: guide-corroborated; a channel of the home market (GB); a curated registry channel before a dictionary-only id; more independent guide families, then more guides; high confidence; network before regional; then the channel id (case-insensitive tie-break). Readers keep the published order. (Before 0.3.24 links were sorted by channel id, so any capitalised dictionary id such as `VirginMediaTwo.ie` came before every curated id such as `gb.itv.one`.)
+- **Binding.** Each link has `binds`: true when it may name the channel showing the event (Sports Today, "on now"); false means "may be on" only. Readers use it as published.
+- **LIVE window.** An event whose `status_normalized` is `live` has `live_until_utc` = min(`status_observed_at` + `compatibility.live_max_age_minutes` (45), `expected_end_utc` + `compatibility.live_end_grace_minutes` (30)). `live` asset rows carry it too. Readers show LIVE only while `start_utc <= now < live_until_utc`; otherwise the clock decides "should be on now" as in §4.2.
+- **Data, not code.** Channel identities (dictionary, `guide_map`, `service_aliases`), event selection and tiers, statuses and the fixtures themselves were already published data; a correction there reaches every TV on its next feed read (at most 30 minutes). Only a new kind of decision, or a change to the B1G matching algorithms themselves (dictionary resolver, event-slot parser), needs a B1G update.
+
+Also in 0.3.24 (producer only, no reader change):
+
+- listings that name a past year or season ("England v Samoa — Rugby World Cup 2023", "2023-24") are treated as repeats: never linked to a fixture and never guide-listed live events;
+- free streaming (FAST) platform guides (Pluto TV, Samsung TV Plus, Plex, Roku) are identified by the curated registry only, never by a dictionary name match (Pluto's "Rugby Pass TV" was mapped to Premier Sports 1 Asia);
+- rugby suffix words (`Rugby`, `RFC`, `RUFC`, `RLFC`, `RC`) are ignored when merging rugby fixtures across sources, so "Scotland Rugby vs Australia Rugby" (TheSportsDB) merges with "Scotland v Australia" (API-Sports).
+
 ## 5. Rights and privacy (unchanged laws)
 
 - Events are published only when the primary source and every fused contributor are listed in `publication_approvals`. Others are omitted and reported. This conservative source-level gate is not the complete per-field licensing model in the design.

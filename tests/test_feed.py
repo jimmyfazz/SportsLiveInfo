@@ -163,7 +163,8 @@ class GoldenFixtureContractTests(unittest.TestCase):
         # listed at the same slot by two independent guide families (mytelly and Schedules Direct): corroborated.
         self.assertEqual(events["football-data:5001"]["broadcast_links"],
                          [{"canonical_channel_id": "gb.sky.sports.main_event", "confidence": "high", "coverage": "network",
-                           "guides": 2, "status": "guide_corroborated", "verification": "independent_guides_v1"}])
+                           "guides": 2, "status": "guide_corroborated", "verification": "independent_guides_v1",
+                           "binds": True, "rank": 1}])
         self.assertEqual(self.manifest["coverage"]["guide_corroborated_broadcasts"], 1)
         self.assertEqual(self.manifest["coverage"]["verified_broadcasts"], 0)
         self.assertEqual(self.manifest["rights"]["broadcast_candidates"], "channel_links_published_unverified")
@@ -195,7 +196,10 @@ class GoldenFixtureContractTests(unittest.TestCase):
         live = self.asset("live")
         self.assertEqual(live, {"schema": "sli.live/1", "generated_at": "2026-11-14T13:55:00Z",
                                 "events": [{"id": "api-sports-rugby:301", "status_normalized": "live",
-                                            "status_observed_at": "2026-11-14T13:55:00Z"}]})
+                                            "status_observed_at": "2026-11-14T13:55:00Z",
+                                            "live_until_utc": "2026-11-14T14:40:00Z"}]})
+        self.assertEqual(self.manifest["compatibility"]["link_order"], "best_first")
+        self.assertEqual(self.manifest["compatibility"]["live_max_age_minutes"], 45)
         self.assertEqual(core["api-sports-rugby:301"]["status_observed_at"], "2026-11-14T12:00:00Z")
         self.assertIn("45 minutes", self.manifest["compatibility"]["live_state_rule"])
         self.assertEqual(self.manifest["format"], "sli/1.6")

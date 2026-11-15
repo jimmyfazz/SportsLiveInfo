@@ -2,6 +2,7 @@
 
 **15 November 2026 · SportsLiveInfo 0.3.23.** Start with the [15 November handover](HANDOVER_2026-11-15_SPORTSLIVEINFO_B1G.md), the [15 November forensic audit](AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md) (open work), the [B1G reconciliation spec](B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md) and the [feed contract](FEED_CONTRACT_SLI_V1.md). The public [SportsLiveInfo source repository](https://github.com/jimmyfazz/SportsLiveInfo) builds the Home Assistant App. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the public data destination; `LiveSports-EPG-private` is the owner's private personal-use feed. Credentials, guide programme text and App settings stay on Home Assistant.
 
+- **In review:** 0.3.24 — channels ranked by evidence (ITV1 first, not Irish/Asian ids), past-year re-runs never live, free streaming channels not mistaken for broadcast services, rugby duplicates merged, and the feed now carries the decisions B1G follows (`rank`, `binds`, `live_until_utc`; [contract §4.3](FEED_CONTRACT_SLI_V1.md)). 329 tests pass.
 - **Installed:** 0.3.23 on the owner's Home Assistant (15 Nov 08:59 UTC). Backup `9542a582` of 0.3.21 was taken first, and auto-update is on. The App started cleanly ("Ingress HTTP ready").
 - **Public feed:**
   - **`sli/1.6`:** live since 09:00 UTC on 15 Nov. At 10:30 UTC the manifest read `sli/1.6` (publisher 0.3.23) with the `live` and `events_extra` assets.

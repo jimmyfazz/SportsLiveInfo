@@ -2,7 +2,7 @@
 
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](docs/CURRENT_STATUS.md).
 
-SportsLiveInfo is an experimental **v0.3.23 Home Assistant OS App** for two equally required products: international full-channel EPG and multi-sport event intelligence. It collects centrally on the owner's always-on home mini PC; B1G TV clients (up to ten) read the shared static feed and resolve playable channels locally.
+SportsLiveInfo is an experimental **v0.3.24 Home Assistant OS App** for two equally required products: international full-channel EPG and multi-sport event intelligence. It collects centrally on the owner's always-on home mini PC; B1G TV clients (up to ten) read the shared static feed and resolve playable channels locally.
 
 See [current status](docs/CURRENT_STATUS.md) for what is installed, measured and still open, and the [changelog](sportsliveinfo/CHANGELOG.md) for each release.
 
@@ -23,7 +23,7 @@ The Ingress UI provides provider/source setup, separate Save/Test controls, sche
 
 - **International EPG:** UK and France first, with subscription-driven additional markets; complete rolling schedules, source identity, time zones, coverage and safe enrichment. Current source counts are candidate catalogues, not measured coverage.
 - **Sports:** independent fixtures/races/sessions and broader sport categories, source conflicts, timing precision and separately verified broadcaster evidence. A programme airing does not prove an event is live.
-- **Current public format:** `sli/1.6` (0.3.23) exports taxonomy, the channel registry and identity graph, the channel dictionary, the guide channel map (ids, names and programme counts), events by day (core tier; the long tail in optional `events_extra` assets) with the time each status was observed, Today grouping, an optional `live` status asset, unverified or guide-corroborated channel links and source health. **It contains no EPG programme rows.** B1G reads it (B1 PR #827) and keeps the provider's guide primary.
+- **Current public format:** `sli/1.6` (0.3.24: links best first with `rank` and `binds`, `live_until_utc`) exports taxonomy, the channel registry and identity graph, the channel dictionary, the guide channel map (ids, names and programme counts), events by day (core tier; the long tail in optional `events_extra` assets) with the time each status was observed, Today grouping, an optional `live` status asset, unverified or guide-corroborated channel links and source health. **It contains no EPG programme rows.** B1G reads it (B1 PR #827) and keeps the provider's guide primary.
 - **TV behavior required:** anonymous read-only feed access, current-account playable stream resolution, manual mapping and hidden-channel/category precedence, provider EPG fallback. No provider/GitHub write keys or account uploads on TV.
 - **Home Assistant:** no new incoming WAN port, public SportsLiveInfo endpoint or TV-to-HA connection. Existing authenticated owner administration is separate.
 - **Excluded:** central TMDB/OMDb, VOD metadata/posters/hero artwork, IPTV credentials/streams and per-TV preferences.

@@ -4,6 +4,12 @@
 
 Work so far was done in a cloud session. That session could not reach the owner's TVs, an emulator, or the Home Assistant host except through the Home Assistant MCP connector. Agents on the Mac can run what the cloud session marked **NOT RUN**.
 
+## 0. Design rule (owner, 15 Nov 2026)
+
+**Improvements are made in SportsLiveInfo only and reach all ten TVs through the feed; B1G is not updated for them.** Every decision (ranking, which link binds a channel, the LIVE window, channel identities, event selection, corrections) is computed here and published as data; B1G follows it ([feed contract §4.3](FEED_CONTRACT_SLI_V1.md)). Put new decisions in the feed, not in B1G. Only a new kind of decision, or a change to the matching algorithms B1G runs on the TV (dictionary resolver, event-slot parser, which see the private channel list and so cannot run here), needs a B1G release.
+
+0.3.24 (this PR, with B1 PR #829) completes this for ranking, binding and LIVE: after it is merged and B1G is updated once on each TV, SportsLiveInfo-only releases improve what the TVs show.
+
 ## 1. What exists and where it runs
 
 | Part | Where | State on 15 Nov 2026 |

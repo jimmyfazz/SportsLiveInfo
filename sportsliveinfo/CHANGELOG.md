@@ -2,6 +2,20 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
+
+Owner report 15 Nov 2026: Scotland v Australia and Spain v England showed an Irish or Asian channel before ITV1, and Pluto's re-run of "England v Samoa — Rugby World Cup 2023" was "probably live". ITV1 had been found (five guides; corroborated for Spain v England) but was listed last.
+
+- **Channels are ranked by evidence, not alphabet.**
+  - **Before:** candidates and published links were sorted by channel id. Capitals sort first, so any dictionary id ("VirginMediaTwo.ie", "PremierSports1Asia.ie") came before every curated id ("gb.itv.one"), and the Home Assistant page showed that channel first.
+  - **Now:** best first: guide-corroborated, then UK channels, then curated registry channels, then more independent guides, high confidence and network coverage. The Home Assistant page labels a corroborated first channel "Guide-corroborated" and shows the right market (GB, IE, NZ) instead of the id.
+- **Re-runs are never live.** A listing that names a past year or season ("Rugby World Cup 2023", "2023-24") is treated as a repeat. Current seasons ("2025/26") and future years are unaffected.
+- **Free streaming channels keep their own identity.** Pluto TV, Samsung TV Plus, Plex and Roku guide channels are identified by the curated registry only; a dictionary name match had made Pluto's "Rugby Pass TV" into Premier Sports 1 Asia (also in the guide map B1G uses).
+- **Rugby duplicates merged.** "Scotland Rugby vs Australia Rugby" and "Ampthill RUFC" (TheSportsDB) now merge with the API-Sports fixtures; rugby suffix words are ignored for rugby only.
+- **TVs follow the feed** ([contract §4.3](../docs/FEED_CONTRACT_SLI_V1.md)). Links are published best first with `rank` and `binds`, and live events carry `live_until_utc` (also in the `live` asset); the manifest declares `link_order: best_first` and the live limits. With the matching B1G update (once), ranking, binding and the LIVE window are decided here and later corrections need no TV update. Older readers ignore the new fields.
+- Version 0.3.24 everywhere; schemas, golden fixtures and the feed contract updated.
+- Tests: 329 pass (14 new, built from the reported cases).
+
 ## 0.3.23 — Honest live state, a light live-status lane, approved fixtures kept, tiered "today", guide-corroborated links (feed `sli/1.6`)
 
 From the [15 November forensic audit](../docs/AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md) (C1, C2, C6, C9) and the feed contract agreed with B1G on the same day. The feed format is now `sli/1.6`; every change is additive, so a 1.5 reader keeps working.
