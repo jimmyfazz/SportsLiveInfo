@@ -2,7 +2,7 @@
 
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](docs/CURRENT_STATUS.md).
 
-SportsLiveInfo is an experimental **v0.3.21 Home Assistant OS App** for two equally required products: international full-channel EPG and multi-sport event intelligence. It collects centrally on the owner's always-on home mini PC; B1G TV clients (up to ten) read the shared static feed and resolve playable channels locally.
+SportsLiveInfo is an experimental **v0.3.23 Home Assistant OS App** for two equally required products: international full-channel EPG and multi-sport event intelligence. It collects centrally on the owner's always-on home mini PC; B1G TV clients (up to ten) read the shared static feed and resolve playable channels locally.
 
 See [current status](docs/CURRENT_STATUS.md) for what is installed, measured and still open, and the [changelog](sportsliveinfo/CHANGELOG.md) for each release.
 
@@ -30,7 +30,7 @@ The Ingress UI provides provider/source setup, separate Save/Test controls, sche
 
 ## Documentation and development
 
-Start with [current status](docs/CURRENT_STATUS.md), the [document index](docs/DOCUMENTATION_INDEX.md), [AGENTS.md](AGENTS.md), [master roadmap](docs/MASTER_IMPLEMENTATION_ROADMAP.md), [current backlog](docs/WORK_PACKAGE_BACKLOG.md) and [handover](docs/IMPLEMENTATION_PROGRESS.md). The [implemented feed contract](docs/FEED_CONTRACT_SLI_V1.md) governs current paths/fields; [publication policy](docs/FEED_CONTRACTS_AND_PUBLICATION.md) governs required rights and safety. Dated audits preserve historical findings and explicitly identify their baseline.
+Start with the [15 November handover](docs/HANDOVER_2026-11-15_SPORTSLIVEINFO_B1G.md), [current status](docs/CURRENT_STATUS.md), the [document index](docs/DOCUMENTATION_INDEX.md), [AGENTS.md](AGENTS.md), [master roadmap](docs/MASTER_IMPLEMENTATION_ROADMAP.md), [current backlog](docs/WORK_PACKAGE_BACKLOG.md) and [handover](docs/IMPLEMENTATION_PROGRESS.md). The [implemented feed contract](docs/FEED_CONTRACT_SLI_V1.md) governs current paths/fields; [publication policy](docs/FEED_CONTRACTS_AND_PUBLICATION.md) governs required rights and safety. Dated audits preserve historical findings and explicitly identify their baseline.
 
 ```sh
 python3.12 -m compileall -q sportsliveinfo/src
