@@ -4,9 +4,9 @@
 
 **Read this first.** This file is intentionally concise; the detailed and binding rules are in [AGENTS.md](AGENTS.md). Do not rely on older UK-only, "B1 optional", or sports-only architecture notes.
 
-## Current additional audit and required follow-up
+## Current state and binding rules (15 Nov 2026, v0.3.21)
 
-See [12 Nov GitHub onboarding and deep EPG/sports/manifest audit](docs/FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md). Critical: the current `sli/1` public output does **not** carry enhanced EPG programme listings; B1G's provider Guide must remain primary and any future licensed supplement must be non-destructive and user-account-aware. The separate public data repo is `jimmyfazz/LiveSports-EPG`. Do not confuse token connection test with write or licensing approval. Source verification, cross-language fixtures and Android reader remain outstanding.
+See [current status](docs/CURRENT_STATUS.md) and the [B1G reconciliation spec](docs/B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md); older audits are in [docs/archive](docs/archive/). The public feed (`sli/1.5`) does **not** carry EPG programme listings: B1G's provider Guide stays primary and any future licensed supplement must be non-destructive and user-account-aware. The separate public data repo is `jimmyfazz/LiveSports-EPG`. Do not confuse a token connection test with write or licensing approval. The B1G Android reader is implemented (B1 PR #827, conformance fixtures pass); device acceptance and live verification of some guide sources remain outstanding.
 
 ## Scope
 
@@ -21,7 +21,7 @@ Home Assistant OS App on owner's always-on **direct-installed home mini PC** doe
 
 1. [AGENTS.md](AGENTS.md)
 2. [Master implementation roadmap](docs/MASTER_IMPLEMENTATION_ROADMAP.md)
-3. [34-finding forensic audit](docs/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md)
+3. [34-finding forensic audit](docs/archive/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md)
 4. [Task backlog](docs/WORK_PACKAGE_BACKLOG.md)
 5. [Agent collaboration/branch ownership](docs/CODEX_CLAUDE_COLLABORATION.md)
 6. [International EPG and sports source strategy](docs/INTERNATIONAL_EPG_AND_SPORTS_SOURCE_EXPANSION.md)

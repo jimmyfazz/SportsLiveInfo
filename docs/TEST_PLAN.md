@@ -58,7 +58,7 @@ Specification: [HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md](HOME_ASSIS
 
 ## Critical B1 integration EPG and API-scope tests
 
-See [B1 forensic EPG and credentials audit](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md).
+See [B1 forensic EPG and credentials audit](archive/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md).
 - [ ] Entire Sky Sports/TNT/Premier standard-service current and upcoming windows compared with licensed/official source; generic provider programmes upgraded only with matching channel/time-window and verified better detail.
 - [ ] Source SHA / true generation time correctly distinguishes 05:00 morning snapshot from later upstream farleyflex update.
 - [ ] 17 stable source aliases, Sky Sports+, TNT5-8, regional and +1 variants tested without unsafe remap; existing provider manual overrides/disabled sources preserved.
