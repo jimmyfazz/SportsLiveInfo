@@ -2,7 +2,7 @@
 
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](docs/CURRENT_STATUS.md).
 
-**Current handover (15 Nov 2026, v0.3.23 installed): [docs/HANDOVER_2026-11-15_SPORTSLIVEINFO_B1G.md](docs/HANDOVER_2026-11-15_SPORTSLIVEINFO_B1G.md)** — state, Mac setup, release and Home Assistant deploy steps, and prioritised open work. Read it first; the list below is the standing reading order.
+**How every agent works: [docs/AGENT_OPERATING_MANUAL.md](docs/AGENT_OPERATING_MANUAL.md).** **Current handover (15 Nov 2026): [docs/HANDOVER_2026-11-15_SPORTSLIVEINFO_B1G.md](docs/HANDOVER_2026-11-15_SPORTSLIVEINFO_B1G.md)** — state, Mac setup, release and Home Assistant deploy steps, and prioritised open work. Read it first; the list below is the standing reading order.
 
 ## READ BEFORE CODE
 
