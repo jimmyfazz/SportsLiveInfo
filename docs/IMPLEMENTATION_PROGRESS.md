@@ -173,7 +173,7 @@ The following sections preserve what their original revisions reported. Statemen
 
 ## Source expansion and sports sub-categories — v0.3.0, 12 November 2026
 
-**Branch:** `claude/sportsliveinfo-b1g-android-syyo8j`. **Status:** SOURCE IMPLEMENTED + LOCAL TESTED (43/43). Live provider calls, Docker build and HAOS install **NOT RUN** (provider hosts unreachable from the build environment). Full detail: [SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md](SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md).
+**Branch:** `claude/sportsliveinfo-b1g-android-syyo8j`. **Status:** SOURCE IMPLEMENTED + LOCAL TESTED (43/43). Live provider calls, Docker build and HAOS install **NOT RUN** (provider hosts unreachable from the build environment). Full detail: [SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md](archive/SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md).
 
 | Workstream | New runnable work | Remaining gate |
 |---|---|---|
@@ -254,7 +254,7 @@ Never make Home Assistant publicly accessible or forward router ports. TV client
 ## GitHub token onboarding and source-to-manifest audit (12 November 2026)
 
 - In this follow-up development branch, the Home Assistant Publishing screen gains a direct GitHub fine-grained token creation walkthrough, explicit owner/repository selection, Content write permission explanation and a **separate read-only Test Connection** action. It never commits data, enables publishing, discloses the stored token or grants data-source rights. A GitHub API redirect with a publishing credential is rejected.
-- Full source-to-manifest audit: [findings and 32-task backlog](FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md). Most important pending gap: public `sli/1` is a sports-event/channel-identity feed, **not a full rights-cleared EPG programme supplement**. Proposed `epg_supplements/1` is not implemented; do not imply full Guide parity.
+- Full source-to-manifest audit: [findings and 32-task backlog](archive/FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md). Most important pending gap: public `sli/1` is a sports-event/channel-identity feed, **not a full rights-cleared EPG programme supplement**. Proposed `epg_supplements/1` is not implemented; do not imply full Guide parity.
 - Added mocked GitHub onboarding/connection tests. **The exact combined suite has not been executed from this branch, CI has been failing and actual Home Assistant device install remains unverified.** The current stage is still experimental; publication is still disabled by default.
 
 ## Claude v0.3.0 integration and independent forensic hardening — 12 November 2026
@@ -265,7 +265,7 @@ Implemented in the integration repair branch: atomic multi-connection API quota 
 
 **TEST STATUS:** Claude recorded 55 passing offline tests on its original branch. New integrated hardening tests and the combined branch have **not** been executed in a complete local checkout here. Existing GitHub Actions returned failures without readable logs. Do not mark this branch green, deployable or HAOS-accepted until the full source test suite and actual App installation pass.
 
-See [forensic integration and corrections](FORENSIC_INTEGRATION_AND_CORRECTIONS_2026-11-12.md) for per-module findings, code fixes and blocking tasks. B1G provider EPG remains primary; the new programme overlay is an opt-in verified *suggestion*, never an unconditional replacement.
+See [forensic integration and corrections](archive/FORENSIC_INTEGRATION_AND_CORRECTIONS_2026-11-12.md) for per-module findings, code fixes and blocking tasks. B1G provider EPG remains primary; the new programme overlay is an opt-in verified *suggestion*, never an unconditional replacement.
 
 
 ## EPG coverage repairs — 13 November 2026

@@ -7,7 +7,7 @@ This repository remains **independent** from the B1 application. B1G integration
 
 ## Verified B1 code audit and integration scope (12 November 2026)
 
-Full source-based specification: **[B1 forensic EPG, Sports Today and API inventory](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md)**.
+Full source-based specification: **[B1 forensic EPG, Sports Today and API inventory](archive/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md)**.
 
 B1's enhanced UK sport EPG source is farleyflex XMLTV, not API-Sports. API-Sports independently verifies football fixtures; TheSportsDB is a separately cached public-key team crest/standings dependency. Android Settings has API-Sports, TMDB and OMDb credential inputs. **Centralise only sport-fixture providers and, where authorised, common international full-channel EPG information, with UK/France priority.** TMDB/OMDb, VOD posters and hero art remain local B1G. Xtream/M3U/Stalker passwords and user-provider XMLTV URLs never go to the central feed.
 

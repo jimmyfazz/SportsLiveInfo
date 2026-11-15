@@ -10,7 +10,7 @@ SportsLiveInfo is the public App source repository. LiveSports-EPG is the separa
 2. [CURRENT_STATUS.md](CURRENT_STATUS.md) governs current implementation and verification claims; [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md) records chronology and handover.
 3. [MASTER_IMPLEMENTATION_ROADMAP.md](MASTER_IMPLEMENTATION_ROADMAP.md) and focused specifications govern required future behavior, which may exceed implemented source.
 4. [FEED_CONTRACT_SLI_V1.md](FEED_CONTRACT_SLI_V1.md), actual source and `../schemas/` govern existing wire fields and paths. Public EPG programme supplements remain unimplemented.
-5. Dated audits retain source baselines. Their unmerged branches, pass counts, source availability/terms and B1 findings are historical evidence, not current facts. Older architecture/JSON/Proxmox proposals cannot override the primary HAOS/two-product/read-only-TV requirements.
+5. Dated audits (now in [archive](archive/)) retain source baselines. Their unmerged branches, pass counts, source availability/terms and B1 findings are historical evidence, not current facts. Older architecture/JSON/Proxmox proposals cannot override the primary HAOS/two-product/read-only-TV requirements.
 
 ## Inventory
 
@@ -20,8 +20,8 @@ SportsLiveInfo is the public App source repository. LiveSports-EPG is the separa
 | [CLAUDE.md](../CLAUDE.md) | Current specification / guide |
 | [README.md](../README.md) | Current specification / guide |
 | [Claude’s 13 November audit](CODE_AUDIT_AND_FIXES_2026-11-13.md) | Historical audit and integration input |
-| [docs/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md](AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md) | Historical audit / receipt |
-| [docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md) | Historical audit / receipt |
+| [docs/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md](archive/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md) | Historical audit / receipt |
+| [docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md](archive/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md) | Historical audit / receipt |
 | [docs/B1_INTEGRATION.md](B1_INTEGRATION.md) | Current specification / guide |
 | [docs/B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md](B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md) | Current specification / guide (binding for B1G) |
 | [docs/B1G_INTEGRATION_FEEDBACK_BACKLOG_2026-11-13.md](B1G_INTEGRATION_FEEDBACK_BACKLOG_2026-11-13.md) | Backlog: producer improvements and B1G feedback import |
@@ -33,24 +33,24 @@ SportsLiveInfo is the public App source repository. LiveSports-EPG is the separa
 | [docs/DELIVERY_PLAN.md](DELIVERY_PLAN.md) | Current specification / guide |
 | [docs/FEED_CONTRACT_SLI_V1.md](FEED_CONTRACT_SLI_V1.md) | Current specification / guide |
 | [docs/FEED_CONTRACTS_AND_PUBLICATION.md](FEED_CONTRACTS_AND_PUBLICATION.md) | Current specification / guide |
-| [docs/FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md](FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md) | Historical audit / receipt |
-| [docs/FORENSIC_INTEGRATION_AND_CORRECTIONS_2026-11-12.md](FORENSIC_INTEGRATION_AND_CORRECTIONS_2026-11-12.md) | Historical audit / receipt |
-| [docs/FORENSIC_SOURCE_AND_LOGIC_INVESTIGATION_2026-11-12.md](FORENSIC_SOURCE_AND_LOGIC_INVESTIGATION_2026-11-12.md) | Historical audit / receipt |
-| [docs/HANDOVER_2026-11-13_SPORTSLIVEINFO_B1G.md](HANDOVER_2026-11-13_SPORTSLIVEINFO_B1G.md) | Historical handover |
+| [docs/FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md](archive/FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md) | Historical audit / receipt |
+| [docs/FORENSIC_INTEGRATION_AND_CORRECTIONS_2026-11-12.md](archive/FORENSIC_INTEGRATION_AND_CORRECTIONS_2026-11-12.md) | Historical audit / receipt |
+| [docs/FORENSIC_SOURCE_AND_LOGIC_INVESTIGATION_2026-11-12.md](archive/FORENSIC_SOURCE_AND_LOGIC_INVESTIGATION_2026-11-12.md) | Historical audit / receipt |
+| [docs/HANDOVER_2026-11-13_SPORTSLIVEINFO_B1G.md](archive/HANDOVER_2026-11-13_SPORTSLIVEINFO_B1G.md) | Historical handover |
 | [docs/HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md](HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md) | Current handover |
 | [docs/HOME_ASSISTANT_BARE_METAL_PRIMARY.md](HOME_ASSISTANT_BARE_METAL_PRIMARY.md) | Current specification / guide |
 | [docs/HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md](HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md) | Current specification / guide |
-| [docs/HOME_ASSISTANT_PROXMOX_HOSTING.md](HOME_ASSISTANT_PROXMOX_HOSTING.md) | Superseded proposal / fallback |
+| [docs/HOME_ASSISTANT_PROXMOX_HOSTING.md](archive/HOME_ASSISTANT_PROXMOX_HOSTING.md) | Superseded proposal / fallback |
 | [docs/IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md) | Current handover + labeled historical receipts |
 | [docs/INTERNATIONAL_EPG_AND_SPORTS_SOURCE_EXPANSION.md](INTERNATIONAL_EPG_AND_SPORTS_SOURCE_EXPANSION.md) | Current specification / guide |
 | [docs/LICENSING_AND_HOSTING.md](LICENSING_AND_HOSTING.md) | Current specification / guide |
 | [docs/MASTER_IMPLEMENTATION_ROADMAP.md](MASTER_IMPLEMENTATION_ROADMAP.md) | Current specification / guide |
 | [docs/QUALITY_SECURITY_AND_ACCEPTANCE.md](QUALITY_SECURITY_AND_ACCEPTANCE.md) | Current specification / guide |
 | [docs/RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md](RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md) | Current research record |
-| [docs/RESEARCH_FINDINGS_2026-11-12.md](RESEARCH_FINDINGS_2026-11-12.md) | Historical audit / receipt |
-| [docs/SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md](SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md) | Historical audit / receipt |
+| [docs/RESEARCH_FINDINGS_2026-11-12.md](archive/RESEARCH_FINDINGS_2026-11-12.md) | Historical audit / receipt |
+| [docs/SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md](archive/SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md) | Historical audit / receipt |
 | [docs/SOURCE_REGISTRY.md](SOURCE_REGISTRY.md) | Current specification / guide |
-| [docs/SOURCES_AND_IMPROVEMENTS_AUDIT_2026-11-12.md](SOURCES_AND_IMPROVEMENTS_AUDIT_2026-11-12.md) | Historical audit / receipt |
+| [docs/SOURCES_AND_IMPROVEMENTS_AUDIT_2026-11-12.md](archive/SOURCES_AND_IMPROVEMENTS_AUDIT_2026-11-12.md) | Historical audit / receipt |
 | [docs/SUBSCRIPTION_DRIVEN_MULTIREGION_EPG.md](SUBSCRIPTION_DRIVEN_MULTIREGION_EPG.md) | Current specification / guide |
 | [docs/TEST_PLAN.md](TEST_PLAN.md) | Current specification / guide |
 | [docs/UK_BROADCAST_MATCHING.md](UK_BROADCAST_MATCHING.md) | Current specification / guide |

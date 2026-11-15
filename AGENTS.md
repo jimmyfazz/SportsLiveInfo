@@ -5,7 +5,7 @@
 ## READ BEFORE CODE
 
 1. [Master implementation roadmap](docs/MASTER_IMPLEMENTATION_ROADMAP.md) — **normative phases and dual-product scope**.
-2. [Forensic audit](docs/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md) — prioritized defects and unverified assumptions.
+2. [Forensic audit](docs/archive/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md) — prioritized defects and unverified assumptions.
 3. [International EPG and sports sources](docs/INTERNATIONAL_EPG_AND_SPORTS_SOURCE_EXPANSION.md) — factual/terms checks.
 4. [Feed contract/licence gate](docs/FEED_CONTRACTS_AND_PUBLICATION.md), [QA/security](docs/QUALITY_SECURITY_AND_ACCEPTANCE.md).
 5. [Codex and Claude collaboration](docs/CODEX_CLAUDE_COLLABORATION.md) — **exclusive worktrees and file owners**.
@@ -17,7 +17,7 @@ Later owner decisions override historical UK-only or optional-B1 language in old
 
 ## New priority: operator setup and supplementary EPG contract (12 Nov 2026)
 
-Read [forensic publishing/token/EPG/sports manifest audit](docs/FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md) before changing token setup, the `sli/1` exporter or B1G channel mapping. Publishing now has an in-app fine-grained token walkthrough and GET-only test. A test of the saved token is **not** authorisation to publish and cannot fully prove write permission. `sli/1` still sends **no EPG programme rows**; a proposed additive, rights-cleared `epg_supplements` contract and B1G's non-destructive local rendering are needed. Do not claim full EPG delivery based on the channel catalogue. Never republish third-party programme titles/descriptions without approval.
+Read [forensic publishing/token/EPG/sports manifest audit](docs/archive/FORENSIC_AUDIT_TOKEN_SETUP_EPG_SPORTS_MANIFEST_2026-11-12.md) before changing token setup, the `sli/1` exporter or B1G channel mapping. Publishing now has an in-app fine-grained token walkthrough and GET-only test. A test of the saved token is **not** authorisation to publish and cannot fully prove write permission. `sli/1` still sends **no EPG programme rows**; a proposed additive, rights-cleared `epg_supplements` contract and B1G's non-destructive local rendering are needed. Do not claim full EPG delivery based on the channel catalogue. Never republish third-party programme titles/descriptions without approval.
 
 ## Locked decisions
 

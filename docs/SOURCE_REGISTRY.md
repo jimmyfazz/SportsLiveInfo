@@ -9,7 +9,7 @@
 
 `providers.SPORTS` contains 16 entries: Jolpica, OpenF1, OpenLigaDB, football-data.org, TheSportsDB, CricketData.org, and ten API-Sports adapters (football, rugby, basketball, hockey, NFL, baseball, handball, volleyball, AFL, MMA). All API-Sports entries share the saved `api_sports` key setting. Three optional owner-entered sports keys are API-Sports, football-data.org and CricketData.org. Jolpica is initially selected, new sources disabled; setup completion is required before collection.
 
-`providers.EPG` contains 27 candidate feeds across 15 source markets, all opt-in. `guide.py` has service tables for eight markets and 41 diagnostic lineup families. [Current status](CURRENT_STATUS.md) records measured code counts and validation; [source expansion report](SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md) records the original expansion. SportsAPI.app, SportAPI.ai, specialist Tennis API and Boxerbook are research candidates, not implemented adapters in this snapshot. Do not confuse SportsAPI.app with API-Sports.
+`providers.EPG` contains 27 candidate feeds across 15 source markets, all opt-in. `guide.py` has service tables for eight markets and 41 diagnostic lineup families. [Current status](CURRENT_STATUS.md) records measured code counts and validation; [source expansion report](archive/SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md) records the original expansion. SportsAPI.app, SportAPI.ai, specialist Tennis API and Boxerbook are research candidates, not implemented adapters in this snapshot. Do not confuse SportsAPI.app with API-Sports.
 
 The tables below retain dated research claims. Endpoint operation, supplier quotas/free eligibility and legal terms were **not newly reverified** in this review and test correction. DOC-CONFIRMED refers to the original research, not current deployment approval. Even a working source is not automatically licensed for public redistribution.
 
@@ -36,7 +36,7 @@ The tables below retain dated research claims. Endpoint operation, supplier quot
 
 ## B1G code-verified existing sports/EPG source map (12 Nov 2026)
 
-Full audit with precise code paths: [B1 forensic EPG and credentials](B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md).
+Full audit with precise code paths: [B1 forensic EPG and credentials](archive/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md).
 
 | Existing B1G input | Role and actual source | Key needed | Aggregator action |
 |---|---|---|---|

@@ -1,9 +1,9 @@
-> **SUPERSEDED AS PRIMARY DEPLOYMENT (12 November 2026):** The owner has selected **Home Assistant installed directly on an always-on personal-home mini PC with no Proxmox**. The primary plan is [HOME_ASSISTANT_BARE_METAL_PRIMARY.md](HOME_ASSISTANT_BARE_METAL_PRIMARY.md). The Proxmox and office-host options below are preserved only as fallbacks. Statements below describing Proxmox as the selected environment are historical and should not direct implementation.
+> **SUPERSEDED AS PRIMARY DEPLOYMENT (12 November 2026):** The owner has selected **Home Assistant installed directly on an always-on personal-home mini PC with no Proxmox**. The primary plan is [HOME_ASSISTANT_BARE_METAL_PRIMARY.md](../HOME_ASSISTANT_BARE_METAL_PRIMARY.md). The Proxmox and office-host options below are preserved only as fallbacks. Statements below describing Proxmox as the selected environment are historical and should not direct implementation.
 
 # Deployment decision — Home Assistant App or Proxmox LXC
 
 > **Superseded reference — reviewed 12 November 2026.** Preserved as an earlier proposal, not installation or current wire-format instructions. Use the master roadmap, implemented sli/1.0 contract and private local App operator guide. UK-only/optional-B1/Proxmox-primary assumptions are superseded.
-> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
+> **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](../CURRENT_STATUS.md).
 
 **Research date:** 2026-11-12. **Status:** architecture proposal only; no installation or integration implemented.
 

@@ -1,6 +1,6 @@
 # Handover — SportsLiveInfo and B1G, 14 November 2026
 
-**Supersedes** [the 13 November handover](HANDOVER_2026-11-13_SPORTSLIVEINFO_B1G.md). Start here. For the feed contract read [FEED_CONTRACTS_AND_PUBLICATION.md](FEED_CONTRACTS_AND_PUBLICATION.md) (§6.1 D8 channel links, §6.2 private feed); for change history read [the changelog](../sportsliveinfo/CHANGELOG.md); for measurements read [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md).
+**Supersedes** [the 13 November handover](archive/HANDOVER_2026-11-13_SPORTSLIVEINFO_B1G.md). Start here. For the feed contract read [FEED_CONTRACTS_AND_PUBLICATION.md](FEED_CONTRACTS_AND_PUBLICATION.md) (§6.1 D8 channel links, §6.2 private feed); for change history read [the changelog](../sportsliveinfo/CHANGELOG.md); for measurements read [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md).
 
 ## 1. What exists
 
