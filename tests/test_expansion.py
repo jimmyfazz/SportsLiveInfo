@@ -485,7 +485,7 @@ class EngineExpansionTests(unittest.TestCase):
              patch("sportsliveinfo.feed.datetime", FixedClock):
             Engine(self.store).publish()
         uploads = commits[0][4]
-        payload = b"".join(d for p, d in uploads.items() if "/assets/events/" in p).decode()
+        payload = b"".join(d for p, d in uploads.items() if "/assets/events" in p).decode()   # core and extra
         self.assertIn("openligadb:1", payload)
         self.assertIn("v1/manifest.json", uploads)
         for private in ("broadcast_candidates", "Private", "fetch_scope", "broadcast_status"):

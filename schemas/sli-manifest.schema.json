@@ -18,7 +18,10 @@
         "min_reader_minor": {"type": "integer"},
         "unknown_fields": {"const": "ignore"},
         "unknown_assets": {"const": "ignore"},
-        "unknown_enum_fallback": {"type": "object"}
+        "unknown_enum_fallback": {"type": "object"},
+        "live_state_rule": {"type": "string", "description": "1.6+: when status_normalized 'live' may be shown as LIVE"},
+        "live_overlay_rule": {"type": "string", "description": "1.6+: how the optional live asset overlays the day assets"},
+        "tier_rule": {"type": "string", "description": "1.6+: which assets carry core and extra events"}
       }
     },
     "revision": {"type": "string", "pattern": "^[0-9a-f]{20}$"},
@@ -44,7 +47,7 @@
         "type": "object",
         "required": ["kind", "path", "sha256", "bytes", "schema", "content_type", "required"],
         "properties": {
-          "kind": {"type": "string", "description": "taxonomy | channels | events:YYYY-MM-DD | today | health | (future kinds: ignore)"},
+          "kind": {"type": "string", "description": "taxonomy | channels | identity | dictionary | guide_map | events:YYYY-MM-DD | events_extra:YYYY-MM-DD (1.6, optional, tier extra) | today | live (1.6, optional, sli.live/1) | health | (future kinds: ignore)"},
           "path": {"type": "string", "pattern": "^v1/assets/[a-z_]+/[0-9a-f]{24}\\.json$"},
           "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "bytes": {"type": "integer", "minimum": 1},
@@ -56,7 +59,11 @@
         }
       }
     },
-    "coverage": {"type": "object", "required": ["events", "today", "by_sport"]},
+    "coverage": {"type": "object", "required": ["events", "today", "by_sport"],
+      "properties": {"tiers": {"type": "object", "required": ["core", "extra"], "description": "1.6+: published events per tier",
+                               "properties": {"core": {"type": "integer", "minimum": 0}, "extra": {"type": "integer", "minimum": 0}}},
+                     "guide_corroborated_broadcasts": {"type": "integer", "minimum": 0, "description": "1.6+: broadcast links with status guide_corroborated"},
+                     "verified_broadcasts": {"type": "integer", "minimum": 0}}},
     "rights": {
       "type": "object",
       "required": ["events", "epg_programmes", "attribution"],

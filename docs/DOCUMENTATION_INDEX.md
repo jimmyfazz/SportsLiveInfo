@@ -20,6 +20,7 @@ SportsLiveInfo is the public App source repository. LiveSports-EPG is the separa
 | [CLAUDE.md](../CLAUDE.md) | Current specification / guide |
 | [README.md](../README.md) | Current specification / guide |
 | [Claude’s 13 November audit](CODE_AUDIT_AND_FIXES_2026-11-13.md) | Historical audit and integration input |
+| [docs/AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md](AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md) | Current audit: fixed and open findings |
 | [docs/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md](archive/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md) | Historical audit / receipt |
 | [docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md](archive/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md) | Historical audit / receipt |
 | [docs/B1_INTEGRATION.md](B1_INTEGRATION.md) | Current specification / guide |

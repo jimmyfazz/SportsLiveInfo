@@ -9,22 +9,26 @@ release:
 * Minor versions only ADD optional fields/assets/enum values. Readers ignore
   unknown fields and map unknown enum values to documented fallbacks.
 * Time-relative state (live now) is never baked in; readers compute it from
-  start/end and taxonomy typical durations, so an old feed stays correct.
+  start/expected end and the time each status was observed (live_state_rule),
+  so an old feed never shows a stale "LIVE".
 * Events use a field WHITELIST; EPG programme text and EPG-derived candidates
   are never published.
 """
 import hashlib
 import json
+import re
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from . import __version__, providers, taxonomy
+from . import __version__, linking, providers, taxonomy
 from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, REGIONAL_PARENTS, REGIONAL_RULES, SERVICES, SOURCE_ID_CROSSWALK
 
-FORMAT_MAJOR, FORMAT_MINOR = 1, 5  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset;
+FORMAT_MAJOR, FORMAT_MINOR = 1, 6  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset;
 # 1.3: optional event `broadcast_links` (owner decision D8); 1.4: dictionary `regions`, `group_markets`,
 # `country_tags` and the 0.3.18 lookup rules (country tag, callsign, transliteration, successor, own-market suffix);
-# 1.5: optional `guide_map` asset (what each guide channel is)
+# 1.5: optional `guide_map` asset (what each guide channel is);
+# 1.6: event `status_observed_at`, `expected_end_utc` and `tier`; optional `live` and `events_extra:<date>` assets;
+# broadcast link status `guide_corroborated` (contract agreed 15 Nov 2026)
 ROOT = "v1"
 # B1G refuses any asset above this size (SliFeedContract.MAX_ASSET_BYTES, sized for 32-bit Fire TV sticks).
 # An optional asset over it is not published; a required one fails the build loudly.
@@ -36,7 +40,49 @@ EVENT_FIELDS = (
     "competition_country", "event_type", "session", "match_type", "day_number", "weight_class", "title", "participants",
     "participants_short", "start_utc", "end_utc", "start_precision", "status_normalized", "round", "stage", "venue",
     "country", "tags", "sources", "fixture_confidence", "corroboration", "start_conflict", "broadcast_verified",
+    "status_observed_at", "expected_end_utc", "tier",
 )
+LIVE_STATE_RULE = ("status_normalized == 'live' is trusted only when status_observed_at is at most 45 minutes old AND "
+                   "start_utc <= now <= expected_end_utc + 30 minutes. Otherwise treat it as unknown and fall back to the "
+                   "clock (start..expected_end) shown as 'should be on now', never 'LIVE'.")
+FEATURED_TAGS = sorted(linking.FEATURED_TAGS)
+
+# Tiered public "today" (contract sli/1.6 §3). Core: named competitions, internationals, featured nations, PPV, the
+# main non-football sports, and football leagues and cups of the UK, Ireland and France. Everything else (mostly
+# low-tier football elsewhere) is "extra" and published in the optional events_extra:<date> assets.
+CORE_SPORTS = frozenset({"motorsport", "rugby_union", "rugby_league", "rugby", "cricket", "tennis", "golf", "darts",
+                         "snooker", "boxing", "mma", "horse_racing"})
+CORE_FOOTBALL_COUNTRIES = frozenset({"england", "scotland", "wales", "northern ireland", "ireland", "republic of ireland",
+                                     "united kingdom", "great britain", "uk", "france"})
+_YOUTH = re.compile(r"\b(?:u ?1[5-9]|u ?2[0-3]|under ?(?:1[5-9]|2[0-3])|youth|reserves?|academy|development|"
+                    r"premier league 2|professional development)\b")
+
+
+def event_tier(event):
+    """'core' or 'extra' (contract sli/1.6 §3)."""
+    if event.get("origin") == "guide_listing":
+        return "core"              # private feed: live sport the owner's guides list on a recognised channel
+    category = event.get("category_id") or ""
+    # A named taxonomy category (anything but "<sport>.other") covers named competitions, including the NFL, NBA, NHL
+    # and MLB top leagues, the national-team categories and boxing PPV.
+    if (event.get("competition_id") or (category and not category.endswith(".other"))
+            or set(event.get("tags") or ()) & linking.FEATURED_TAGS or event.get("sport") in CORE_SPORTS):
+        return "core"
+    if (event.get("sport") == "football" and taxonomy.norm(event.get("competition_country")) in CORE_FOOTBALL_COUNTRIES
+            and not _YOUTH.search(taxonomy.norm(event.get("competition")))):
+        return "core"              # UK, Irish and French leagues and cups not named in the taxonomy (youth excepted)
+    return "extra"
+
+
+def _z(value):
+    """ISO-8601 UTC with a trailing Z, or None."""
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if moment.tzinfo is None:
+        return None
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 # B1G SportsPriorityStore groups. New taxonomy sports map to a group here; a
 # group B1G has never seen is appended to the user's order by the reader.
@@ -108,8 +154,9 @@ def taxonomy_document():
         "tags": {**{"team:" + slug: label for slug, label in nations}, "ppv": "Pay-per-view"},
         "live_states": [{"id": i, "label": l, "is_live": live} for i, l, live in LIVE_STATES],
         "start_precisions": [{"id": i, "label": l} for i, l in PRECISIONS],
-        "live_state_rule": "status_normalized wins for live/finished/postponed/cancelled; otherwise live_probable when "
-                           "start_utc <= now < (end_utc or start_utc + sport.typical_minutes); date_only -> time_tbc",
+        "live_state_rule": LIVE_STATE_RULE + " finished/postponed/cancelled win; otherwise live_probable when "
+                           "start_utc <= now < expected_end_utc (older feeds: end_utc or start_utc + "
+                           "sport.typical_minutes); date_only -> time_tbc",
     }
 
 
@@ -234,8 +281,17 @@ def dictionary_document(store, conf):
     return document if isinstance(document, dict) and document.get("channels") else None
 
 
-def _event_public(event, private=False):
+def _event_public(event, private=False, observed_fallback=None):
     row = {k: event[k] for k in EVENT_FIELDS if k in event and event[k] not in (None, "", [])}
+    # Contract sli/1.6 §1: when the status was last observed (always present) and the typical end.
+    row["status_observed_at"] = _z(event.get("status_observed_at")) or _z(observed_fallback) or "1970-01-01T00:00:00Z"
+    row.pop("expected_end_utc", None)
+    if event.get("start_utc") and event.get("start_precision") != "date_only":
+        try:
+            row["expected_end_utc"] = linking.expected_end(event).isoformat(timespec="seconds")
+        except (TypeError, ValueError):
+            pass
+    row["tier"] = event_tier(event)
     # A cached event must not become a "verified broadcaster" merely
     # because an untrusted source sets a boolean. A reviewed, versioned
     # evidence rule must be attached before publishing clickable TV claims.
@@ -263,6 +319,11 @@ def _broadcast_links(event, private=False):
     and a link never makes an event "verified": the guide shows a channel
     listing the event, not that a provider stream carries it.
     """
+    # Audit 15 Nov (P1): links found only by the looser guide-listing matcher (team words stripped, ±3 h) can name the
+    # wrong match ("Man City v Liverpool" 14:30 → "Manchester United v Liverpool" 17:30). Until that matcher is as
+    # strict as the main one they stay in the owner's private feed and are never published publicly.
+    if not private and event.get("broadcast_status") == "guide_listing_match":
+        return []
     links = []
     for candidate in event.get("broadcast_candidates") or []:
         if not isinstance(candidate, dict) or not candidate.get("canonical_channel_id"):
@@ -272,6 +333,11 @@ def _broadcast_links(event, private=False):
                 "coverage": candidate.get("coverage") or "network",
                 "confidence": "high" if candidate.get("match_confidence") == "high" else "medium",
                 "guides": len(candidate.get("epg_sources") or [])}
+        if linking.guide_corroborated(event, candidate):
+            # Contract sli/1.6 §4: strict match, same slot, curated channel, two independent guide families.
+            # Still not "verified": broadcast_verified is reserved for provider or official evidence.
+            link["status"] = "guide_corroborated"
+            link["verification"] = linking.CORROBORATION_RULE
         if candidate.get("parent_channel_id"):
             link["parent_channel_id"] = str(candidate["parent_channel_id"])
         if candidate.get("not_on"):
@@ -282,6 +348,35 @@ def _broadcast_links(event, private=False):
                     link[field] = str(candidate[field])[:120]
         links.append(link)
     return sorted(links, key=lambda link: link["canonical_channel_id"])
+
+
+def live_document(store, events):
+    """The optional ``live`` asset (contract sli/1.6 §2), or None.
+
+    Built from the live-status lane's observations (``live_observations``, keyed by source event id). An event is
+    listed when an observation newer than its published status either changes the status or confirms play in
+    progress (so a reader keeps trusting "live" for 45 minutes). Ids, statuses and times only: no scores."""
+    observations = ((store._get("live_observations") or {}).get("events") or {})
+    if not observations:
+        return None
+    rows = []
+    for event in events:
+        seen = [observations[sid] for sid in event.get("source_events") or [event.get("id")]
+                if isinstance(observations.get(sid), dict)]
+        if not seen:
+            continue
+        latest = max(seen, key=lambda o: str(o.get("status_observed_at") or ""))
+        observed, published = _z(latest.get("status_observed_at")), _z(event.get("status_observed_at"))
+        status = latest.get("status_normalized")
+        if not observed or status not in linking.STATUS_PROGRESS or (published and observed <= published):
+            continue
+        if status != event.get("status_normalized") or status == "live":
+            rows.append({"id": event["id"], "status_normalized": status, "status_observed_at": observed})
+    if not rows:
+        return None
+    rows.sort(key=lambda r: r["id"])
+    # generated_at is the newest observation, not the build time, so an unchanged lane keeps the same bytes.
+    return {"schema": "sli.live/1", "generated_at": max(r["status_observed_at"] for r in rows), "events": rows}
 
 
 def build_feed(store, now=None, previous_revision=None, private=False):
@@ -296,15 +391,18 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     enabled_sports = [name for name in providers.SPORTS if conf["sports"].get(name)]
     enabled_guides = [name for name in providers.EPG if conf["epg"].get(name)]
     snapshots = store.read_snapshots(
-        products=("sports", *("epg-quality:" + name for name in enabled_guides)),
+        products=("sports", *(() if private else ("sports-public",)), *("epg-quality:" + name for name in enabled_guides)),
         timestamps_only=(*("sports:" + name for name in enabled_sports),
                          *("epg:" + name for name in enabled_guides)),
     )
     snap = snapshots.get("sports")
     all_events = snap["data"]["events"] if snap else []
-    # In a fused fixture, the primary source may be approved while another
-    # source supplied a participant/time/status. Until field-level lineage is
-    # implemented, fail closed unless *every* contributor is approved.
+    observed_fallback = ((snap or {}).get("data") or {}).get("generated_at") or (snap or {}).get("updated_at")
+
+    # Audit 15 Nov (C1): the public feed is built from a merge of approved-source events only (engine
+    # materialisation, snapshot "sports-public"), so an unapproved source corroborating an approved fixture can no
+    # longer remove it. Every published record must still come from approved sources only: a fused fixture whose
+    # contributors are not all approved is never published (field-level lineage is not tracked).
     def licensed(event):
         if private:
             return True                   # personal use in the owner's private repository
@@ -315,28 +413,37 @@ def build_feed(store, now=None, previous_revision=None, private=False):
         return (isinstance(origin, str) and origin in approved
                 and isinstance(contributors, list) and bool(contributors)
                 and all(isinstance(src, str) and src in approved for src in contributors))
+    public = snapshots.get("sports-public")
+    public_data = (public or {}).get("data") or {}
+    if not private and public and sorted(public_data.get("approved") or []) == sorted(approved):
+        selected = public_data.get("events") or []
+    else:
+        # Private feed, or approvals changed since the last collection: the full merge, fail-closed.
+        selected = all_events
+    selected = [e if "category_id" in e else taxonomy.classify(e) for e in selected if licensed(e)]
     # Legacy/unclassified snapshot rows still need category fields the schema requires.
-    events = [_event_public(e if "category_id" in e else taxonomy.classify(e), private) for e in all_events if licensed(e)]
+    events = [_event_public(e, private, observed_fallback) for e in selected]
     if private:
         approved = {src for e in all_events for src in (e.get("sources") or [e.get("source_id")])
                     if isinstance(src, str) and src != "guide_listing"}
-    omitted = sorted({src for e in all_events if not licensed(e) and e.get("origin") != "guide_listing"
+    omitted = sorted({src for e in all_events if e.get("origin") != "guide_listing"
                       for src in (e.get("sources") or [e.get("source_id")])
                       if isinstance(src, str) and src not in approved})
-    by_day = {}
+    by_day, extra_by_day = {}, {}
     for event in events:
         day = datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date().isoformat()
-        by_day.setdefault(day, []).append(event)
+        (by_day if event["tier"] == "core" else extra_by_day).setdefault(day, []).append(event)
     today = now.astimezone(LONDON).date()
     window = [(today + timedelta(days=i)).isoformat() for i in range(8)]
 
-    assets, files = [], {}
+    assets, files, skipped = [], {}, []
 
     def add(kind, obj, schema, required, **extra):
         data = _json(obj)
         if len(data) > MAX_READER_ASSET_BYTES:
             if required:
                 raise ValueError("required feed asset %s exceeds the reader limit" % kind.split(":")[0])
+            skipped.append(kind)
             return                     # e.g. a dictionary with every world region switched on
         digest = hashlib.sha256(data).hexdigest()
         path = "%s/assets/%s/%s.json" % (ROOT, kind.split(":")[0], digest[:24])
@@ -359,12 +466,16 @@ def build_feed(store, now=None, previous_revision=None, private=False):
         rows = sorted(by_day.get(day, []), key=lambda e: (e["start_utc"], e["id"]))
         add("events:" + day, {"schema": "sli.events-day/1", "date": day, "timezone": "Europe/London", "events": rows},
             "sli.events-day/1", day == window[0], date=day, records=len(rows))
+    for day in window:
+        rows = sorted(extra_by_day.get(day, []), key=lambda e: (e["start_utc"], e["id"]))
+        if rows:      # contract sli/1.6 §3: the long tail, same schema as events:<date>
+            add("events_extra:" + day, {"schema": "sli.events-day/1", "date": day, "timezone": "Europe/London",
+                                        "events": rows}, "sli.events-day/1", False, date=day, records=len(rows))
     todays = by_day.get(window[0], [])
     groups = {}
     for event in todays:
         groups.setdefault(event["sport"], {}).setdefault(event["category_id"], []).append(event)
-    featured_tags = sorted({"team:england", "team:england_women", "team:scotland", "team:wales", "team:northern_ireland",
-                            "team:ireland", "team:lions", "team:great_britain", "ppv"})
+    featured_tags = FEATURED_TAGS
     today_doc = {
         "schema": "sli.today/1", "date": window[0],
         "featured_event_ids": [e["id"] for e in sorted(todays, key=lambda e: e["start_utc"]) if set(e.get("tags", [])) & set(featured_tags)],
@@ -374,6 +485,11 @@ def build_feed(store, now=None, previous_revision=None, private=False):
             for sport, cats in sorted(groups.items(), key=lambda kv: taxonomy.sport_order(kv[0]))],
     }
     add("today", today_doc, "sli.today/1", True, date=window[0], records=len(todays))
+    published_ids = {e["id"] for e in events}
+    live_doc = live_document(store, [dict(e, status_observed_at=e.get("status_observed_at") or observed_fallback)
+                                     for e in selected if e.get("id") in published_ids])
+    if live_doc:
+        add("live", live_doc, "sli.live/1", False, records=len(live_doc["events"]))
     add("health", health_document(store, conf, snapshots), "sli.health/1", False)
 
     schedule = sorted(conf.get("schedule", []))
@@ -387,12 +503,24 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     by_sport = {}
     for event in events:
         by_sport[event["sport"]] = by_sport.get(event["sport"], 0) + 1
+    corroborated_links = sum(link.get("status") == "guide_corroborated"
+                             for e in events for link in e.get("broadcast_links") or [])
+    core = sum(e["tier"] == "core" for e in events)
+    notices = [] if events else ["No rights-approved sporting events in this revision; registry assets remain valid."]
+    notices += ["Optional asset %s exceeded the %d MiB reader limit and was not published." % (kind, MAX_READER_ASSET_BYTES >> 20)
+                for kind in skipped]
     manifest = {
         "feed": "sportsliveinfo", "format": "sli/%d.%d" % (FORMAT_MAJOR, FORMAT_MINOR),
         "format_major": FORMAT_MAJOR, "format_minor": FORMAT_MINOR,
         "compatibility": {"reader_major": FORMAT_MAJOR, "min_reader_minor": 0, "unknown_fields": "ignore",
                           "unknown_assets": "ignore", "unknown_enum_fallback": FALLBACKS,
-                          "on_major_mismatch": "keep last good feed; show 'update B1G to read the newer SportsLiveInfo feed'"},
+                          "on_major_mismatch": "keep last good feed; show 'update B1G to read the newer SportsLiveInfo feed'",
+                          "live_state_rule": LIVE_STATE_RULE,
+                          "live_overlay_rule": "overlay the optional 'live' asset on the day assets by event id when its "
+                                               "status_observed_at is newer; a feed older than 45 minutes never makes "
+                                               "anything 'LIVE'",
+                          "tier_rule": "events:<date> and today carry tier 'core'; the optional events_extra:<date> "
+                                       "assets (same schema) carry tier 'extra'"},
         "revision": revision, "previous_revision": previous_revision,
         "generated_at": now.isoformat(timespec="seconds"),
         "publisher": {"app": "SportsLiveInfo", "version": __version__},
@@ -401,16 +529,21 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                     "reader_poll_minutes": 30, "stale_after_hours": 30,
                     "expires_at": (now + timedelta(hours=48)).isoformat(timespec="seconds")},
         "capabilities": ["taxonomy", "channel_registry", "channel_families", "guide_catalogue", "events_by_day",
-                         "today", "source_health", "fixture_corroboration"]
+                         "today", "source_health", "fixture_corroboration", "status_observed_at", "event_tiers"]
                         + (["channel_identity"] if identity_doc else [])
                         + (["channel_dictionary"] if dictionary_doc else [])
                         + (["guide_map"] if guide_map_doc else [])
+                        + (["live_status"] if live_doc else [])
                         + (["verified_broadcasts"] if any(e["broadcast_verified"] for e in events) else [])
-                        + (["broadcast_links"] if any(e.get("broadcast_links") for e in events) else []),
+                        + (["broadcast_links"] if any(e.get("broadcast_links") for e in events) else [])
+                        + (["guide_corroborated_broadcasts"] if corroborated_links else []),
         "assets": assets,
         "coverage": {"events": len(events), "today": len(todays), "by_sport": dict(sorted(by_sport.items())),
+                     "tiers": {"core": core, "extra": len(events) - core},
+                     "today_extra": len(extra_by_day.get(window[0], [])),
                      "corroborated": sum(e.get("fixture_confidence") == "corroborated" for e in events),
                      "verified_broadcasts": sum(e["broadcast_verified"] for e in events),
+                     "guide_corroborated_broadcasts": corroborated_links,
                      "sports_known": len(taxonomy.SPORTS), "competitions_known": sum(len(t) for t in taxonomy.COMPETITIONS.values()),
                      "services_known": len({cid for t in SERVICES.values() for cid in t.values()}),
                      "families_known": len(CHANNEL_FAMILIES)},
@@ -423,7 +556,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                                        "licence": "Unlicense (public domain)"}] if dictionary_doc else [])},
         "display_policy": {"sports_today_body_cards": 10, "ppv_pinned_extra_card": True, "featured_tags": featured_tags,
                            "user_settings_override": True},
-        "notices": [] if events else ["No rights-approved sporting events in this revision; registry assets remain valid."],
+        "notices": notices,
     }
     if private:
         manifest["visibility"] = "private"

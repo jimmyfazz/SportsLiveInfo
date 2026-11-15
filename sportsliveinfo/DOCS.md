@@ -24,7 +24,7 @@ In **Sources & API keys**, select the keyless sports and private guide groups wi
 | Sources / setup | Individual source selection and Save/Test; optional key settings for API-Sports, football-data.org and CricketData.org; keyless providers identified |
 | Live today / events | Classified and fused fixtures, UK times, featured groups, filters and explicitly provisional EPG channel candidates |
 | EPG coverage | Private source programmes, canonical identity hints, 24/72/168-hour gaps and family/service diagnostics |
-| Schedule | Europe/London daily refresh slots, durable claims, manual-refresh overlap protection; defaults 04:00, 12:00 and 17:00 |
+| Schedule | Europe/London daily refresh slots, durable claims, manual-refresh overlap protection; defaults 04:00, 12:00 and 17:00. **Live status lane** (0.3.23, on by default once an API-Sports key is saved): while a collected event is between its start and expected end, the API-Sports live board is read at most every 15 minutes, at most 40 calls a day per product inside that product's quota (20 calls always kept for the scheduled refreshes). Status changes are published as the small `live` asset when automatic publishing is on. Switch it off here |
 | Diagnostics | Last-good snapshots, source errors, daily UTC request counts and bounded recent job history |
 | Publishing | Local preview, masked fine-grained token setup, separate GET-only connection check and optional atomic static-feed publication |
 

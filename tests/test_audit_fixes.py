@@ -381,6 +381,34 @@ class FeedAndPublisherTests(StoreCase):
         self.assertNotIn("v1/gone.json", paths, "never delete a path absent from the remote tree")
         self.assertTrue(any("/git/ref/heads/main" in p for m, p in calls if m == "GET"))
 
+    def test_publisher_refuses_a_private_feed_in_a_public_repository(self):
+        """The visibility check runs on every publish, not only in the connection test (audit 15 Nov, P1)."""
+        class Response(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        for private, visible in ((True, False), (False, True)):
+            calls = []
+
+            def opener(request, timeout=0, visible=visible):
+                calls.append((request.get_method(), urllib.parse.urlsplit(request.full_url).path))
+                return Response(json.dumps({"full_name": "o/feed", "private": visible}).encode())
+
+            with patch.object(engine_module, "_github_open", side_effect=opener):
+                with self.assertRaisesRegex(RuntimeError, "nothing was published"):
+                    Engine._github_commit("o", "feed", "main", "t", {"v1/manifest.json": b"{}"}, [], "msg", private=private)
+            self.assertEqual(calls, [("GET", "/repos/o/feed")], "stops before reading or writing anything")
+
+        def renamed(request, timeout=0):
+            return Response(json.dumps({"full_name": "someone/else", "private": True}).encode())
+
+        with patch.object(engine_module, "_github_open", side_effect=renamed):
+            with self.assertRaisesRegex(RuntimeError, "different repository"):
+                Engine._github_commit("o", "feed", "main", "t", {}, [], "msg", private=True)
+
     def test_network_failure_maps_to_runtime_error(self):
         with patch.object(engine_module, "_github_open", side_effect=urllib.error.URLError("dns")):
             with self.assertRaisesRegex(RuntimeError, "Could not reach GitHub"):

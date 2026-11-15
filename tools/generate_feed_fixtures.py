@@ -51,11 +51,18 @@ SNAPSHOTS = {
            title="Aston Villa v AS Roma", participants=["Aston Villa", "AS Roma"], start_utc="2026-11-18T20:00:00+00:00", status_normalized="scheduled"),
         _e(id="api-sports:9005", source_id="api_sports", sport="football", competition="Friendlies", competition_country="World",
            title="England W v Spain W", participants=["England W", "Spain W"], start_utc="2026-11-15T17:00:00+00:00", status_normalized="scheduled"),
+        # 1.6 tiers: an English league outside the named competitions is core; low-tier football elsewhere is extra.
+        _e(id="api-sports:9006", source_id="api_sports", sport="football", competition="National League",
+           competition_country="England", title="York City v Solihull Moors", participants=["York City", "Solihull Moors"],
+           start_utc="2026-11-14T15:00:00+00:00", status_normalized="scheduled"),
+        _e(id="api-sports:9007", source_id="api_sports", sport="football", competition="Liga Nacional",
+           competition_country="Honduras", title="Olimpia v Motagua", participants=["Olimpia", "Motagua"],
+           start_utc="2026-11-14T20:00:00+00:00", status_normalized="scheduled"),
     ],
     "api_sports_rugby": [
         _e(id="api-sports-rugby:301", source_id="api_sports_rugby", sport="rugby", competition="Autumn Nations Series",
            competition_country="World", title="Scotland v Fiji", participants=["Scotland", "Fiji"], start_utc="2026-11-14T13:10:00+00:00",
-           status_normalized="scheduled", venue="Murrayfield"),
+           status_normalized="scheduled", venue="Murrayfield", status_observed_at="2026-11-14T12:00:00+00:00"),
     ],
     "api_sports_mma": [
         _e(id="api-sports-mma:77", source_id="api_sports_mma", sport="mma", competition="UFC 330", event_type="main_event",
@@ -114,6 +121,14 @@ GUIDE["programmes"] += _schedule("skysportsmainevent.uk", NOW)
 GUIDE_B = {"source_id": "epgtalk_uk",
            "channels": {"SkySpMainEvHD.uk": "UK - Sky Sports Main Event HD", "SkySpMainEv1.uk": "Sky Sports Main Event +1"},
            "programmes": _schedule("SkySpMainEvHD.uk", NOW) + _schedule("SkySpMainEv1.uk", NOW, offset_minutes=60)}
+# 1.6: the same fixture in a second, independent guide family (EPGTalk / Schedules Direct vs farleyflex / mytelly) at the
+# same slot makes the strict link "guide_corroborated" (still never broadcast_verified).
+GUIDE_B["programmes"].append({"channel_id": "SkySpMainEvHD.uk", "start_utc": "2026-11-14T14:30:00+00:00",
+                              "end_utc": "2026-11-14T17:15:00+00:00", "title": "Premier League Football",
+                              "subtitle": "Arsenal v Manchester City", "is_live": True, "is_repeat": False})
+# 1.6 live lane: the rugby was "scheduled" at the 12:00 refresh; the API-Sports live board saw it in play at 13:55.
+LIVE_OBSERVATIONS = {"events": {"api-sports-rugby:301": {"status": "2H", "status_normalized": "live",
+                                                         "status_observed_at": "2026-11-14T13:55:00+00:00"}}}
 
 
 # Tiny public-domain dictionary sample (same shape as the iptv-org database files).
@@ -150,6 +165,7 @@ def build():
         store.save_snapshot("channel-dictionary", {"document": dictionary.build_document(DICT_CHANNELS, DICT_FEEDS),
                                                    "meta": {"channels": 3}})
         Engine(store)._materialize(now=NOW)
+        store._put("live_observations", LIVE_OBSERVATIONS)
         return feed.build_feed(store, now=NOW)
 
 

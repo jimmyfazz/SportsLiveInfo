@@ -4,6 +4,7 @@
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Status:** v0.3.0 source implements `sli/1.0`, schemas, golden fixtures, preview and atomic writer. Current verification: [CURRENT_STATUS.md](CURRENT_STATUS.md), 88 tests passed on Python 3.12.15; HTTP handler tests use an in-memory transport because loopback bind is denied here. The public daily-feed repo `jimmyfazz/LiveSports-EPG` was README-only when checked. The source/installation repo `jimmyfazz/SportsLiveInfo` stays private. B1G reader/device acceptance remains unverified.
+**Current minor version: `sli/1.6` (SportsLiveInfo 0.3.23).** It adds honest live state, an optional `live` asset, tiered day assets and guide-corroborated broadcast links; see §4.2.
 **Supersedes** the proposed layout in `FEED_CONTRACTS_AND_PUBLICATION.md` §3 for asset paths and versioning. The rights, state-machine and safety rules there remain in force.
 
 ---
@@ -30,8 +31,10 @@ v1/assets/<kind>/<sha256[:24]>.json   immutable, content-addressed assets
 |---|---|---|---|
 | `taxonomy` | `sli.taxonomy/1` | yes | Sports (label, order, typical minutes, B1G priority group), 127+ competitions, national rows (England, England Women, home nations, U21), tags, live states, precisions, live-state rule |
 | `channels` | `sli.channels/1` | yes | Canonical services per market with names, exact source tvg-id crosswalk (farleyflex), normalisation spec, 41+ lineup families, matching precedence and gates, guide catalogue (URLs, market, upstream family, verified flag) |
-| `events:YYYY-MM-DD` ×8 | `sli.events-day/1` | today yes, others no | De-duplicated, classified events for each Europe/London day (today + 7), field whitelist |
-| `today` | `sli.today/1` | yes | Default grouping (sport → competition → event ids) and featured ids for today |
+| `events:YYYY-MM-DD` ×8 | `sli.events-day/1` | today yes, others no | De-duplicated, classified events for each Europe/London day (today + 7), field whitelist. Since 1.6 only tier `core` |
+| `events_extra:YYYY-MM-DD` (since 1.6, capability `event_tiers`) | `sli.events-day/1` | no | The long tail (tier `extra`, mostly low-tier football abroad) for days that have any. Readers that ignore unknown kinds simply do not show it |
+| `live` (since 1.6, capability `live_status`) | `sli.live/1` | no | Status observations from the live-status lane since the last full feed: `{id, status_normalized, status_observed_at}` per event. Present only when there are such observations |
+| `today` | `sli.today/1` | yes | Default grouping (sport → competition → event ids) and featured ids for today (since 1.6: core events only) |
 | `health` | `sli.health/1` | no | Source states and guide coverage per family, measured on the HA host |
 | `identity` (since 1.1, capability `channel_identity`) | `sli.identity/1` | no | **Channel identity graph.** Guide channels linked across guides because they show the same programmes at the same times and their names agree apart from decoration. Members `{source_id, channel_id}` per service; `timeshifts` (+1/+2 channels with their base channel); `sources` with guide URLs. Channel ids and names only, never programme data. Generated `<mk>.auto.*` ids are join keys valid within one revision; curated ids are stable |
 
@@ -43,7 +46,8 @@ JSON is UTF-8, compact, keys sorted. The SHA-256 in the manifest covers the exac
 - `revision` is a hash of the asset hashes, so it is stable when data is unchanged. `previous_revision` is also given.
 - `refresh`: `reader_poll_minutes` (30), `stale_after_hours` (30), `expires_at` (+48 h), `expected_interval_minutes` (from the HA schedule).
 - `capabilities`: readers may only rely on features listed here. New features add a capability string.
-- `coverage`: counts by sport, today, corroborated, verified broadcasts, known sports/competitions/services/families.
+- `coverage`: counts by sport, today (core), corroborated, verified broadcasts, known sports/competitions/services/families. Since 1.6 also `tiers` (`core`, `extra`), `today_extra` and `guide_corroborated_broadcasts`.
+- Since 1.6, `compatibility` also carries `live_state_rule`, `live_overlay_rule` and `tier_rule` (§4.2).
 - `rights`: approved and omitted sources, `epg_programmes: not_published`, `broadcast_candidates: not_published`, and the attribution lines the TV must display (ODbL, CC BY-NC-SA…).
 - `display_policy`: default 10 body cards plus a pinned PPV card, featured tags. User settings on the TV always override.
 
@@ -150,9 +154,24 @@ The identity graph lets a provider tvg-id from one guide family use another guid
 
 The merge rules are published inside the asset (`rules`): identity tokens (+1/+2, plus/Sports+, numbers, regions including ROI and Channel Islands, languages) must be equal, names must agree apart from decoration, and schedules must agree for at least 50 % of comparable slots. Pairs whose schedules agree but whose names differ are **never** published; they wait for owner review in the Home Assistant app.
 
+### 4.2 Format 1.6: live state, tiers and corroborated links (since SportsLiveInfo 0.3.23)
+
+**Honest live state.** Every event has `status_observed_at` (ISO-8601 UTC ending in `Z`): when its `status_normalized` was last read from its source(s). Events with a start time that is not date-only also have `expected_end_utc`: the start plus the typical duration (football and rugby 2 h, tennis 3 h, cricket T20 4 h / ODI 8 h / Test day 7 h 30, F1 race 2 h 30, golf round 6 h, darts and snooker session 4 h, boxing card 4 h, basketball 2 h 30, ice hockey 2 h 45, NFL and baseball 3 h 30, otherwise 3 h). When a source gives the event's own end time (OpenF1 sessions), that end is used. The manifest rule (`compatibility.live_state_rule`) is:
+
+> status_normalized == 'live' is trusted only when status_observed_at is at most 45 minutes old AND start_utc <= now <= expected_end_utc + 30 minutes. Otherwise treat it as unknown and fall back to the clock (start..expected_end) shown as 'should be on now', never 'LIVE'.
+
+A cricket Test split into day records has only the day in play `live`; later days are `scheduled` and earlier days `finished` (that day's play). When sources disagree, a merged event takes the most advanced status (finished, postponed or cancelled, then live, then scheduled), then the most recently observed.
+
+**Live asset.** The live-status lane on the SportsLiveInfo host reads the API-Sports live boards (`fixtures?live=all` for football, `games?live=all` for the other team-sport products; not MMA) at most every 15 minutes, and only while the collected feed has an event between its start and expected end. It uses at most 40 calls a day per product, counted in that product's own daily quota, and keeps 20 calls for the scheduled refreshes; provider back-off and learned plan dates apply. An event that leaves the live board becomes `unknown`, never `finished`. When a status changes, or play in progress is confirmed (at most every 30 minutes), the feed gains or updates the `live` asset; with automatic publishing on, a commit then uploads only that asset and the manifests. Readers overlay it on the day assets by `id` when its `status_observed_at` is newer. A feed older than 45 minutes never makes anything "LIVE". No scores and no programme data.
+
+**Tiers.** Every event has `tier`. `core`: named taxonomy competitions (including the NFL, NBA, NHL and MLB), national-team categories, featured tags (`display_policy.featured_tags`, including `ppv`), the main non-football sports (motorsport, rugby union and league, cricket, tennis, golf, darts, snooker, boxing, MMA, horse racing), and football leagues and cups of England, Scotland, Wales, Northern Ireland, Ireland and France (youth competitions excepted). Everything else is `extra`. `events:<date>` and `today` carry core only; `events_extra:<date>` carries the rest.
+
+**Guide-corroborated links.** `broadcast_links[].status` is `guide_corroborated`, with `verification: independent_guides_v1`, when all of these hold: the strict title matcher found it (never the loose guide-listing matcher); the programme starts between kick-off − 60 min and + 20 min; the channel is a curated registry channel (not a dictionary-only id); and two or more independent guide families list it. Families come from `providers.EPG_FAMILY` after a lineage audit (15 Nov 2026): farleyflex is a mytelly.co.uk grab; Freeview-EPG (dp247) and every M3UPT file are built from Sky's own EPG and form one family; all EPGTalk files are Schedules Direct data; Matt Huisman's files are one family. Guides whose upstream could not be checked (EPG Share, IPTV-EPG.org, Fazzani/grab, dobleM) never count towards the two. `broadcast_verified` stays false: it is reserved for provider or official evidence. B1G binds a channel for Sports Today or "on now" only from `guide_corroborated` links or links with `confidence: high`; others are shown as "may be on <channel>".
+
 ## 5. Rights and privacy (unchanged laws)
 
 - Events are published only when the primary source and every fused contributor are listed in `publication_approvals`. Others are omitted and reported. This conservative source-level gate is not the complete per-field licensing model in the design.
+- Since 0.3.23 the public feed is built from a merge of approved-source records only, so a fixture an approved source reports stays public when an unapproved source also reports it (audit C1). The published record then names the approved sources only. If the approvals change after the last collection, the feed falls back to dropping any fused event with an unapproved contributor until the next collection.
 - Events use a **field whitelist** (`feed.EVENT_FIELDS`). EPG programme text, EPG-derived broadcast candidates, fetch scopes and live state never leave the HA box.
 - `broadcasts` appear only when `broadcast_verified` is true, `broadcast_verification_rule` is `approved_v1`, and evidence is present. A reviewed independent rule and real evidence remain acceptance gates; a boolean alone is insufficient.
 - The feed never contains stream URLs, provider credentials, user lineups, hidden channels or IP addresses. The guide catalogue lists only public guide URLs.
