@@ -284,6 +284,36 @@ class ProviderRejected(ValueError):
     """Safe classification of a provider error envelope."""
 
 
+_ISO_DAY = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
+
+
+class PlanWindow(ProviderRejected):
+    """A plan restriction that names the dates the key may read ("try from 2026-11-14 to 2026-11-16")."""
+
+    def __init__(self, message, first, last):
+        super().__init__(message)
+        self.first, self.last = first, last
+
+
+def api_sports_plan_window(payload):
+    """(first, last) dates an API-Sports plan restriction allows, or None. Only the two dates are read."""
+    errors = payload.get("errors") if isinstance(payload, dict) else None
+    if not isinstance(errors, dict):
+        return None
+    for key, value in errors.items():
+        if str(key).casefold() not in {"plan", "subscription"} or not isinstance(value, str):
+            continue
+        days = _ISO_DAY.findall(value)
+        if len(days) < 2:
+            return None
+        try:
+            first, last = date.fromisoformat(days[0]), date.fromisoformat(days[1])
+        except ValueError:
+            return None
+        return (first, last) if first <= last and (last - first).days <= 31 else None
+    return None
+
+
 def api_sports_error(payload):
     errors = payload.get("errors") if isinstance(payload, dict) else None
     if not errors:

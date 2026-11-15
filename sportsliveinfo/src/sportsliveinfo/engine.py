@@ -14,7 +14,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from email.utils import parsedate_to_datetime
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import partial
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -272,7 +272,33 @@ class Engine:
                       and last.astimezone(LONDON).date() == today)
         except (ValueError, TypeError, KeyError):
             recent = False
-        return [today] if recent else [today + timedelta(days=i) for i in range(DAY_HORIZON.get(name, 1))]
+        days = [today] if recent else [today + timedelta(days=i) for i in range(DAY_HORIZON.get(name, 1))]
+        window = self._plan_window(name)
+        if window:
+            first, last = window
+            days = [day for day in days if first <= (day - today).days <= last] or [today]
+        return days
+
+    PLAN_WINDOW_RELEARN = timedelta(days=3)
+
+    def _plan_window(self, name):
+        """Day offsets (from today) the source's plan allows, as learned from its own refusal, or None.
+
+        Forgotten after PLAN_WINDOW_RELEARN so an upgraded plan is noticed by the next full discovery."""
+        stored = self.store._get("plan_window:" + name)
+        try:
+            learned = datetime.fromisoformat(stored["learned_at"])
+            if datetime.now(timezone.utc) - learned > self.PLAN_WINDOW_RELEARN:
+                return None
+            return int(stored["first"]), int(stored["last"])
+        except (TypeError, KeyError, ValueError):
+            return None
+
+    def _learn_plan_window(self, name, exc, today):
+        first, last = (exc.first - today).days, (exc.last - today).days
+        self.store._put("plan_window:" + name, {"first": first, "last": last,
+                                                 "learned_at": datetime.now(timezone.utc).isoformat()})
+        return first, last
 
     def _plan(self, name, conf, today, previous=None):
         """Return request dicts: url, headers, max_bytes, decode, scope."""
@@ -372,6 +398,9 @@ class Engine:
             payload = json.loads(raw)
             error = providers.api_sports_error(payload)
             if error:
+                window = providers.api_sports_plan_window(payload)
+                if window:
+                    raise providers.PlanWindow(error, *window)
                 raise providers.ProviderRejected(error)
             paging = payload.get("paging", {}) if isinstance(payload, dict) else {}
             if isinstance(paging, dict):
@@ -457,10 +486,15 @@ class Engine:
             if stamp >= (now - interval).isoformat():
                 cached.add(scope)
         scopes, failed, errors = {}, set(), {}
+        outside = set()     # dates the provider plan does not cover: not failures, not requested again
+        window = None
         deferred = False
         for item in plan:
             scope = item["scope"]
             if scope in failed or scope in cached:
+                continue
+            if window and not window[0] <= (date.fromisoformat(scope.split("|")[0]) - today).days <= window[1]:
+                outside.add(scope)
                 continue
             try:
                 rows = self._request(name, item, daily_limit)
@@ -471,6 +505,9 @@ class Engine:
                 scopes.pop(scope, None)
                 deferred = True
                 break
+            except providers.PlanWindow as exc:
+                window = self._learn_plan_window(name, exc, today)
+                outside.add(scope)
             except SAFE_ERRORS as exc:
                 errors[scope] = _sports_failure(exc)
                 failed.add(scope)
@@ -482,7 +519,7 @@ class Engine:
                 if getattr(exc, "status", None) == 401 or errors[scope] == "Provider rejected the API key":
                     break
         succeeded = set(scopes)
-        missing = planned - succeeded - cached
+        missing = planned - succeeded - cached - outside
         for scope in missing:
             errors.setdefault(scope, "Deferred by request budget" if deferred else "Skipped after provider rejection")
         detail = "; ".join(f"{scope}: {errors[scope]}" for scope in sorted(errors)[:3])
@@ -538,6 +575,8 @@ class Engine:
         summary = f"{len(events)} event records; {len(succeeded)}/{len(planned)} request scopes refreshed"
         if cached:
             summary += f"; {len(cached)} reused"
+        if outside:
+            summary += f"; {len(outside)} outside the provider plan's dates (not requested again for 3 days)"
         if possible_truncation:
             summary += f"; results reached the {result_cap}-row limit and may be incomplete"
         if detail:

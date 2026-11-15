@@ -2,6 +2,14 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.21 — API-Sports: stop asking for dates the plan cannot read
+
+- **Measured on the live feed (15 November, 04:15):** every API-Sports source (football, basketball, rugby, hockey, handball, volleyball, NFL, baseball, AFL, MMA) returned events for today and tomorrow only. The other five days of each run were refused with a plan restriction, so every one of them was reported "partial". The once-a-day full discovery was never recorded, and the refused days were requested again on every run.
+- **Fix:** when API-Sports refuses a date with its plan message ("try from … to …"), SportsLiveInfo reads just the two dates and remembers which days the key can read. Days outside that window are no longer requested and are not counted as failures, so the source reports "ok". The window is forgotten after 3 days, so an upgraded plan is picked up by the next full discovery. Only the dates are taken from the message.
+- **Effect:** about five wasted requests per API-Sports source per run are saved, out of a 100-a-day quota per sport. Source health stops showing "partial" for a normal free key, and the job summary says "N outside the provider plan's dates".
+- **Not changed:** the week ahead still relies on football-data.org, OpenLigaDB, BHA racing and F1 (2–68 events a day beyond tomorrow). Closing that gap needs another fixture source; TheSportsDB's free endpoints could not be checked from the cloud session (NOT RUN).
+- Tests: 3 new (window learned and honoured, parser reads only two dates, window forgotten after 3 days). 288 tests pass.
+
 ## 0.3.20 — Channel coverage on Home Assistant; guide channel map; B1G reconciliation spec
 
 - **New *Channel coverage* page (local only).** Import your provider's channel list (M3U or text).

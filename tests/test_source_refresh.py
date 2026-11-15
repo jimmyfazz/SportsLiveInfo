@@ -87,6 +87,49 @@ class SourceRefreshTests(unittest.TestCase):
             self.assertEqual([call.args[1]["scope"] for call in fetch.call_args_list], [planned[0]["scope"], failure])
         self.assertIn("Provider plan or season restriction", self.store.recent_jobs(1)[0]["details"])
 
+    def test_free_plan_date_window_is_learned_and_not_requested_again(self):
+        """API-Sports free keys read only a few days; dates outside are not failures and are skipped next time."""
+        self.store.configure({"keys": {"api_sports": "synthetic"}})
+        conf = self.store.config()
+        today = datetime.now(LONDON).date()
+        refusal = {"errors": {"plan": "Free plans do not have access to this date, try from %s to %s."
+                              % ((today - timedelta(days=1)).isoformat(), (today + timedelta(days=1)).isoformat())},
+                   "response": []}
+        ok = {"errors": [], "paging": {"current": 1, "total": 1}, "response": []}
+        def fetch(url, headers=None, max_bytes=None, response_headers=None):
+            day = url.split("date=")[1].split("&")[0]
+            inside = (datetime.fromisoformat(day).date() - today).days <= 1
+            return json.dumps(ok if inside else refusal).encode()
+
+        with patch.object(providers, "fetch", side_effect=fetch) as calls, patch.object(Engine, "_pace"):
+            self.assertTrue(self.engine._collect_sport("api_sports_rugby", conf))
+            # today and tomorrow succeed; day 3 is refused and teaches the window; days 4-7 are never requested
+            self.assertEqual(calls.call_count, 3)
+        job = self.store.recent_jobs(1)[0]
+        self.assertEqual(job["state"], "no_events_reported")
+        self.assertIn("outside the provider plan", job["details"])
+        self.assertEqual(self.engine._plan_window("api_sports_rugby"), (-1, 1))
+        # The next full discovery plans only the allowed days.
+        days = self.engine._days("api_sports_rugby", None, today)
+        self.assertEqual(days, [today, today + timedelta(days=1)])
+        snapshot = self.store.snapshot("sports:api_sports_rugby")["data"]
+        self.assertIsNotNone(snapshot["full_discovery_at"])
+
+    def test_plan_window_parser_reads_only_two_dates(self):
+        window = providers.api_sports_plan_window({"errors": {"plan": "Free plans … try from 2026-11-14 to 2026-11-16."}})
+        self.assertEqual([d.isoformat() for d in window], ["2026-11-14", "2026-11-16"])
+        self.assertIsNone(providers.api_sports_plan_window({"errors": {"plan": "Upgrade your plan"}}))
+        self.assertIsNone(providers.api_sports_plan_window({"errors": {"token": "2026-11-14 2026-11-16"}}))
+        self.assertIsNone(providers.api_sports_plan_window({"errors": {"plan": "from 2026-11-16 to 2026-11-14"}}))
+        self.assertIsNone(providers.api_sports_plan_window({"errors": []}))
+
+    def test_a_learned_window_is_forgotten_so_an_upgraded_plan_is_noticed(self):
+        self.store._put("plan_window:api_sports", {"first": -1, "last": 1,
+                                                  "learned_at": (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()})
+        self.assertIsNone(self.engine._plan_window("api_sports"))
+        today = datetime.now(LONDON).date()
+        self.assertEqual(len(self.engine._days("api_sports", None, today)), 7)
+
     def test_tennis_connection_checks_upcoming_tours_as_well_as_live(self):
         self.store.configure({"keys": {"tennis_api": "synthetic"}})
         with patch.object(providers, "tennis_api_events", return_value=[]), patch.object(
