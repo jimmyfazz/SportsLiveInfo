@@ -14,7 +14,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from email.utils import parsedate_to_datetime
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import partial
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -28,7 +28,9 @@ COLLECTION_SCOPES = {"both": "Sports and EPG", "sports": "Sports", "epg": "EPG"}
 LONDON = ZoneInfo("Europe/London")
 # Minimum seconds between calls to one provider (published per-minute limits).
 PACING = {"thesportsdb": 2.1, "football_data": 6.5, **{n: 6.1 for n in providers.SPORTS if n.startswith("api_sports")}}
-DAY_HORIZON = {**{n: 7 for n in providers.SPORTS if n.startswith("api_sports")}, "thesportsdb": 3}
+# TheSportsDB: whole-sport day requests cover today only (the free key returns 3 events per request, so later days
+# added little); the week ahead comes from per-competition requests (providers.THESPORTSDB_LEAGUES).
+DAY_HORIZON = {**{n: 7 for n in providers.SPORTS if n.startswith("api_sports")}, "thesportsdb": 1}
 SAFE_ERRORS = (ValueError, RuntimeError, TimeoutError, OSError, EOFError,
                json.JSONDecodeError, TypeError, KeyError, OverflowError, ET.ParseError)
 FEED_RETAIN = 10  # published manifests (and the assets they reference) kept for slow/offline TVs
@@ -262,17 +264,47 @@ class Engine:
         return bool(successes)
 
     # ---- request planning -------------------------------------------------
-    def _days(self, name, previous, today):
-        # Full multi-day discovery once per London day (and at most every 20 h);
-        # other runs refresh today only. Timed from the last FULL discovery, not
-        # from the last snapshot write, which every today-only run also updates.
+    @staticmethod
+    def _full_discovery_recent(previous, today):
+        """Whether a full multi-day discovery already ran this London day (and within 20 h). Timed from the last FULL
+        discovery, not from the last snapshot write, which every today-only run also updates."""
         try:
             last = datetime.fromisoformat(previous["data"]["full_discovery_at"])
-            recent = (datetime.now(timezone.utc) - last < timedelta(hours=20)
-                      and last.astimezone(LONDON).date() == today)
+            return (datetime.now(timezone.utc) - last < timedelta(hours=20)
+                    and last.astimezone(LONDON).date() == today)
         except (ValueError, TypeError, KeyError):
-            recent = False
-        return [today] if recent else [today + timedelta(days=i) for i in range(DAY_HORIZON.get(name, 1))]
+            return False
+
+    def _days(self, name, previous, today):
+        # Full multi-day discovery once per London day (and at most every 20 h); other runs refresh today only.
+        recent = self._full_discovery_recent(previous, today)
+        days = [today] if recent else [today + timedelta(days=i) for i in range(DAY_HORIZON.get(name, 1))]
+        window = self._plan_window(name)
+        if window:
+            first, last = window
+            days = [day for day in days if first <= (day - today).days <= last] or [today]
+        return days
+
+    PLAN_WINDOW_RELEARN = timedelta(days=3)
+
+    def _plan_window(self, name):
+        """Day offsets (from today) the source's plan allows, as learned from its own refusal, or None.
+
+        Forgotten after PLAN_WINDOW_RELEARN so an upgraded plan is noticed by the next full discovery."""
+        stored = self.store._get("plan_window:" + name)
+        try:
+            learned = datetime.fromisoformat(stored["learned_at"])
+            if datetime.now(timezone.utc) - learned > self.PLAN_WINDOW_RELEARN:
+                return None
+            return int(stored["first"]), int(stored["last"])
+        except (TypeError, KeyError, ValueError):
+            return None
+
+    def _learn_plan_window(self, name, exc, today):
+        first, last = (exc.first - today).days, (exc.last - today).days
+        self.store._put("plan_window:" + name, {"first": first, "last": last,
+                                                 "learned_at": datetime.now(timezone.utc).isoformat()})
+        return first, last
 
     def _plan(self, name, conf, today, previous=None):
         """Return request dicts: url, headers, max_bytes, decode, scope."""
@@ -313,10 +345,20 @@ class Engine:
                                  decode=decode, max_bytes=7_000_000))
         elif name == "thesportsdb":
             chosen = [s for s in options.get("thesportsdb_sports", providers.THESPORTSDB_DEFAULT_SPORTS) if s in providers.THESPORTSDB_SPORTS]
+            leagues = [l for l in options.get("thesportsdb_leagues", providers.THESPORTSDB_DEFAULT_LEAGUES)
+                       if l in providers.THESPORTSDB_LEAGUES]
             for day in self._days(name, previous, today):
                 for sport in chosen:
                     query = urllib.parse.urlencode({"d": day.isoformat(), "s": sport})
                     plan.append(dict(url=base + "?" + query, scope="%s|%s" % (day.isoformat(), sport),
+                                     decode=providers.thesportsdb_events, max_bytes=3_000_000))
+            # The week ahead per competition, once per full discovery (other runs: today only, like the sports).
+            recent = self._full_discovery_recent(previous, today)
+            league_days = [today] if recent else [today + timedelta(days=i) for i in range(providers.THESPORTSDB_LEAGUE_DAYS)]
+            for day in league_days:
+                for league in leagues:
+                    query = urllib.parse.urlencode({"d": day.isoformat(), "l": league})
+                    plan.append(dict(url=base + "?" + query, scope="%s|league:%s" % (day.isoformat(), league),
                                      decode=providers.thesportsdb_events, max_bytes=3_000_000))
         elif name == "bha_racing":
             for year in sorted({today.year, (today + timedelta(days=7)).year}):
@@ -372,6 +414,9 @@ class Engine:
             payload = json.loads(raw)
             error = providers.api_sports_error(payload)
             if error:
+                window = providers.api_sports_plan_window(payload)
+                if window:
+                    raise providers.PlanWindow(error, *window)
                 raise providers.ProviderRejected(error)
             paging = payload.get("paging", {}) if isinstance(payload, dict) else {}
             if isinstance(paging, dict):
@@ -457,10 +502,15 @@ class Engine:
             if stamp >= (now - interval).isoformat():
                 cached.add(scope)
         scopes, failed, errors = {}, set(), {}
+        outside = set()     # dates the provider plan does not cover: not failures, not requested again
+        window = None
         deferred = False
         for item in plan:
             scope = item["scope"]
             if scope in failed or scope in cached:
+                continue
+            if window and not window[0] <= (date.fromisoformat(scope.split("|")[0]) - today).days <= window[1]:
+                outside.add(scope)
                 continue
             try:
                 rows = self._request(name, item, daily_limit)
@@ -471,6 +521,9 @@ class Engine:
                 scopes.pop(scope, None)
                 deferred = True
                 break
+            except providers.PlanWindow as exc:
+                window = self._learn_plan_window(name, exc, today)
+                outside.add(scope)
             except SAFE_ERRORS as exc:
                 errors[scope] = _sports_failure(exc)
                 failed.add(scope)
@@ -482,7 +535,7 @@ class Engine:
                 if getattr(exc, "status", None) == 401 or errors[scope] == "Provider rejected the API key":
                     break
         succeeded = set(scopes)
-        missing = planned - succeeded - cached
+        missing = planned - succeeded - cached - outside
         for scope in missing:
             errors.setdefault(scope, "Deferred by request budget" if deferred else "Skipped after provider rejection")
         detail = "; ".join(f"{scope}: {errors[scope]}" for scope in sorted(errors)[:3])
@@ -538,6 +591,8 @@ class Engine:
         summary = f"{len(events)} event records; {len(succeeded)}/{len(planned)} request scopes refreshed"
         if cached:
             summary += f"; {len(cached)} reused"
+        if outside:
+            summary += f"; {len(outside)} outside the provider plan's dates (not requested again for 3 days)"
         if possible_truncation:
             summary += f"; results reached the {result_cap}-row limit and may be incomplete"
         if detail:

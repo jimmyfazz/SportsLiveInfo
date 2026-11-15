@@ -355,16 +355,18 @@ class EngineExpansionTests(unittest.TestCase):
         self.assertTrue(any(j["state"] == "partial" for j in self.store.recent_jobs()))
 
     def test_quota_exhaustion_mid_plan_saves_completed_scopes(self):
+        # Two sports today plus two competitions over the next 7 days = 16 scopes; only 2 requests left in the budget.
         self.store.configure({"setup_complete": True, "sports": {"jolpica": False, "thesportsdb": True},
-                              "options": {"thesportsdb_sports": ["Soccer", "Darts"]}})
-        for _ in range(118):
-            self.store.increment("thesportsdb", 120)
+                              "options": {"thesportsdb_sports": ["Soccer", "Darts"], "thesportsdb_leagues": ["5852", "4714"]}})
+        limit = providers.SPORTS["thesportsdb"][3]
+        for _ in range(limit - 2):
+            self.store.increment("thesportsdb", limit)
         with patch("sportsliveinfo.providers.fetch", return_value=b'{"events": null}') as fetch, patch("sportsliveinfo.engine.time.sleep"):
             Engine(self.store).collect()
         self.assertEqual(fetch.call_count, 2)
         snap = self.store.snapshot("sports:thesportsdb")["data"]
         self.assertEqual(len(snap["scopes_ok"]), 2)
-        self.assertEqual(len(snap["scopes_failed"]), 4)
+        self.assertEqual(len(snap["scopes_failed"]), 14)
 
     def test_scoped_refresh_calls_only_selected_engine_and_skips_publishing(self):
         self.store.configure({"setup_complete": True, "epg": {"farleyflex": True},
@@ -538,8 +540,9 @@ class IngressExpansionTests(unittest.TestCase):
         cfg = self.store.config()
         self.assertEqual(cfg["keys"], {"api_sports": "shared-secret"})
         self.assertTrue(cfg["sports"]["api_sports_rugby"])
-        self.post({"action": "options", "tsdb": ["Darts", "Snooker", "NotASport"], "old": ["bl2"]})
-        self.assertEqual(self.store.config()["options"], {"thesportsdb_sports": ["Darts", "Snooker"], "openligadb_leagues": ["bl2"]})
+        self.post({"action": "options", "tsdb": ["Darts", "Snooker", "NotASport"], "tsdbl": ["5852", "9999"], "old": ["bl2"]})
+        self.assertEqual(self.store.config()["options"], {"thesportsdb_sports": ["Darts", "Snooker"],
+                                                          "thesportsdb_leagues": ["5852"], "openligadb_leagues": ["bl2"]})
         sources = self.get("?page=sources")
         self.assertNotIn("shared-secret", sources)
         self.assertIn("EPG Share HK1", sources)

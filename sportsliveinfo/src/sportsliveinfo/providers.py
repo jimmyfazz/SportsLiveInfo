@@ -215,7 +215,7 @@ SPORTS = {
     "api_sports_volleyball": ("Volleyball · API-Sports", "https://v1.volleyball.api-sports.io/games", "api_sports", 80),
     "api_sports_afl": ("Australian rules (AFL) · API-Sports", "https://v1.afl.api-sports.io/games", "api_sports", 80),
     "api_sports_mma": ("MMA · API-Sports", "https://v1.mma.api-sports.io/fights", "api_sports", 80),
-    "thesportsdb": ("Multi-sport · TheSportsDB (free public key)", "https://www.thesportsdb.com/api/v1/json/123/eventsday.php", None, 120),
+    "thesportsdb": ("Multi-sport · TheSportsDB (free public key)", "https://www.thesportsdb.com/api/v1/json/123/eventsday.php", None, 200),
     "cricketdata": ("Cricket · CricketData.org (CricAPI)", "https://api.cricapi.com/v1/matches", "cricketdata", 60),
 }
 SPORT_FAMILY = {name: ("api_sports" if name.startswith("api_sports") else name) for name in SPORTS}
@@ -235,12 +235,31 @@ SOURCE_NOTES = {
     "openligadb": "Community fixtures for selected German and European competitions. ODbL attribution/share-alike.",
     "football_data": "Free plan: 12 competitions incl. Premier League, Champions League, Championship, World Cup, Euros. 10 calls/min; delayed scores.",
     "api_sports": "One key works across these products. Provider quotas and season access depend on the product and plan.",
-    "thesportsdb": "Free public key 123: soccer, rugby, cricket, motorsport, fighting, golf, darts, snooker and more. Free day results may be capped. Select sports with coverage gaps.",
+    "thesportsdb": "Free public key 123 (30 requests a minute): today's events for each chosen sport, plus the next 7 days for each chosen competition. The free key returns at most 3 events per request.",
     "cricketdata": "Free lifetime plan 100 hits/day. Key travels in the query string (provider requirement); never logged.",
 }
 THESPORTSDB_DEFAULT_SPORTS = ["Soccer", "Rugby", "Cricket", "Motorsport", "Fighting", "Golf", "Darts", "Snooker",
                       "Tennis", "Ice Hockey", "Basketball", "American Football", "Cycling", "Horse Racing"]
 THESPORTSDB_SPORTS = THESPORTSDB_DEFAULT_SPORTS + ["Athletics", "Bowling", "eSports", "Boxing"]
+# TheSportsDB competitions asked for day by day over the week ahead (eventsday.php?d=…&l=…). The free key returns at
+# most 3 events per request, so a competition filter recovers fixtures a whole-sport day request would cut off.
+# Ids checked with lookupleague.php on 15 November 2026.
+THESPORTSDB_LEAGUES = {
+    "5852": ("Rugby union · Nations Championship (November tests)", "Rugby"),
+    "4714": ("Rugby union · Six Nations", "Rugby"),
+    "4574": ("Rugby union · Rugby World Cup", "Rugby"),
+    "4446": ("Rugby union · United Rugby Championship", "Rugby"),
+    "4414": ("Rugby union · Premiership Rugby", "Rugby"),
+    "4550": ("Rugby union · European Champions Cup", "Rugby"),
+    "5418": ("Rugby union · European Challenge Cup", "Rugby"),
+    "4415": ("Rugby league · Super League", "Rugby"),
+    "4554": ("Darts · PDC", "Darts"),
+    "4555": ("Snooker · World Snooker", "Snooker"),
+    "4426": ("Golf · DP World Tour", "Golf"),
+    "4443": ("MMA · UFC", "Fighting"),
+}
+THESPORTSDB_DEFAULT_LEAGUES = ["5852", "4714", "4446", "4414", "4550", "4415", "4554", "4555", "4443"]
+THESPORTSDB_LEAGUE_DAYS = 7
 OPENLIGADB_DEFAULT_LEAGUES = ("bl1", "bl2", "bl3")
 OPENLIGADB_LEAGUES = {
     "bl1": ("Bundesliga", "Germany"),
@@ -282,6 +301,36 @@ class UpstreamHTTPError(RuntimeError):
 
 class ProviderRejected(ValueError):
     """Safe classification of a provider error envelope."""
+
+
+_ISO_DAY = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
+
+
+class PlanWindow(ProviderRejected):
+    """A plan restriction that names the dates the key may read ("try from 2026-11-14 to 2026-11-16")."""
+
+    def __init__(self, message, first, last):
+        super().__init__(message)
+        self.first, self.last = first, last
+
+
+def api_sports_plan_window(payload):
+    """(first, last) dates an API-Sports plan restriction allows, or None. Only the two dates are read."""
+    errors = payload.get("errors") if isinstance(payload, dict) else None
+    if not isinstance(errors, dict):
+        return None
+    for key, value in errors.items():
+        if str(key).casefold() not in {"plan", "subscription"} or not isinstance(value, str):
+            continue
+        days = _ISO_DAY.findall(value)
+        if len(days) < 2:
+            return None
+        try:
+            first, last = date.fromisoformat(days[0]), date.fromisoformat(days[1])
+        except ValueError:
+            return None
+        return (first, last) if first <= last and (last - first).days <= 31 else None
+    return None
 
 
 def api_sports_error(payload):

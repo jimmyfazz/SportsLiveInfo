@@ -370,10 +370,12 @@ class UI(BaseHTTPRequestHandler):
             return "sources", "Source selections saved (%d enabled)" % len(selected)
         if action == "options":
             sports = [s for s in form.get("tsdb", []) if s in providers.THESPORTSDB_SPORTS]
+            competitions = [c for c in form.get("tsdbl", []) if c in providers.THESPORTSDB_LEAGUES]
             leagues = [l for l in form.get("old", []) if l in providers.OPENLIGADB_LEAGUES]
             if not sports or not leagues:
                 raise ValueError("Choose at least one TheSportsDB sport and one OpenLigaDB league")
-            self.store.configure({"options": {"thesportsdb_sports": sports, "openligadb_leagues": leagues}})
+            self.store.configure({"options": {"thesportsdb_sports": sports, "thesportsdb_leagues": competitions,
+                                              "openligadb_leagues": leagues}})
             return "sources", message
         if action == "epg":
             name = value("provider")
@@ -671,8 +673,12 @@ class UI(BaseHTTPRequestHandler):
                 ) + content, test_button)
         options = config.get("options", {})
         chosen_sports, chosen_leagues = set(options.get("thesportsdb_sports", [])), set(options.get("openligadb_leagues", []))
-        option_form = '<h3>TheSportsDB sports (one call per sport for each day requested)</h3><div class="formrow">'
+        chosen_competitions = set(options.get("thesportsdb_leagues", providers.THESPORTSDB_DEFAULT_LEAGUES))
+        option_form = '<h3>TheSportsDB sports (today, one call per sport)</h3><div class="formrow">'
         option_form += ''.join('<label class="inline"><input type="checkbox" name="tsdb" value="%s" %s> %s</label>' % (e(s), "checked" if s in chosen_sports else "", e(s)) for s in providers.THESPORTSDB_SPORTS)
+        option_form += ('</div><h3>TheSportsDB competitions (the next %d days, one call per competition per day, once a day)</h3>'
+                        '<div class="formrow">' % providers.THESPORTSDB_LEAGUE_DAYS)
+        option_form += ''.join('<label><input type="checkbox" name="tsdbl" value="%s" %s> %s</label>' % (e(c), "checked" if c in chosen_competitions else "", e(label)) for c, (label, _) in providers.THESPORTSDB_LEAGUES.items())
         option_form += '</div><h3>OpenLigaDB leagues</h3><div class="formrow">'
         option_form += ''.join('<label><input type="checkbox" name="old" value="%s" %s> %s</label>' % (e(l), "checked" if l in chosen_leagues else "", e(label)) for l, (label, _) in providers.OPENLIGADB_LEAGUES.items())
         option_form += '</div><button type="submit">Save source options</button>'
