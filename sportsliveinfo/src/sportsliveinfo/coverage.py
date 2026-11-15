@@ -34,6 +34,7 @@ MAX_LINEUP_ENTRIES = 60_000
 _EXTINF = re.compile(r"^#EXTINF:[^,]*?,(?P<name>.*)$")
 _ATTR = re.compile(r'([a-zA-Z0-9_-]+)="([^"]*)"')
 _VOD_URL = re.compile(r"/(?:movie|series|vod)/", re.I)
+_CREDENTIAL_LINE = re.compile(r"^[a-z][a-z0-9+.-]*://|[?&](?:username|password|user|pass)=", re.I)
 
 
 def parse_lineup(text):
@@ -45,7 +46,8 @@ def parse_lineup(text):
     """
     entries = []
     lines = str(text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    if any(line.startswith("#EXTM3U") or line.startswith("#EXTINF") for line in lines[:50]):
+    # Detected anywhere and after stripping, so leading blank lines or indentation never turn stream URLs into names.
+    if any(line.strip().startswith(("#EXTM3U", "#EXTINF")) for line in lines):
         pending = None
         for line in lines:
             line = line.strip()
@@ -56,6 +58,7 @@ def parse_lineup(text):
                            "name": (match.group("name") if match else attrs.get("tvg-name", "")).strip()[:160],
                            "tvg_id": attrs.get("tvg-id", "").strip()[:160]}
             elif pending is not None and line and not line.startswith("#"):
+                # The stream URL is only classified (film or channel), never stored.
                 pending["kind"] = "vod" if _VOD_URL.search(line) else classify_kind(pending["category"], pending["name"])
                 if pending["name"]:
                     entries.append(pending)
@@ -65,8 +68,8 @@ def parse_lineup(text):
     else:
         for line in lines:
             line = line.strip()
-            if not line or line.startswith("#"):
-                continue
+            if not line or line.startswith("#") or _CREDENTIAL_LINE.search(line):
+                continue        # a URL (it may carry the provider login) is never a channel name
             category, _, name = line.partition("\t") if "\t" in line else ("", "", line)
             entry = {"category": category.strip()[:120], "name": name.strip()[:160], "tvg_id": ""}
             entry["kind"] = classify_kind(entry["category"], entry["name"])

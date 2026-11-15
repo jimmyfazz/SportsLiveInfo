@@ -1361,7 +1361,7 @@ class Engine:
         state = self.store._get("private_feed_state") or {"revisions": []}
         manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"), private=True)
         outcome, revision = self._commit_feed(owner, repository, branch, token, manifest, files, state,
-                                              "private_feed_state", "private_publisher", "SportsLiveInfo private feed")
+                                              "private_feed_state", "private_publisher", "SportsLiveInfo private feed", private=True)
         self._private_outcome = outcome
         return revision
 
@@ -1385,11 +1385,11 @@ class Engine:
         state = self.store._get("feed_state") or {"revisions": []}
         manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"))
         outcome, revision = self._commit_feed(owner, repository, branch, token, manifest, files, state,
-                                              "feed_state", "publisher", "SportsLiveInfo feed")
+                                              "feed_state", "publisher", "SportsLiveInfo feed", private=False)
         self._publish_outcome = outcome
         return revision
 
-    def _commit_feed(self, owner, repository, branch, token, manifest, files, state, state_key, job, label):
+    def _commit_feed(self, owner, repository, branch, token, manifest, files, state, state_key, job, label, private):
         """One atomic commit with revision retention; returns (outcome, revision)."""
         revision = manifest["revision"]
         try:
@@ -1415,14 +1415,14 @@ class Engine:
         deletions += ["%s/manifests/%s.json" % (feed.ROOT, h["revision"]) for h in drop if h["revision"] not in kept_ids]
         self._github_commit(owner, repository, branch, token, uploads, deletions,
                             "%s %s (%d events)" % (label, revision, manifest["coverage"]["events"]),
-                            required=files)
+                            required=files, private=private)
         self.store._put(state_key, {"last_revision": revision, "revisions": keep, "published_at": utcnow()})
         self.store.job(job, "submitted", "Feed %s committed atomically (%d new files, %d removed); verify the static endpoint" % (
             revision, len(uploads), len(deletions)))
         return "committed", revision
 
     @staticmethod
-    def _github_commit(owner, repository, branch, token, uploads, deletions, message, required=None):
+    def _github_commit(owner, repository, branch, token, uploads, deletions, message, required=None, private=None):
         """Single commit via the Git Data API: readers never see a manifest without its assets.
 
         The remote tree is the source of truth: any referenced asset missing
@@ -1445,6 +1445,16 @@ class Engine:
             except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
                 raise RuntimeError("Could not reach GitHub while %s (%s); publish again" % (step, type(exc).__name__)) from None
 
+        # Re-check the destination on every publish, not only in the connection test: a private feed (every collected
+        # event and guide-derived listings) must never land in a repository that was made public or mistyped since.
+        if private is not None:
+            info = api("GET", "", step="checking the repository")
+            if not isinstance(info, dict) or str(info.get("full_name", "")).casefold() != (owner + "/" + repository).casefold():
+                raise RuntimeError("GitHub returned a different repository; nothing was published")
+            if private and info.get("private") is not True:
+                raise RuntimeError("The private feed repository is not private on GitHub; nothing was published")
+            if not private and info.get("private") is not False:
+                raise RuntimeError("The public feed repository is not public on GitHub; nothing was published")
         quoted = urllib.parse.quote(branch, safe="")
         try:
             head = api("GET", "/git/ref/heads/" + quoted, step="reading the feed branch")["object"]["sha"]

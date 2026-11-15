@@ -50,6 +50,17 @@ class LineupParsingTests(unittest.TestCase):
         self.assertEqual(kinds["RADIO: Example FM"], "radio")
         self.assertEqual(kinds["EPL 05 | Northtown United vs Southport Rovers (Sat 17:30 UK)"], "event_slot")
 
+    def test_stream_urls_never_become_channel_names(self):
+        """Audit 15 Nov (P1): URLs, which may carry the provider login, are never stored."""
+        urls = "http://h.example:80/user/pass/1.ts\nhttps://h.example/get.php?username=u&password=p\n"
+        self.assertEqual(coverage.parse_lineup(urls), [])
+        late_header = "\n" * 60 + "#EXTM3U\n#EXTINF:-1 group-title=\"UK\",BBC One\nhttp://h.example/user/pass/1.ts\n"
+        indented = '  #EXTINF:-1 group-title="UK",BBC Two\n  http://h.example/user/pass/2.ts\n'
+        for text, name in ((late_header, "BBC One"), (indented, "BBC Two")):
+            entries = coverage.parse_lineup(text)
+            self.assertEqual([e["name"] for e in entries], [name])
+            self.assertFalse(any("://" in v or "pass" in v for e in entries for v in e.values()))
+
     def test_plain_text_lists(self):
         entries = coverage.parse_lineup("UK | Sport\tSky Example 1\nFR | TF Example\n")
         self.assertEqual([(e["category"], e["name"]) for e in entries],
