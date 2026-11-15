@@ -28,7 +28,9 @@ COLLECTION_SCOPES = {"both": "Sports and EPG", "sports": "Sports", "epg": "EPG"}
 LONDON = ZoneInfo("Europe/London")
 # Minimum seconds between calls to one provider (published per-minute limits).
 PACING = {"thesportsdb": 2.1, "football_data": 6.5, **{n: 6.1 for n in providers.SPORTS if n.startswith("api_sports")}}
-DAY_HORIZON = {**{n: 7 for n in providers.SPORTS if n.startswith("api_sports")}, "thesportsdb": 3}
+# TheSportsDB: whole-sport day requests cover today only (the free key returns 3 events per request, so later days
+# added little); the week ahead comes from per-competition requests (providers.THESPORTSDB_LEAGUES).
+DAY_HORIZON = {**{n: 7 for n in providers.SPORTS if n.startswith("api_sports")}, "thesportsdb": 1}
 SAFE_ERRORS = (ValueError, RuntimeError, TimeoutError, OSError, EOFError,
                json.JSONDecodeError, TypeError, KeyError, OverflowError, ET.ParseError)
 FEED_RETAIN = 10  # published manifests (and the assets they reference) kept for slow/offline TVs
@@ -262,16 +264,20 @@ class Engine:
         return bool(successes)
 
     # ---- request planning -------------------------------------------------
-    def _days(self, name, previous, today):
-        # Full multi-day discovery once per London day (and at most every 20 h);
-        # other runs refresh today only. Timed from the last FULL discovery, not
-        # from the last snapshot write, which every today-only run also updates.
+    @staticmethod
+    def _full_discovery_recent(previous, today):
+        """Whether a full multi-day discovery already ran this London day (and within 20 h). Timed from the last FULL
+        discovery, not from the last snapshot write, which every today-only run also updates."""
         try:
             last = datetime.fromisoformat(previous["data"]["full_discovery_at"])
-            recent = (datetime.now(timezone.utc) - last < timedelta(hours=20)
-                      and last.astimezone(LONDON).date() == today)
+            return (datetime.now(timezone.utc) - last < timedelta(hours=20)
+                    and last.astimezone(LONDON).date() == today)
         except (ValueError, TypeError, KeyError):
-            recent = False
+            return False
+
+    def _days(self, name, previous, today):
+        # Full multi-day discovery once per London day (and at most every 20 h); other runs refresh today only.
+        recent = self._full_discovery_recent(previous, today)
         days = [today] if recent else [today + timedelta(days=i) for i in range(DAY_HORIZON.get(name, 1))]
         window = self._plan_window(name)
         if window:
@@ -339,10 +345,20 @@ class Engine:
                                  decode=decode, max_bytes=7_000_000))
         elif name == "thesportsdb":
             chosen = [s for s in options.get("thesportsdb_sports", providers.THESPORTSDB_DEFAULT_SPORTS) if s in providers.THESPORTSDB_SPORTS]
+            leagues = [l for l in options.get("thesportsdb_leagues", providers.THESPORTSDB_DEFAULT_LEAGUES)
+                       if l in providers.THESPORTSDB_LEAGUES]
             for day in self._days(name, previous, today):
                 for sport in chosen:
                     query = urllib.parse.urlencode({"d": day.isoformat(), "s": sport})
                     plan.append(dict(url=base + "?" + query, scope="%s|%s" % (day.isoformat(), sport),
+                                     decode=providers.thesportsdb_events, max_bytes=3_000_000))
+            # The week ahead per competition, once per full discovery (other runs: today only, like the sports).
+            recent = self._full_discovery_recent(previous, today)
+            league_days = [today] if recent else [today + timedelta(days=i) for i in range(providers.THESPORTSDB_LEAGUE_DAYS)]
+            for day in league_days:
+                for league in leagues:
+                    query = urllib.parse.urlencode({"d": day.isoformat(), "l": league})
+                    plan.append(dict(url=base + "?" + query, scope="%s|league:%s" % (day.isoformat(), league),
                                      decode=providers.thesportsdb_events, max_bytes=3_000_000))
         elif name == "bha_racing":
             for year in sorted({today.year, (today + timedelta(days=7)).year}):

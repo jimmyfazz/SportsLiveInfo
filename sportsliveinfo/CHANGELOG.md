@@ -2,13 +2,19 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
-## 0.3.21 — API-Sports: stop asking for dates the plan cannot read
+## 0.3.21 — API-Sports stops asking for dates the plan cannot read; TheSportsDB fills the week ahead per competition
 
 - **Measured on the live feed (15 November, 04:15):** every API-Sports source (football, basketball, rugby, hockey, handball, volleyball, NFL, baseball, AFL, MMA) returned events for today and tomorrow only. The other five days of each run were refused with a plan restriction, so every one of them was reported "partial". The once-a-day full discovery was never recorded, and the refused days were requested again on every run.
 - **Fix:** when API-Sports refuses a date with its plan message ("try from … to …"), SportsLiveInfo reads just the two dates and remembers which days the key can read. Days outside that window are no longer requested and are not counted as failures, so the source reports "ok". The window is forgotten after 3 days, so an upgraded plan is picked up by the next full discovery. Only the dates are taken from the message.
 - **Effect:** about five wasted requests per API-Sports source per run are saved, out of a 100-a-day quota per sport. Source health stops showing "partial" for a normal free key, and the job summary says "N outside the provider plan's dates".
-- **Not changed:** the week ahead still relies on football-data.org, OpenLigaDB, BHA racing and F1 (2–68 events a day beyond tomorrow). Closing that gap needs another fixture source; TheSportsDB's free endpoints could not be checked from the cloud session (NOT RUN).
-- Tests: 3 new (window learned and honoured, parser reads only two dates, window forgotten after 3 days). 288 tests pass.
+- **Week ahead from TheSportsDB, per competition.** TheSportsDB's documentation (checked 15 November) states that the free key "123" allows 30 requests a minute and returns at most 3 events per day request (1 for "next league", 15 for a season). A whole-sport day request therefore loses most fixtures.
+  - **What changes:** SportsLiveInfo now also asks, once a day, for each chosen **competition** on each of the next 7 days (`eventsday.php?d=…&l=…`). Later runs that day ask for today only.
+  - **Defaults:** Nations Championship (the November rugby tests), Six Nations, United Rugby Championship, Premiership Rugby, European Champions Cup, Super League, PDC darts, World Snooker and UFC. Rugby World Cup, Challenge Cup and the DP World Tour are optional, under Sources → Source options.
+  - **Whole-sport day requests** now cover today only.
+  - **Budget:** the local daily budget is 200 requests (was 120); a normal day uses about 130.
+  - **Measured live:** next Saturday's Ireland v South Africa, Italy v Fiji and France v Argentina, which the published feed did not have.
+  - **Still partial:** a competition with more than 3 fixtures on one day still shows only 3 on the free key.
+- Tests: 4 new (window learned and honoured, parser reads only two dates, window forgotten after 3 days, competitions cover the week once a day); 2 updated for the new TheSportsDB plan. 286 tests pass.
 
 ## 0.3.20 — Channel coverage on Home Assistant; guide channel map; B1G reconciliation spec
 

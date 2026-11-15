@@ -16,6 +16,7 @@ DEFAULT = {
     "sports": {name: name == "jolpica" for name in providers.SPORTS},
     "epg": {name: False for name in providers.EPG},
     "options": {"thesportsdb_sports": list(providers.THESPORTSDB_DEFAULT_SPORTS),
+                "thesportsdb_leagues": list(providers.THESPORTSDB_DEFAULT_LEAGUES),
                 "openligadb_leagues": list(providers.OPENLIGADB_DEFAULT_LEAGUES)},
     "keys": {},
     "schedule": ["04:00", "12:00", "17:00"],
@@ -133,6 +134,7 @@ class Store:
                     if key == "options":
                         for option, values in value.items():
                             allowed = {"thesportsdb_sports": providers.THESPORTSDB_SPORTS,
+                                       "thesportsdb_leagues": providers.THESPORTSDB_LEAGUES,
                                        "openligadb_leagues": providers.OPENLIGADB_LEAGUES}.get(option)
                             if (allowed is None or not isinstance(values, list)
                                     or any(not isinstance(entry, str) or entry not in allowed for entry in values)):
