@@ -263,6 +263,11 @@ def _broadcast_links(event, private=False):
     and a link never makes an event "verified": the guide shows a channel
     listing the event, not that a provider stream carries it.
     """
+    # Audit 15 Nov (P1): links found only by the looser guide-listing matcher (team words stripped, ±3 h) can name the
+    # wrong match ("Man City v Liverpool" 14:30 → "Manchester United v Liverpool" 17:30). Until that matcher is as
+    # strict as the main one they stay in the owner's private feed and are never published publicly.
+    if not private and event.get("broadcast_status") == "guide_listing_match":
+        return []
     links = []
     for candidate in event.get("broadcast_candidates") or []:
         if not isinstance(candidate, dict) or not candidate.get("canonical_channel_id"):

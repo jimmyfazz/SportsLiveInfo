@@ -2,7 +2,7 @@
 
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](../docs/CURRENT_STATUS.md).
 
-**v0.3.21 · experimental · 15 November 2026.** The app:
+**v0.3.22 · experimental · 15 November 2026.** The app:
 - collects sporting events and TV guides on your Home Assistant;
 - links live sport to channels;
 - publishes a public feed (`sli/1.5`, owner-approved sources only) and an optional private feed for your own TVs;

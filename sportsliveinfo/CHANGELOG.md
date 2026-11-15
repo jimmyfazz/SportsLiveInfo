@@ -2,6 +2,27 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.22 — Forensic audit fixes: private feed guard, channel-list privacy, no loose channel links in public
+
+From the [15 November forensic audit](../docs/AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md). Every fix was checked against the code and has a test.
+
+- **The private feed can never be published to a public repository.**
+  - **Before:** the private/public check ran only in the connection test, and the publisher itself never repeated it.
+  - **Now:** every publish re-checks the destination's name and visibility first, and publishes nothing if the private repository has become public or the name is wrong. The public feed is checked the same way.
+- **Your channel list never stores stream addresses.**
+  - **Before:** a list without an M3U header in its first 50 lines (leading blank lines, indentation or a bare list of URLs) could store stream URLs, which may contain your provider login, as channel names on Home Assistant.
+  - **Now:** the M3U header is recognised anywhere in the file, and any URL or credential line is dropped.
+- **No loose channel links in the public feed.**
+  - **Before:** links found only by the looser guide-listing matcher could name the wrong match. It was reproduced: "Man City v Liverpool" at 14:30 was linked to Manchester United v Liverpool at 17:30.
+  - **Now:** those links stay in your private feed until that matcher is made strict.
+- **Open items** (prioritised in the audit):
+  - approved events lost when an unapproved source corroborates them;
+  - stale "live" states;
+  - guide memory use on the mini PC;
+  - a collector that a slow host can hang;
+  - backups and observability.
+- Tests: 290 pass (5 new).
+
 ## 0.3.21 — API-Sports stops asking for dates the plan cannot read; TheSportsDB fills the week ahead per competition
 
 - **Measured on the live feed (15 November, 04:15):** every API-Sports source (football, basketball, rugby, hockey, handball, volleyball, NFL, baseball, AFL, MMA) returned events for today and tomorrow only. The other five days of each run were refused with a plan restriction, so every one of them was reported "partial". The once-a-day full discovery was never recorded, and the refused days were requested again on every run.

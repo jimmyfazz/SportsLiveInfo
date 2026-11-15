@@ -304,3 +304,24 @@ class FeedBehaviourTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LooseLinkPublicationTests(unittest.TestCase):
+    """Audit 15 Nov (P1): links from the looser guide-listing matcher never reach the public feed."""
+
+    CANDIDATE = {"canonical_channel_id": "gb.sky.sports.main_event", "match_confidence": "high",
+                 "epg_sources": ["uk_freeview"], "channel_name": "Sky Sports Main Event",
+                 "programme_start_utc": "2026-11-21T14:30:00+00:00"}
+
+    def test_loose_match_links_are_private_only(self):
+        event = {"broadcast_status": "guide_listing_match", "broadcast_candidates": [dict(self.CANDIDATE)]}
+        self.assertEqual(feed._broadcast_links(event), [])
+        private = feed._broadcast_links(event, private=True)
+        self.assertEqual([link["canonical_channel_id"] for link in private], ["gb.sky.sports.main_event"])
+
+    def test_strict_match_links_are_still_published(self):
+        for status in ("single_guide_match", "multi_guide_match"):
+            event = {"broadcast_status": status, "broadcast_candidates": [dict(self.CANDIDATE)]}
+            links = feed._broadcast_links(event)
+            self.assertEqual([link["canonical_channel_id"] for link in links], ["gb.sky.sports.main_event"])
+            self.assertNotIn("channel_name", links[0])
