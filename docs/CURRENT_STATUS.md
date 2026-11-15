@@ -1,14 +1,23 @@
 # Current implementation and verification status
 
-**14 November 2026 · SportsLiveInfo 0.3.20.** Start with the [14 November handover](HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md) and the [channel identification and EPG source research](RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md). The public [SportsLiveInfo source repository](https://github.com/jimmyfazz/SportsLiveInfo) builds the Home Assistant App. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the public data destination; `LiveSports-EPG-private` is the owner's private personal-use feed. Credentials, guide programme text and App settings stay on Home Assistant.
+**15 November 2026 · SportsLiveInfo 0.3.21.** Start with the [14 November handover](HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md), the [B1G reconciliation spec](B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md) and the [channel identification and EPG source research](RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md). The public [SportsLiveInfo source repository](https://github.com/jimmyfazz/SportsLiveInfo) builds the Home Assistant App. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the public data destination; `LiveSports-EPG-private` is the owner's private personal-use feed. Credentials, guide programme text and App settings stay on Home Assistant.
 
-- **Installed:** 0.3.19 on the owner's Home Assistant (14 Nov, backup c84c67f1 of 0.3.18 first; auto-update on). 0.3.20 adds the local *Channel coverage* page, the guide survey, the published guide channel map, regional identities that never merge with the national channel, a dictionary that fits B1G's 8 MB limit with every region on, and the [B1G reconciliation spec](B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md) with conformance fixtures the B1G Kotlin port passes.
-- **Public feed:** `sli/1.3` (0.3.18 publishes `sli/1.4`: optional dictionary regions, country tags and rules), about 4,400 events from owner-approved sources, channel registry with UK regional services, UK/Europe channel dictionary with fallback rules, and D8 channel links (`broadcast_links`: canonical ids and confidence only, never verified).
-- **Private feed:** implemented (0.3.14); every collected event plus guide-listed live sport with channel names and times. Enabled and connection test passed on 14 Nov 09:41 UTC; the first private publication is pending.
-- **Live sport allocation (three public UK guides, 14–20 Nov):** 234 of 244 live UK sports broadcasts have a channel (25 of 251 before 0.3.12); 14 of 14 labelled fixtures match; no radio, shopping, +1 or radio-commentary candidates; regional opt-outs allocated correctly.
-- **Channel identification (owner's list, 0.3.18):** UK + Europe 61.5 % by the dictionary (55.4 % at 0.3.17), UK + Europe sport channels 71.2 % (57.8 %), France 66.9 %; whole 21,250-channel list 50.1 % with all optional world regions (20.0 %). Downloadable guide (GitHub-hosted files): France 75.4 %, Spain 72.8 %, Italy 72.7 %, UK 69.8 %, Portugal 62.7 %, Germany 56.8 %.
-- **New optional guides (0.3.18, off by default):** Sky UK/DE/IT and Sky Italia (M3UPT, xz), EPGTalk US/US local/Latin/free streaming, Sky Sport Now and Sky Go NZ, Kayo and all-cities AU, UK and US free streaming (Plex/Samsung/Pluto/Roku), DStv South Africa, Spain incl. Movistar Plus+, France + beIN MENA, Portugal; further EPG Share / IPTV-EPG.org country files to verify on Home Assistant.
-- **Not verified:** French guide listing formats (French guides unreachable from the cloud session), Docker/Supervisor build internals, and B1G device acceptance (B1G does not read SLI yet).
+- **Installed:** 0.3.21 on the owner's Home Assistant (15 Nov 07:17 UTC; backup `6feebca2` of 0.3.20 first; auto-update on). It started cleanly.
+  - 0.3.21 stops asking API-Sports for dates the plan refuses.
+  - It also fills the week ahead from TheSportsDB per competition (rugby internationals, Six Nations, URC, Premiership, Champions Cup, Super League, PDC darts, World Snooker, UFC). See the [changelog](../sportsliveinfo/CHANGELOG.md).
+- **Public feed (measured 15 Nov 04:15, before 0.3.21):**
+  - **Format:** `sli/1.5` from 0.3.20.
+  - **Events:** 2,271 events from owner-approved sources: 1,923 today, 229 tomorrow, then 2–68 a day.
+  - **Assets:** channel registry, identity, dictionary (3.1 MB), `guide_map` (1.7 MB) and D8 channel links (never "verified").
+  - **Expected after 0.3.21:** more rugby, darts, snooker and UFC fixtures beyond tomorrow.
+- **B1G:** reads the feed since B1 PR #827 (merged 15 Nov). It reconciles channels with the same rules (conformance fixtures pass), uses the guide map for gap-fill guides and channel details, shows event-slot fixtures in the Guide, and builds Sports Today from the feed. GitHub Actions on B1 are blocked by account billing; the Gradle unit suite (2,127 tests) passes in a cloud session. **Device acceptance not yet run.**
+- **Private feed:** implemented (0.3.14); enabled and connection-tested on 14 Nov.
+- **Live sport allocation (three public UK guides, 14–20 Nov):** 234 of 244 live UK sports broadcasts have a channel; 14 of 14 labelled fixtures match; no radio, shopping, +1 or commentary candidates.
+- **Channel identification (owner's list, 0.3.18):** UK + Europe 61.5 % by the dictionary, UK + Europe sport channels 71.2 %, France 66.9 %; whole 21,250-channel list 50.1 % with all optional world regions.
+- **Known limits:**
+  - **API-Sports free key:** today and tomorrow only.
+  - **TheSportsDB free key:** at most 3 events per request.
+  - **Not checked from the cloud session:** French guide listing formats and Docker/Supervisor build internals.
 
 ## Validation
 
@@ -17,4 +26,4 @@ python3 -m compileall -q sportsliveinfo/src tests
 PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests
 ```
 
-**Local result:** 282 tests passed (0.3.20, 14 Nov 2026); CI passes on every merged PR. See [implementation progress](IMPLEMENTATION_PROGRESS.md) for measurements and [document index](DOCUMENTATION_INDEX.md) for earlier records.
+**Local result:** 286 tests passed (0.3.21, 15 Nov 2026); CI passes on every merged PR. See [implementation progress](IMPLEMENTATION_PROGRESS.md) for measurements and [document index](DOCUMENTATION_INDEX.md) for earlier records.
