@@ -17,10 +17,8 @@
 - **Deployed:** 0.3.23 on Home Assistant at 08:59 UTC.
   - **Backup:** `9542a582`, taken before the update.
   - **Start-up:** the App log shows "Ingress HTTP ready".
-- **NOT RUN:**
-  - the first `sli/1.6` publish (due at the next scheduled run);
-  - live-lane API-Sports `live=all` calls;
-  - B1G on a TV or emulator.
+- **Observed live:** `sli/1.6` publishing since 09:00 UTC. The live lane republishes every 15 minutes; at 10:30 UTC it held 42 events (34 live).
+- **NOT RUN:** B1G on a TV or emulator.
 - **Handover:** [15 November handover](HANDOVER_2026-11-15_SPORTSLIVEINFO_B1G.md). Work moves from the cloud session to terminal agents on the owner's Mac.
 
 ## 14 November 2026 — 0.3.20 channel coverage, guide survey, guide map, B1G spec

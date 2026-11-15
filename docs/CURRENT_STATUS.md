@@ -5,10 +5,10 @@
 - **Installed:** 0.3.23 on the owner's Home Assistant (15 Nov 08:59 UTC). Backup `9542a582` of 0.3.21 was taken first, and auto-update is on. The App started cleanly ("Ingress HTTP ready").
 - **Public feed:**
   - **Last observed publish:** `sli/1.5` at 04:17 UTC on 15 Nov, from 0.3.21.
-  - **First `sli/1.6` publish:** due at the next scheduled run (04:00, 12:00 or 17:00 UK time). **Not yet observed.**
+  - **`sli/1.6`:** live since 09:00 UTC on 15 Nov. At 10:30 UTC the manifest read `sli/1.6` (publisher 0.3.23) with the `live` and `events_extra` assets.
   - **What `sli/1.6` adds:** status observation times, a `live_state_rule`, an optional `live` asset, core and extra tiers, and guide-corroborated links (never "verified").
   - **No programme rows:** the feed still carries no EPG programme listings.
-- **Live-status lane:** implemented and tested offline. The API-Sports `live=all` calls have **not yet run** against the live service.
+- **Live-status lane:** running on Home Assistant. It republishes the `live` asset every 15 minutes while matches are on: at 10:30 UTC it held 42 events (34 live, 8 unknown). One publish failed on a GitHub HTTP 500 and the next succeeded.
 - **B1G:** has read the feed since B1 PR #827. PR #828 (merged 15 Nov, B1 `main` `7269e5f`) applies the `sli/1.6` reader rules. A B1 interop test reads this repository's golden 1.6 feed.
   - **Unit tests:** the Gradle unit suite (2,179 tests) passes, run in a cloud session.
   - **CI:** B1's GitHub Actions do not run (account billing; the owner does not use them).

@@ -9,7 +9,7 @@ Work so far was done in a cloud session. That session could not reach the owner'
 | Part | Where | State on 15 Nov 2026 |
 |---|---|---|
 | SportsLiveInfo Home Assistant App | Source: `jimmyfazz/SportsLiveInfo` (public), folder `sportsliveinfo/`. Installed on the owner's Home Assistant OS mini PC as slug `106c7bd5_sportsliveinfo` | **0.3.23 installed and running** (08:59 UTC). Backup of 0.3.21 taken first: `9542a582` "SportsLiveInfo 0.3.21 before 0.3.23". Auto-update **on**; watchdog on |
-| Public feed | `jimmyfazz/LiveSports-EPG` (public), `v1/manifest.json` | Last published 04:17 UTC as `sli/1.5` (from 0.3.21). The **first `sli/1.6` publish is the next scheduled run** (04:00, 12:00, 17:00 Europe/London) — **not yet observed** |
+| Public feed | `jimmyfazz/LiveSports-EPG` (public), `v1/manifest.json` | **`sli/1.6` live since 09:00 UTC 15 Nov** (publisher 0.3.23). The live-status lane republishes the `live` asset every 15 minutes while matches are on: at 10:30 UTC it held 42 events (34 live, 8 unknown). One run (09:30) failed on a GitHub HTTP 500 and the next run succeeded. Full collections still run at 04:00, 12:00 and 17:00 Europe/London |
 | Private feed | `jimmyfazz/LiveSports-EPG-private` (private) | Enabled; publishes with the public feed |
 | B1G Android app | `jimmyfazz/B1`, `platforms/android/` | Reads the feed (B1 PR #827, then #828 merged 15 Nov at `7269e5f`): reconciliation, gap-fill guide, event slots, Sports Today with the `sli/1.6` live rules. **Not yet installed on any TV from this build; device acceptance NOT RUN** |
 
@@ -77,7 +77,10 @@ PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests
 
 From the [15 November audit](AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md); IDs match it.
 
-1. **Observe the first `sli/1.6` publish** (Publishing page or `LiveSports-EPG/v1/manifest.json`): format `sli/1.6`, `live_state_rule` present, events carry `status_observed_at`; once API-Sports has a match on, the `live` asset appears. The live-lane calls against API-Sports (`live=all`) have **not been run** yet.
+1. **Watch the live lane for a day.** `sli/1.6` and the `live` asset have been published since 09:00 UTC on 15 Nov.
+   - Check its API-Sports call count against the daily quota on the Scheduler page.
+   - Check that events leave the `live` asset when matches end.
+   - Check the B1G side on a TV.
 2. **0.3.24 — stability and fixture correctness:**
    - **C4 (P1):** stream guides one at a time for linking; slim programme records to title, sub-title and times; keep the next 8 days. Out-of-memory risk with 10–40 guides.
    - **O1 (P1):** an overall deadline per request (chunked reads) and a "collector stuck" state; today a slow upstream holds the busy lock indefinitely.
