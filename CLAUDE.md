@@ -4,9 +4,9 @@
 
 **Read this first.** This file is intentionally concise; the detailed and binding rules are in [AGENTS.md](AGENTS.md). Do not rely on older UK-only, "B1 optional", or sports-only architecture notes.
 
-## Current state and binding rules (15 Nov 2026, v0.3.21)
+## Current state and binding rules (15 Nov 2026, v0.3.24)
 
-See [current status](docs/CURRENT_STATUS.md) and the [B1G reconciliation spec](docs/B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md); older audits are in [docs/archive](docs/archive/). The public feed (`sli/1.5`) does **not** carry EPG programme listings: B1G's provider Guide stays primary and any future licensed supplement must be non-destructive and user-account-aware. The separate public data repo is `jimmyfazz/LiveSports-EPG`. Do not confuse a token connection test with write or licensing approval. The B1G Android reader is implemented (B1 PR #827, conformance fixtures pass); device acceptance and live verification of some guide sources remain outstanding.
+**Start with the [15 November handover](docs/HANDOVER_2026-11-15_SPORTSLIVEINFO_B1G.md)** (state, Mac setup, release and Home Assistant deploy steps, prioritised open work), then [current status](docs/CURRENT_STATUS.md), the [15 November audit](docs/AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md) and the [B1G reconciliation spec](docs/B1G_CHANNEL_AND_GUIDE_RECONCILIATION_SPEC.md); older audits are in [docs/archive](docs/archive/). 0.3.23 is installed on Home Assistant; 0.3.24 (channel ranking, re-runs, readers follow the feed's decisions — [contract §4.3](docs/FEED_CONTRACT_SLI_V1.md)) is in review. **Design rule:** decisions belong in SportsLiveInfo and are published as data; B1G follows them, so improvements need no TV update. The public feed (`sli/1.6`) does **not** carry EPG programme listings: B1G's provider Guide stays primary and any future licensed supplement must be non-destructive and user-account-aware. The separate public data repo is `jimmyfazz/LiveSports-EPG`. Do not confuse a token connection test with write or licensing approval. The B1G Android reader is implemented (B1 PRs #827 and #828, conformance and `sli/1.6` interop tests pass); `sli/1.6` and the live-status lane have been publishing since 09:00 UTC on 15 Nov; device acceptance remains outstanding.
 
 ## Scope
 

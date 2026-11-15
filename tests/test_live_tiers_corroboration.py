@@ -455,7 +455,8 @@ class LiveLaneTests(StoreCase):
         self.assertEqual(set(uploads) - set(live_paths), {"v1/manifest.json", "v1/manifests/%s.json" % second})
         live = json.loads(uploads[live_paths[0]])
         self.assertEqual(live["events"], [{"id": "api-sports:1", "status_normalized": "live",
-                                           "status_observed_at": "2026-11-14T15:30:00Z"}])
+                                           "status_observed_at": "2026-11-14T15:30:00Z",
+                                           "live_until_utc": "2026-11-14T16:15:00Z"}])
         manifest = json.loads(uploads["v1/manifest.json"])
         self.assertIn("live_status", manifest["capabilities"])
         self.assertNotIn("score", uploads[live_paths[0]].decode())

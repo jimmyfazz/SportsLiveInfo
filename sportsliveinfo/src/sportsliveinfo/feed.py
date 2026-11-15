@@ -74,6 +74,26 @@ def event_tier(event):
     return "extra"
 
 
+LIVE_MAX_AGE = timedelta(minutes=45)
+LIVE_END_GRACE = timedelta(minutes=30)
+
+
+def live_until(status, observed_at, start_utc, expected_end_utc):
+    """``live_until_utc`` (contract sli/1.6, 0.3.24): the moment after which a reader stops showing this event as LIVE,
+    computed here so readers compare one clock time instead of applying the rule themselves. None unless the status
+    is live and was observed: min(observed + 45 min, expected end + 30 min), never before the start."""
+    if status != "live":
+        return None
+    observed, start, end = _z(observed_at), _z(start_utc), _z(expected_end_utc)
+    if not observed or not start or not end:
+        return None
+    parse = lambda value: datetime.fromisoformat(value.replace("Z", "+00:00"))
+    until = min(parse(observed) + LIVE_MAX_AGE, parse(end) + LIVE_END_GRACE)
+    if until <= parse(start):
+        return None
+    return until.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _z(value):
     """ISO-8601 UTC with a trailing Z, or None."""
     try:
@@ -291,6 +311,10 @@ def _event_public(event, private=False, observed_fallback=None):
             row["expected_end_utc"] = linking.expected_end(event).isoformat(timespec="seconds")
         except (TypeError, ValueError):
             pass
+    until = live_until(row.get("status_normalized"), row["status_observed_at"], row.get("start_utc"),
+                       row.get("expected_end_utc"))
+    if until:
+        row["live_until_utc"] = until
     row["tier"] = event_tier(event)
     # A cached event must not become a "verified broadcaster" merely
     # because an untrusted source sets a boolean. A reviewed, versioned
@@ -325,8 +349,10 @@ def _broadcast_links(event, private=False):
     if not private and event.get("broadcast_status") == "guide_listing_match":
         return []
     links = []
-    for candidate in event.get("broadcast_candidates") or []:
-        if not isinstance(candidate, dict) or not candidate.get("canonical_channel_id"):
+    # Published best first (linking.candidate_rank); readers keep this order and use `binds`, so ranking and binding
+    # are decided here and improve without a reader update.
+    for candidate in linking.rank_candidates(event.get("broadcast_candidates") or [], event):
+        if not candidate.get("canonical_channel_id"):
             continue
         link = {"canonical_channel_id": str(candidate["canonical_channel_id"]),
                 "status": "guide_listed_unverified",
@@ -346,8 +372,11 @@ def _broadcast_links(event, private=False):
             for field in ("channel_name", "programme_start_utc", "programme_end_utc"):
                 if candidate.get(field):
                     link[field] = str(candidate[field])[:120]
+        # May this link name the channel that shows the event ("on now", Sports Today)? Weaker links are "may be on".
+        link["binds"] = link["status"] == "guide_corroborated" or link["confidence"] == "high"
+        link["rank"] = len(links) + 1
         links.append(link)
-    return sorted(links, key=lambda link: link["canonical_channel_id"])
+    return links
 
 
 def live_document(store, events):
@@ -371,7 +400,16 @@ def live_document(store, events):
         if not observed or status not in linking.STATUS_PROGRESS or (published and observed <= published):
             continue
         if status != event.get("status_normalized") or status == "live":
-            rows.append({"id": event["id"], "status_normalized": status, "status_observed_at": observed})
+            row = {"id": event["id"], "status_normalized": status, "status_observed_at": observed}
+            try:
+                end = linking.expected_end(event).isoformat(timespec="seconds") \
+                    if event.get("start_utc") and event.get("start_precision") != "date_only" else None
+            except (TypeError, ValueError):
+                end = None
+            until = live_until(status, observed, event.get("start_utc"), end)
+            if until:
+                row["live_until_utc"] = until
+            rows.append(row)
     if not rows:
         return None
     rows.sort(key=lambda r: r["id"])
@@ -520,7 +558,16 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                                                "status_observed_at is newer; a feed older than 45 minutes never makes "
                                                "anything 'LIVE'",
                           "tier_rule": "events:<date> and today carry tier 'core'; the optional events_extra:<date> "
-                                       "assets (same schema) carry tier 'extra'"},
+                                       "assets (same schema) carry tier 'extra'",
+                          # 0.3.24: decisions made here, so readers follow them without an update.
+                          "link_order": "best_first",
+                          "link_rule": "broadcast_links are published best first (rank 1 = best); keep that order. A "
+                                       "link with binds=true may name the channel showing the event; binds=false is "
+                                       "'may be on' only",
+                          "live_until_rule": "when an event (or its live-asset row) has live_until_utc, show LIVE only "
+                                             "while start_utc <= now < live_until_utc; without it apply live_state_rule",
+                          "live_max_age_minutes": int(LIVE_MAX_AGE.total_seconds() // 60),
+                          "live_end_grace_minutes": int(LIVE_END_GRACE.total_seconds() // 60)},
         "revision": revision, "previous_revision": previous_revision,
         "generated_at": now.isoformat(timespec="seconds"),
         "publisher": {"app": "SportsLiveInfo", "version": __version__},

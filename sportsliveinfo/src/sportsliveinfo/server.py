@@ -715,7 +715,7 @@ class UI(BaseHTTPRequestHandler):
         if event.get("broadcast_verified"):
             names = ", ".join(str(c.get("name", "")) for c in event.get("broadcasts", []) if isinstance(c, dict))
             return e(names or "Verified")
-        candidates = event.get("broadcast_candidates") or []
+        candidates = linking.rank_candidates(event.get("broadcast_candidates") or [], event)
         if not candidates:
             return e({
                 "time_unconfirmed": "Fixture time TBC",
@@ -729,7 +729,7 @@ class UI(BaseHTTPRequestHandler):
         items = []
         for candidate in candidates:
             name = candidate.get("channel_name", "")
-            market = candidate.get("canonical_channel_id", "").partition(".")[0].upper()
+            market = linking.channel_market(candidate.get("canonical_channel_id")).upper() or "?"
             coverage = self._uk_time({"start_utc": candidate.get("programme_start_utc")})
             source_ids = candidate.get("epg_sources", [])
             sources = ", ".join(providers.EPG.get(source, (source,))[0] for source in source_ids)
@@ -742,8 +742,10 @@ class UI(BaseHTTPRequestHandler):
             items.append("<li>%s · %s<br><small>Guide start %s · %s%s</small></li>" %
                          (e(name), e(market), e(coverage), e(sources), " · " + e(basis) if basis else ""))
         first = candidates[0]
-        first_market = first.get("canonical_channel_id", "").partition(".")[0].upper()
-        return '<details><summary>EPG match (unverified) · %s (%s)%s</summary><ul>%s</ul></details>' % (
+        first_market = linking.channel_market(first.get("canonical_channel_id")).upper() or "?"
+        label = "Guide-corroborated" if linking.guide_corroborated(event, first) else "EPG match (unverified)"
+        return '<details><summary>%s · %s (%s)%s</summary><ul>%s</ul></details>' % (
+            label,
             e(first.get("channel_name", "")), e(first_market),
             " +%d" % (len(candidates) - 1) if len(candidates) > 1 else "", "".join(items))
 

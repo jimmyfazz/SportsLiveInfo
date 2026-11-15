@@ -149,7 +149,13 @@ def team_key(name):
     return frozenset(t for t in tokens(name) if t not in _STOP)
 
 
-def same_team(a, b):
+# Rugby suffix words a source may add to a side's name ("Scotland Rugby", "Ampthill RUFC", "RC Toulon"). Droppable for
+# rugby only, so football matching is unchanged; a side is never identified by these words alone.
+_RUGBY_GENERIC = frozenset({"rugby", "rfc", "rufc", "rlfc", "rc", "rugby union", "rugby league"})
+
+
+def same_team(a, b, generic=None):
+    generic = _GENERIC if generic is None else generic
     if not a or not b or "tbc" in a or "tbc" in b:
         return False
     if (a & _VARIANT) != (b & _VARIANT):
@@ -157,7 +163,7 @@ def same_team(a, b):
     if a == b:
         return True
     small, large = (a, b) if len(a) < len(b) else (b, a)
-    return small < large and bool(small - _GENERIC) and (large - small) <= _GENERIC
+    return small < large and bool(small - generic) and (large - small) <= generic
 
 
 def _source_rank(source_id):
@@ -188,9 +194,10 @@ def _same_event(a, b):
     if ca and cb and ca != cb:
         return False
     ta, tb = a["_teams"], b["_teams"]
+    generic = _GENERIC | _RUGBY_GENERIC if _sport_family(a["sport"]) == "rugby" else _GENERIC
     if len(ta) == 2 and len(tb) == 2:
-        return ((same_team(ta[0], tb[0]) and same_team(ta[1], tb[1])) or
-                (same_team(ta[0], tb[1]) and same_team(ta[1], tb[0])))
+        return ((same_team(ta[0], tb[0], generic) and same_team(ta[1], tb[1], generic)) or
+                (same_team(ta[0], tb[1], generic) and same_team(ta[1], tb[0], generic)))
     return gap <= 1800 and taxonomy.norm(a.get("title")) == taxonomy.norm(b.get("title"))
 
 
@@ -349,9 +356,19 @@ def _identity_members(identity_document):
 _TIMESHIFT_FEED = re.compile(r"(?:plus\s*[12]|\+\s*[12]|timeshift|1hr|2hr)", re.I)
 
 
+# Free streaming (FAST) platform guides: their channels are the platform's own brands. A dictionary name match maps
+# them to an unrelated broadcast service (15 Nov 2026: Pluto's "Rugby Pass TV" -> Premier Sports 1 Asia), so they are
+# identified by the curated registry only.
+FAST_GUIDE_PREFIXES = ("mjh_pluto_", "mjh_samsung_", "mjh_plex_", "mjh_roku_")
+
+
+def is_fast_guide(source_id):
+    return str(source_id or "").startswith(FAST_GUIDE_PREFIXES)
+
+
 def _dictionary_hit(resolver, source_id, display_name, channel_id=None):
     market = COUNTRY_BY_SOURCE.get(source_id)
-    if resolver is None or not market or foreign_guide_channel(market, channel_id):
+    if resolver is None or not market or is_fast_guide(source_id) or foreign_guide_channel(market, channel_id):
         return None
     hit = resolver.resolve(display_name, market)
     if not hit or hit.get("confidence") != "high":
@@ -490,6 +507,8 @@ def _programme_index(epg_guides, window_start, window_end, *, include_non_matche
                 coverage[source_id] = (min(first, start) if first else start, max(last, end) if last else end)
             if end <= window_start or start >= window_end or programme.get("is_repeat") or end - start > _MAX_PROGRAMME:
                 continue
+            if names_past_year(programme.get("title"), programme.get("subtitle"), window_start.year):
+                continue                  # a re-run ("England v Samoa - Rugby World Cup 2023") is never live sport
             if canonical and ".news" in canonical:
                 continue
             text = taxonomy.norm("%s %s" % (programme.get("title", ""), programme.get("subtitle", "")))
@@ -504,6 +523,28 @@ def _programme_index(epg_guides, window_start, window_end, *, include_non_matche
                          channel_name, source_id, mapping_method, mapping_confidence, dictionary_categories,
                          (str(programme.get("title") or ""), str(programme.get("subtitle") or ""))))
     return rows
+
+
+_YEAR = re.compile(r"(?<![\d/])((?:19|20)\d\d)(?:\s*[/\u2013-]\s*(\d{4}|\d{2}))?(?![\d/])")
+
+
+def names_past_year(title, subtitle, current_year):
+    """True when a listing names a year (or season) that ended before ``current_year``: a re-run, never live.
+
+    A season keeps its last year ("Premiership 2025/26" is current in 2026); a bare year or a season that ended
+    earlier ("Rugby World Cup 2023", "2023-24") is past. Future years are fine ("World Championship 2027")."""
+    for match in _YEAR.finditer("%s %s" % (title or "", subtitle or "")):
+        first, second = int(match.group(1)), match.group(2)
+        last = first
+        if second:
+            last = int(second) if len(second) == 4 else (first // 100) * 100 + int(second)
+            if last < first:              # "1999/00"
+                last += 100
+            if last - first != 1:         # not a season: judge the first number alone
+                last = first
+        if last < current_year:
+            return True
+    return False
 
 
 _LISTING_DATE = re.compile(r"\s+\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\s*$")
@@ -895,7 +936,7 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
             matched[canonical].append((row[0], row[3], row[6]))
             matched_rows.add(row_index)
         _allocate_regions(found, matched, observed)
-        candidates = sorted(found.values(), key=lambda c: c["canonical_channel_id"])
+        candidates = rank_candidates(found.values())
         if not candidates:
             if gaps is not None:
                 if unmapped_match:
@@ -941,6 +982,57 @@ def independent_guide_families(sources):
     unverified lineage (providers.UNVERIFIED_LINEAGE_FAMILIES) never count as independent evidence."""
     families = {EPG_FAMILY.get(source, source) for source in sources or ()}
     return families - UNVERIFIED_LINEAGE_FAMILIES
+
+
+# ---- channel ranking ----------------------------------------------------------
+# The owner's home market: its channels come first among equally strong links. Readers (B1G) keep the published order,
+# so ranking is decided here only.
+HOME_MARKETS = ("gb",)
+_CURATED_ID = re.compile(r"^([a-z]{2})\.[a-z0-9_.]+$")
+_DICTIONARY_MARKET = re.compile(r"\.([a-z]{2})(?:@[^.]*)?$")
+
+
+def channel_market(canonical_id):
+    """Two-letter market of a channel id: curated ids lead with it ("gb.itv.one"), dictionary ids end with it
+    ("VirginMediaTwo.ie", "BBCOne.uk@London"; uk -> gb). Empty when unknown."""
+    cid = str(canonical_id or "")
+    curated = _CURATED_ID.match(cid)
+    if curated:
+        return curated.group(1)
+    found = _DICTIONARY_MARKET.search(cid.lower())
+    if not found:
+        return ""
+    return "gb" if found.group(1) == "uk" else found.group(1)
+
+
+def candidate_rank(candidate, event=None):
+    """Sort key, best first, for one broadcast candidate of ``event``:
+
+    1. guide-corroborated (contract sli/1.6 §4) before everything else;
+    2. a channel of the home market (``HOME_MARKETS``);
+    3. a curated registry channel before a dictionary-only id;
+    4. more independent guide families, then more guides;
+    5. high match confidence; network before regional coverage;
+    6. the channel id, case-insensitively (stable tie-break only).
+
+    Replaces the plain id sort, which put any capitalised dictionary id ("VirginMediaTwo.ie") before every curated id
+    ("gb.itv.one") regardless of evidence."""
+    cid = str(candidate.get("canonical_channel_id") or "")
+    sources = candidate.get("epg_sources") or ()
+    market = channel_market(cid)
+    corroborated = bool(event) and guide_corroborated(event, candidate)
+    return (0 if corroborated else 1,
+            HOME_MARKETS.index(market) if market in HOME_MARKETS else len(HOME_MARKETS),
+            0 if candidate.get("channel_identity_method") in CURATED_IDENTITY_METHODS else 1,
+            -len(independent_guide_families(sources)), -len(set(sources)),
+            0 if candidate.get("match_confidence") == "high" else 1,
+            0 if (candidate.get("coverage") or "network") == "network" else 1,
+            cid.casefold(), cid)
+
+
+def rank_candidates(candidates, event=None):
+    """Broadcast candidates best first (see ``candidate_rank``)."""
+    return sorted((c for c in candidates if isinstance(c, dict)), key=lambda c: candidate_rank(c, event))
 
 
 def guide_corroborated(event, candidate):
@@ -1164,7 +1256,7 @@ def _guide_live_events(by_start, programme_starts, matched_rows, now, timed=()):
             if row[1] >= start + timedelta(minutes=30) and row[5] and _regional_family(row[5]):
                 observed[row[5]].append((row[0], row[3], row[6]))
         _allocate_regions(found, matched, observed)
-        candidates = sorted(found.values(), key=lambda c: c["canonical_channel_id"])
+        candidates = rank_candidates(found.values())
         # Fixtures: the fullest team names; sessions: the plainest title.
         pick = max if key and _is_fixture_key(key) else min
         _, row, title, competition, participants = pick(members, key=lambda m: (len(m[2]), -m[1][0].timestamp()))

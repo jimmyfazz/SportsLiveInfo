@@ -11,6 +11,7 @@
     "events": {"type": "array", "items": {"type": "object", "required": ["id", "status_normalized", "status_observed_at"],
       "properties": {"id": {"type": "string", "description": "Event id in the same feed revision's day assets"},
                      "status_normalized": {"type": "string", "description": "scheduled | live | finished | postponed | cancelled | unknown"},
-                     "status_observed_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"}}}}
+                     "status_observed_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+                     "live_until_utc": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "description": "0.3.24+: with status live, show LIVE only until this time"}}}}
   }
 }

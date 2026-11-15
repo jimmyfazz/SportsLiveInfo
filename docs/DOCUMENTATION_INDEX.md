@@ -1,6 +1,6 @@
 # Documentation index and precedence
 
-**Reconciled 15 November 2026 for v0.3.21** (first reconciled 13 November for v0.3.4).
+**Reconciled 15 November 2026 for v0.3.23** (first reconciled 13 November for v0.3.4).
 
 SportsLiveInfo is the public App source repository. LiveSports-EPG is the separate public data destination. Installation and in-place update steps are in the [operator guide](../sportsliveinfo/DOCS.md).
 
@@ -38,7 +38,8 @@ SportsLiveInfo is the public App source repository. LiveSports-EPG is the separa
 | [docs/FORENSIC_INTEGRATION_AND_CORRECTIONS_2026-11-12.md](archive/FORENSIC_INTEGRATION_AND_CORRECTIONS_2026-11-12.md) | Historical audit / receipt |
 | [docs/FORENSIC_SOURCE_AND_LOGIC_INVESTIGATION_2026-11-12.md](archive/FORENSIC_SOURCE_AND_LOGIC_INVESTIGATION_2026-11-12.md) | Historical audit / receipt |
 | [docs/HANDOVER_2026-11-13_SPORTSLIVEINFO_B1G.md](archive/HANDOVER_2026-11-13_SPORTSLIVEINFO_B1G.md) | Historical handover |
-| [docs/HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md](HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md) | Current handover |
+| [docs/HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md](archive/HANDOVER_2026-11-14_SPORTSLIVEINFO_B1G.md) | Historical handover |
+| [docs/HANDOVER_2026-11-15_SPORTSLIVEINFO_B1G.md](HANDOVER_2026-11-15_SPORTSLIVEINFO_B1G.md) | **Current handover (start here)** |
 | [docs/HOME_ASSISTANT_BARE_METAL_PRIMARY.md](HOME_ASSISTANT_BARE_METAL_PRIMARY.md) | Current specification / guide |
 | [docs/HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md](HOME_ASSISTANT_FIRST_RUN_WIZARD_AND_NOTIFICATIONS.md) | Current specification / guide |
 | [docs/HOME_ASSISTANT_PROXMOX_HOSTING.md](archive/HOME_ASSISTANT_PROXMOX_HOSTING.md) | Superseded proposal / fallback |

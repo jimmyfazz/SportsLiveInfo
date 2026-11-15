@@ -7,6 +7,20 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 15 November 2026 — 0.3.21 to 0.3.23, audit, deployment and handover to Mac terminal agents
+
+- **Merged:** PR #32 (0.3.21: API-Sports plan window, TheSportsDB week-ahead per competition), #33 and #34 (documentation status, index, archive), #35 (0.3.22 audit fixes and 0.3.23 feed `sli/1.6`, `main` `f335c4e`).
+- **Audit:** [15 November forensic audit](AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md).
+  - **Fixed:** S1, S2, C1, C2, C3, C6 and C9.
+  - **Open, prioritised:** C4 and O1 (P1); C5, C7, C8, C10, C11 and O2–O6 (P2).
+- **Tests:** 315 pass locally; CI green on #35.
+- **Deployed:** 0.3.23 on Home Assistant at 08:59 UTC.
+  - **Backup:** `9542a582`, taken before the update.
+  - **Start-up:** the App log shows "Ingress HTTP ready".
+- **Observed live:** `sli/1.6` publishing since 09:00 UTC. The live lane republishes every 15 minutes; at 10:30 UTC it held 42 events (34 live).
+- **NOT RUN:** B1G on a TV or emulator.
+- **Handover:** [15 November handover](HANDOVER_2026-11-15_SPORTSLIVEINFO_B1G.md). Work moves from the cloud session to terminal agents on the owner's Mac.
+
 ## 14 November 2026 — 0.3.20 channel coverage, guide survey, guide map, B1G spec
 
 - **Local *Channel coverage* page:** M3U/text import that discards URLs; per-channel identity and guide for every genre; recommendations; CSV export.
