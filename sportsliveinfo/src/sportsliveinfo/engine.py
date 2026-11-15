@@ -34,6 +34,18 @@ DAY_HORIZON = {**{n: 7 for n in providers.SPORTS if n.startswith("api_sports")},
 SAFE_ERRORS = (ValueError, RuntimeError, TimeoutError, OSError, EOFError,
                json.JSONDecodeError, TypeError, KeyError, OverflowError, ET.ParseError)
 FEED_RETAIN = 10  # published manifests (and the assets they reference) kept for slow/offline TVs
+# Light live-status lane (contract sli/1.6 §2). API-Sports "live=all" boards, only while the collected feed has an
+# event between its start and expected end, at most every 15 minutes, within a daily budget per product that also
+# counts against the product's own daily quota (and always leaves calls for the scheduled refreshes).
+LIVE_INTERVAL = timedelta(minutes=15)
+LIVE_DAILY_BUDGET = 40          # live calls per product per UTC day
+LIVE_RESERVE = 20               # product calls kept back for the scheduled refreshes
+LIVE_REFRESH = timedelta(minutes=30)   # re-confirm an unchanged "live" this often, so readers keep trusting it
+LIVE_RETAIN = timedelta(hours=36)
+LIVE_SLOT_GUARD = 3             # minutes either side of a scheduled refresh when the lane stays quiet
+LIVE_UNSUPPORTED_DAYS = 3       # a product that refuses live=all is not asked again for this long
+# Football uses fixtures?live=all; the v1 "games" products games?live=all. The MMA API has no live board.
+LIVE_PRODUCTS = tuple(name for name in providers.SPORTS if name.startswith("api_sports") and name != "api_sports_mma")
 
 
 class _NoGitHubRedirect(urllib.request.HTTPRedirectHandler):
@@ -514,7 +526,9 @@ class Engine:
                 continue
             try:
                 rows = self._request(name, item, daily_limit)
-                scopes.setdefault(scope, []).extend(dict(r, fetch_scope=scope) for r in rows)
+                observed = utcnow()      # contract sli/1.6 §1: when this status was read from the source
+                scopes.setdefault(scope, []).extend(dict(r, fetch_scope=scope, status_observed_at=observed)
+                                                    for r in rows)
             except QuotaExhausted as exc:
                 errors[scope] = (str(exc) if str(exc).startswith("Provider quota")
                                  else "Local daily request budget exhausted")
@@ -758,6 +772,28 @@ class Engine:
                     guides_by_id[name]["exclusive_matches"] += int(len(guide_ids) == 1)
 
     # ---- materialisation --------------------------------------------------
+    # Fields that decide which guide programmes match an event: a public (approved-only) merged event equal on all of
+    # these to the full-merge event holding its primary record reuses that event's broadcast candidates.
+    _MATCH_FIELDS = ("sport", "start_utc", "start_precision", "status_normalized", "participants", "participants_short",
+                     "competition", "competition_id", "session", "title", "event_type", "category_id", "end_utc")
+
+    def _apply_live_observations(self, raw):
+        """Fold the live-status lane's observations into source records whose own status is older."""
+        observations = (self.store._get("live_observations") or {}).get("events") or {}
+        if not observations:
+            return raw
+        out = []
+        for event in raw:
+            seen = observations.get(event.get("id"))
+            if (isinstance(seen, dict) and str(seen.get("status_observed_at") or "")
+                    > str(event.get("status_observed_at") or "")):
+                event = dict(event, status=seen.get("status", event.get("status")),
+                             status_normalized=seen.get("status_normalized"),
+                             status_observed_at=seen["status_observed_at"])
+                event.pop("live_status_unconfirmed", None)
+            out.append(event)
+        return out
+
     def _materialize(self, now=None):
         now = now or datetime.now(timezone.utc)
         conf = self.store.config()
@@ -768,18 +804,39 @@ class Engine:
             entry = self.store.snapshot("sports:" + name)
             if entry:
                 sources.append({"id": name, "last_success": entry["updated_at"], "events": len(entry["data"]["events"])})
-                raw.extend(entry["data"]["events"])
-        merged = linking.merge_events([taxonomy.classify(e) for e in raw])
+                # Records saved before 0.3.23 carry no observation time: the snapshot's own time is the latest it can be.
+                fallback = entry["data"].get("observed_at") or entry["updated_at"]
+                raw.extend(e if e.get("status_observed_at") else dict(e, status_observed_at=fallback)
+                           for e in entry["data"]["events"])
+        raw = self._apply_live_observations(raw)
+        classified = [taxonomy.classify(e) for e in raw]
+        merged = linking.merge_events(classified)
+        # Audit 15 Nov (C1): the public feed is a merge of approved-source records only, so an unapproved source that
+        # corroborates an approved fixture can no longer remove it. The private feed keeps the full merge.
+        approved = sorted(set(conf.get("publication_approvals") or []))
+        merged_public = linking.merge_events([e for e in classified if e.get("source_id") in approved]) if approved else []
         # A rolling window prevents stale earlier-season races appearing on a TV's 'today' rail.
         london_today = now.astimezone(LONDON).date()
-        eligible = []
-        for event in merged:
-            try:
-                local_day = datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date()
-                if london_today <= local_day <= london_today + timedelta(days=7):
-                    eligible.append(event)
-            except (ValueError, KeyError, TypeError):
-                continue
+
+        def in_window(rows):
+            kept = []
+            for event in rows:
+                try:
+                    local_day = datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date()
+                    if london_today <= local_day <= london_today + timedelta(days=7):
+                        kept.append(event)
+                except (ValueError, KeyError, TypeError):
+                    continue
+            return kept
+        eligible, eligible_public = in_window(merged), in_window(merged_public)
+        holder = {sid: event for event in eligible for sid in event.get("source_events") or [event["id"]]}
+        reuse, copies = {}, []
+        for event in eligible_public:
+            full = holder.get(event["id"])
+            if full is not None and all(full.get(f) == event.get(f) for f in self._MATCH_FIELDS):
+                reuse[event["id"]] = full["id"]
+            else:
+                copies.append(dict(event, id="public:" + event["id"], _public_copy=True))
         guides = []
         # Guides are always read: besides matching events, live sport they list is kept (see below).
         guide_sources = self._guide_sources(conf, guides, True)
@@ -789,7 +846,8 @@ class Engine:
         dictionary_document = (dictionary_snapshot.get("data") or {}).get("document")
         identity_document = (identity_snapshot.get("data") or {}).get("document")
         guide_listed, guide_map, service_aliases = [], {}, {}
-        links = linking.broadcast_candidates(eligible, guide_sources, now, gaps=gaps,
+        # One pass over the guides serves both merges; public copies only when their matching fields differ.
+        links = linking.broadcast_candidates(eligible + copies, guide_sources, now, gaps=gaps,
                                              dictionary_document=dictionary_document,
                                              identity_document=identity_document,
                                              guide_events=guide_listed, guide_map=guide_map,
@@ -800,6 +858,13 @@ class Engine:
             event["broadcast_candidates"] = candidates
             if event["id"] in gaps:
                 event["broadcast_gap"] = gaps[event["id"]]
+        for event in eligible_public:
+            key = reuse.get(event["id"]) or "public:" + event["id"]
+            status, candidates = links.get(key, ("none", []))
+            event["broadcast_status"] = status
+            event["broadcast_candidates"] = [dict(c, epg_sources=list(c.get("epg_sources") or [])) for c in candidates]
+            if key in gaps:
+                event["broadcast_gap"] = gaps[key]
         # Live sport listed in the guides that no event source has: private, never published.
         for event in guide_listed:
             try:
@@ -814,12 +879,16 @@ class Engine:
         self.store.save_snapshots({
             "sports": {"schema_version": "0.3", "events": eligible, "sources": sources,
                        "generated_at": generated_at, "broadcast_status": "not_verified"},
+            "sports-public": {"schema_version": "0.3", "events": eligible_public, "approved": approved,
+                              "generated_at": generated_at},
             "today": today,
             "epg": {"schema_version": "0.3", "generated_at": generated_at, "sources": guides,
                     "note": "Private source-specific schedules; publication rights not cleared"},
             "guide-map": {"generated_at": generated_at, "guides": guide_map,
                           "service_aliases": dict(sorted(service_aliases.items()))},
         })
+        # Observations folded into this snapshot are no longer "since the last full feed"; keep only newer ones.
+        self._prune_live_observations(now)
 
     def _guide_sources(self, conf, summaries, include_programmes):
         """Load one saved guide at a time and retain only coverage summaries."""
@@ -967,6 +1036,185 @@ class Engine:
                 if not self.start_collection(scheduled=True):
                     # Worker already running: allow a retry within this minute.
                     self.store.release_scheduler_slot(key)
+        self._live_tick(conf, local)
+
+    # ---- live-status lane -------------------------------------------------
+    @staticmethod
+    def live_lane_enabled(conf):
+        """Switchable (config ``live_status``, default on) and only with an API-Sports key and product enabled."""
+        return bool(conf.get("live_status", True) and conf["keys"].get("api_sports")
+                    and any(conf["sports"].get(name) for name in LIVE_PRODUCTS))
+
+    def _live_tick(self, conf, local):
+        if not self.live_lane_enabled(conf):
+            return
+        state = self.store._get("live_lane") or {}
+        try:
+            if datetime.now(timezone.utc) - datetime.fromisoformat(state["last_run"]) < LIVE_INTERVAL:
+                return
+        except (KeyError, TypeError, ValueError):
+            pass
+        minute = local.hour * 60 + local.minute
+        for slot in conf.get("schedule", []):
+            gap = abs(minute - (int(slot[:2]) * 60 + int(slot[3:])))
+            if min(gap, 1440 - gap) <= LIVE_SLOT_GUARD:
+                return                     # leave the scheduled refresh its slot
+        if not self._busy.acquire(blocking=False):
+            return
+
+        def worker():
+            try:
+                changed = self.live_lane()
+            except Exception:
+                LOGGER.exception("Live status lane failed")
+                self.store.job("live_status", "failed", "Unexpected error; previous statuses kept")
+                changed = 0
+            finally:
+                self._busy.release()
+            if changed:
+                self._publish_live()
+        try:
+            threading.Thread(target=worker, name="sportsliveinfo-live", daemon=True).start()
+        except RuntimeError:
+            self._busy.release()
+
+    def _publish_live(self):
+        """Publish after a status change, under the same conditions as automatic publication after a collection.
+        Content addressing means only the small live asset and the manifests are new files."""
+        conf = self.store.config()
+        github = conf["github"]
+        if github.get("enabled") and github.get("auto_publish") and conf.get("publication_approvals"):
+            self._publish_job("live")
+
+    def _live_candidates(self, conf, now, observations):
+        """{product: [(event, [source event ids])]} for collected events between start and expected end."""
+        snapshot = self.store.snapshot("sports")
+        events = ((snapshot or {}).get("data") or {}).get("events") or []
+        found = {}
+        products = [name for name in LIVE_PRODUCTS if conf["sports"].get(name)]
+        for event in events:
+            if (event.get("origin") == "guide_listing"
+                    or event.get("start_precision") in linking.UNCONFIRMED_START_PRECISIONS):
+                continue
+            try:
+                start, end = datetime.fromisoformat(event["start_utc"]), linking.expected_end(event)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not start <= now <= end + linking.LIVE_END_GRACE:
+                continue
+            ids = event.get("source_events") or [event.get("id")]
+            seen = [observations[sid] for sid in ids if isinstance(observations.get(sid), dict)] + [event]
+            latest = max(seen, key=lambda o: str(o.get("status_observed_at") or ""))
+            if latest.get("status_normalized") in ("finished", "postponed", "cancelled"):
+                continue
+            for name in products:
+                prefix = name.replace("_", "-") + ":"
+                mine = [sid for sid in ids if isinstance(sid, str) and sid.startswith(prefix)]
+                if mine:
+                    found.setdefault(name, []).append((event, mine))
+        return found
+
+    def live_lane(self, now=None):
+        """One pass of the live-status lane; returns the number of status observations that changed.
+
+        Never touches the day assets: observations go to ``live_observations`` (keyed by source event id), which
+        the feed publishes as the small ``live`` asset and the next materialisation folds into the events."""
+        now = now or datetime.now(timezone.utc)
+        conf = self.store.config()
+        stamp = now.isoformat(timespec="seconds")
+        if not conf["setup_complete"] or not self.live_lane_enabled(conf):
+            return 0
+        stored = self.store._get("live_observations") or {}
+        observations = dict(stored.get("events") or {})
+        candidates = self._live_candidates(conf, now, observations)
+        calls, changed, notes = 0, 0, []
+        for name, rows in sorted(candidates.items()):
+            _, base, key_name, daily_limit = providers.SPORTS[name]
+            unsupported = self.store._get("live_unsupported:" + name) or ""
+            if unsupported > stamp:
+                notes.append("%s: live board refused earlier; retry after %s" % (name, unsupported[:16]))
+                continue
+            window = self._plan_window(name)
+            if window and not window[0] <= 0 <= window[1]:
+                notes.append("%s: today is outside the provider plan's dates" % name)
+                continue
+            if self.store.usage().get(name, 0) >= daily_limit - LIVE_RESERVE:
+                notes.append("%s: remaining calls kept for scheduled refreshes" % name)
+                continue
+            if name == "api_sports":
+                decode = providers.api_sports_events
+            else:
+                decode = partial(providers.api_sports_games_events, source_id=name, sport=providers.API_SPORTS_SPORT[name])
+            item = dict(url=base + "?" + urllib.parse.urlencode({"live": "all"}),
+                        headers={"x-apisports-key": conf["keys"].get(key_name, "")}, scope="live", decode=decode,
+                        max_bytes=7_000_000)
+            try:
+                self._check_sport_backoff(name)
+                try:
+                    self.store.increment("live:" + name, LIVE_DAILY_BUDGET)
+                except RuntimeError:
+                    notes.append("%s: daily live budget (%d) used" % (name, LIVE_DAILY_BUDGET))
+                    continue
+                board = {row["id"]: row for row in self._request(name, item, daily_limit)}
+                calls += 1
+            except QuotaExhausted as exc:
+                notes.append("%s: %s" % (name, str(exc)[:80]))
+                continue
+            except providers.PlanWindow as exc:
+                self._learn_plan_window(name, exc, now.astimezone(LONDON).date())
+                notes.append("%s: today is outside the provider plan's dates" % name)
+                continue
+            except SAFE_ERRORS as exc:
+                reason = _sports_failure(exc)
+                if getattr(exc, "status", None) == 429 or reason == "Provider quota or rate limit":
+                    self._defer_sport(name, exc)
+                elif reason in ("Provider plan or season restriction", "Provider rejected the requested scope"):
+                    self.store._put("live_unsupported:" + name,
+                                    (now + timedelta(days=LIVE_UNSUPPORTED_DAYS)).isoformat(timespec="seconds"))
+                notes.append("%s: %s" % (name, reason))
+                continue
+            for event, ids in rows:
+                for sid in ids:
+                    previous = observations.get(sid)
+                    if sid in board:
+                        status, raw = board[sid]["status_normalized"], str(board[sid].get("status") or "")[:20]
+                    else:
+                        before = (previous or event).get("status_normalized")
+                        if before != "live":
+                            continue           # not on the board and not known live: nothing new to say
+                        status, raw = "unknown", "left the live board"   # finished? abandoned? not claimed
+                    if previous and previous.get("status_normalized") == status:
+                        try:
+                            if now - datetime.fromisoformat(previous["status_observed_at"]) < LIVE_REFRESH:
+                                continue       # unchanged and recently confirmed: no new asset
+                        except (KeyError, TypeError, ValueError):
+                            pass
+                    elif not previous and status == event.get("status_normalized") and status != "live":
+                        continue
+                    observations[sid] = {"status": raw, "status_normalized": status, "status_observed_at": stamp}
+                    changed += 1
+        cutoff = (now - LIVE_RETAIN).isoformat()
+        observations = {k: v for k, v in observations.items() if str(v.get("status_observed_at", "")) >= cutoff}
+        if changed or observations != (stored.get("events") or {}):
+            self.store._put("live_observations", {"events": observations, "updated_at": stamp})
+        in_play = sum(len(rows) for rows in candidates.values())
+        summary = "%d events in play; %d live calls; %d status changes" % (in_play, calls, changed)
+        if notes:
+            summary += "; " + "; ".join(notes[:3])
+        self.store._put("live_lane", {"last_run": stamp, "in_play": in_play, "calls": calls, "changed": changed,
+                                      "summary": summary[:300]})
+        if candidates or notes:
+            self.store.job("live_status", "ok" if not notes else "partial", summary)
+        return changed
+
+    def _prune_live_observations(self, now):
+        stored = self.store._get("live_observations")
+        if not stored:
+            return
+        cutoff = (now - LIVE_RETAIN).isoformat()
+        kept = {k: v for k, v in (stored.get("events") or {}).items() if str(v.get("status_observed_at", "")) >= cutoff}
+        if kept != stored.get("events"):
+            self.store._put("live_observations", dict(stored, events=kept))
 
     def preview_feed(self, out_dir=None):
         """Build the full sli/1 feed locally (no upload) for inspection and B1G testing."""

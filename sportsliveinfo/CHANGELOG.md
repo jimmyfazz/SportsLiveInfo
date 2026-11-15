@@ -2,6 +2,32 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.23 — Honest live state, a light live-status lane, approved fixtures kept, tiered "today", guide-corroborated links (feed `sli/1.6`)
+
+From the [15 November forensic audit](../docs/AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md) (C1, C2, C6, C9) and the feed contract agreed with B1G on the same day. The feed format is now `sli/1.6`; every change is additive, so a 1.5 reader keeps working.
+
+- **"Live" can no longer be stale or false (C2).**
+  - **Before:** an event's status was a snapshot from the 04:00, 12:00 or 17:00 run, and the reader trusted it. A started cricket Test became five "live" day records.
+  - **Now:** every event carries `status_observed_at` (when its status was last read) and `expected_end_utc` (start plus a typical duration for the sport, or the source's own end). The manifest rule says "live" is trusted only when the observation is at most 45 minutes old and the time is between the start and 30 minutes after the expected end; otherwise readers show "should be on now", never "LIVE". Only the Test day in play is live; later days are scheduled.
+- **A merged event takes the most advanced, most recent status (C9).**
+  - **Before:** it took the status of its most precise record, so a delayed football-data "TIMED" hid API-Sports "1H" or "FT".
+  - **Now:** finished, postponed or cancelled outrank live, which outranks scheduled; ties go to the most recent observation.
+- **API-Sports live codes are understood (C6).** Ice hockey periods (P1–P3, OT, PT, BT), baseball innings (IN1–IN9 and extra innings), volleyball sets (S1–S5), MMA (IN, EOR) and AFL quarter time (QT) read "live" instead of "unknown". The codes are kept per product, so MMA's "IN" never changes another source. A test covers every product.
+- **A light live-status lane.**
+  - While the collected feed has an event between its start and expected end, SportsLiveInfo reads the API-Sports live board at most every 15 minutes: `fixtures?live=all` for football and `games?live=all` for the other team sports (the MMA API has no live board).
+  - At most 40 calls a day per product. They count in the product's own daily quota, and 20 calls are always kept for the scheduled refreshes. Provider back-off and the learned plan dates apply, it stays quiet for 3 minutes either side of a scheduled refresh, and a product that refuses the live board is not asked again for 3 days.
+  - Status changes go into a small optional `live` asset. With automatic publishing on, a commit then uploads only that asset and the manifests; unchanged assets are reused. An event that leaves the live board becomes "unknown", never "finished". No scores are kept.
+  - On by default once an API-Sports key is saved; switch it off on the Scheduler page. Its last pass and calls are shown there and in Diagnostics.
+- **Approved fixtures no longer vanish from the public feed (C1).**
+  - **Before:** a fixture was dropped from the public feed when any source that also reported it was unapproved, so switching on a private source silently removed approved fixtures.
+  - **Now:** the public feed is built from a merge of approved sources only; the private feed keeps the full merge. A published record still names approved sources only. If approvals change after the last collection, the feed falls back to the old fail-closed filter until the next collection.
+- **Tiered public "today".** Each event is `core` or `extra`. Core: named competitions, internationals, featured nations, PPV, the main non-football sports, and football leagues and cups of the UK, Ireland and France (youth competitions excepted). The day assets and `today` carry core events; the long tail moves to optional `events_extra:<date>` assets. The manifest reports both counts. An optional asset over the 8 MiB reader limit is now reported in the manifest notices instead of being skipped silently.
+- **Guide-corroborated broadcast links.**
+  - A link becomes `guide_corroborated` when the strict matcher found it, the programme starts between kick-off − 60 and + 20 minutes, the channel is a curated registry channel and at least two independent guide families list it. `broadcast_verified` stays false. The manifest counts these links.
+  - The guide families were audited from each publisher's own files: farleyflex is a mytelly grab; Freeview-EPG (dp247) and M3UPT both come from Sky's own EPG, so they now count as one family; EPGTalk is Schedules Direct data. Guides whose upstream could not be checked (EPG Share, IPTV-EPG.org, Fazzani/grab, dobleM) never count towards the two.
+- Version 0.3.23 everywhere; schemas, golden fixtures and the feed contract updated (new schema `sli.live/1`).
+- Tests: 315 pass (25 new).
+
 ## 0.3.22 — Forensic audit fixes: private feed guard, channel-list privacy, no loose channel links in public
 
 From the [15 November forensic audit](../docs/AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md). Every fix was checked against the code and has a test.

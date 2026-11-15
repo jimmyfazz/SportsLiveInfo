@@ -5,6 +5,7 @@
 - **Installed:** 0.3.21 on the owner's Home Assistant (15 Nov 07:17 UTC; backup `6feebca2` of 0.3.20 first; auto-update on). It started cleanly.
   - 0.3.21 stops asking API-Sports for dates the plan refuses.
   - It also fills the week ahead from TheSportsDB per competition (rugby internationals, Six Nations, URC, Premiership, Champions Cup, Super League, PDC darts, World Snooker, UFC). See the [changelog](../sportsliveinfo/CHANGELOG.md).
+- **0.3.23 (built and tested in the development worktree, not yet installed):** feed `sli/1.6` with `status_observed_at`/`expected_end_utc`, a light API-Sports live-status lane and `live` asset, approved-only public merge (audit C1), core/extra tiers and guide-corroborated links. See the [changelog](../sportsliveinfo/CHANGELOG.md).
 - **Public feed (measured 15 Nov 04:15, before 0.3.21):**
   - **Format:** `sli/1.5` from 0.3.20.
   - **Events:** 2,271 events from owner-approved sources: 1,923 today, 229 tomorrow, then 2–68 a day.

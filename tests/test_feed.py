@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "schemas" / "fixtures" / "sli-v1"
 SCHEMAS = {"sli.manifest/1": "sli-manifest", "sli.taxonomy/1": "sli-taxonomy", "sli.channels/1": "sli-channels",
            "sli.events-day/1": "sli-events-day", "sli.today/1": "sli-today", "sli.health/1": "sli-health",
-           "sli.identity/1": "sli-identity", "sli.dictionary/1": "sli-dictionary", "sli.guide-map/1": "sli-guide-map"}
+           "sli.identity/1": "sli-identity", "sli.dictionary/1": "sli-dictionary", "sli.guide-map/1": "sli-guide-map",
+           "sli.live/1": "sli-live"}
 NOW = datetime(2026, 11, 14, 14, 0, tzinfo=timezone.utc)
 _spec = importlib.util.spec_from_file_location("feed_fixtures", ROOT / "tools" / "generate_feed_fixtures.py")
 fixtures_tool = importlib.util.module_from_spec(_spec)
@@ -120,8 +121,8 @@ class GoldenFixtureContractTests(unittest.TestCase):
             schema = load_schema(asset["schema"])
             validate(json.loads(data), schema, schema)
             kinds.add(asset["kind"].split(":")[0])
-        self.assertEqual(kinds, {"taxonomy", "channels", "identity", "dictionary", "guide_map", "events", "today",
-                                 "health"})
+        self.assertEqual(kinds, {"taxonomy", "channels", "identity", "dictionary", "guide_map", "events", "events_extra",
+                                 "today", "live", "health"})
         guide_map = self.asset("guide_map")
         channels = {(g["source_id"], c["id"]): c for g in guide_map["guides"] for c in g["channels"]}
         self.assertEqual(channels[("epgtalk_uk", "SkySpMainEvHD.uk")]["service"], "gb.sky.sports.main_event")
@@ -134,16 +135,16 @@ class GoldenFixtureContractTests(unittest.TestCase):
         entry = next(a for a in self.manifest["assets"] if a["kind"] == kind)
         return json.loads((FIXTURES / entry["path"]).read_text())
 
-    def events(self):
+    def events(self, prefix="events:"):
         out = []
         for a in self.manifest["assets"]:
-            if a["kind"].startswith("events:"):
+            if a["kind"].startswith(prefix):
                 out.extend(json.loads((FIXTURES / a["path"]).read_text())["events"])
         return {e["id"]: e for e in out}
 
     def test_events_are_fused_classified_and_whitelisted(self):
         events = self.events()
-        self.assertEqual(len(events), 13)
+        self.assertEqual(len(events), 14)
         pl = events["football-data:5001"]
         self.assertEqual((pl["category_id"], pl["fixture_confidence"], pl["sources"]),
                          ("football.premier_league", "corroborated", ["api_sports", "football_data"]))
@@ -158,10 +159,13 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertEqual(events["cricketdata:ash1:d1"]["category_id"], "cricket.intl.england")
         self.assertEqual(events["api-sports-rugby:301"]["b1g_priority_group"], "Rugby")
         allowed = set(feed.EVENT_FIELDS) | {"b1g_priority_group", "broadcasts", "broadcast_links"}
-        # D8: guide-listed links are canonical ids and confidence only, never "verified".
+        # D8: guide-listed links are canonical ids and confidence only, never "verified". 1.6: the strict match is
+        # listed at the same slot by two independent guide families (mytelly and Schedules Direct): corroborated.
         self.assertEqual(events["football-data:5001"]["broadcast_links"],
                          [{"canonical_channel_id": "gb.sky.sports.main_event", "confidence": "high", "coverage": "network",
-                           "guides": 1, "status": "guide_listed_unverified"}])
+                           "guides": 2, "status": "guide_corroborated", "verification": "independent_guides_v1"}])
+        self.assertEqual(self.manifest["coverage"]["guide_corroborated_broadcasts"], 1)
+        self.assertEqual(self.manifest["coverage"]["verified_broadcasts"], 0)
         self.assertEqual(self.manifest["rights"]["broadcast_candidates"], "channel_links_published_unverified")
         self.assertIn("broadcast_links", self.manifest["capabilities"])
         blob = json.dumps(events)
@@ -170,6 +174,31 @@ class GoldenFixtureContractTests(unittest.TestCase):
             self.assertFalse(event["broadcast_verified"])
         for private in ("broadcast_candidates", "Live Premier League", "fetch_scope", "live_state", "skysportsmainevent"):
             self.assertNotIn(private, blob)
+
+    def test_tiers_live_overlay_and_observation_times(self):
+        core, extra = self.events(), self.events("events_extra:")
+        self.assertEqual(set(extra), {"api-sports:9007"})                      # low-tier football abroad
+        self.assertEqual(core["api-sports:9006"]["tier"], "core")              # English league, not named
+        self.assertTrue(all(e["tier"] == "core" for e in core.values()))
+        self.assertTrue(all(e["tier"] == "extra" for e in extra.values()))
+        self.assertEqual(self.manifest["coverage"]["tiers"], {"core": 14, "extra": 1})
+        today = self.asset("today")
+        referenced = {i for g in today["groups"] for c in g["categories"] for i in c["event_ids"]}
+        self.assertNotIn("api-sports:9007", referenced)
+        extra_asset = next(a for a in self.manifest["assets"] if a["kind"].startswith("events_extra:"))
+        self.assertFalse(extra_asset["required"])
+        for event in list(core.values()) + list(extra.values()):
+            self.assertRegex(event["status_observed_at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+        self.assertEqual(core["football-data:5001"]["expected_end_utc"], "2026-11-14T17:00:00+00:00")   # football 2 h
+        self.assertEqual(core["f1:2026:22:race"]["expected_end_utc"], "2026-11-21T08:00:00+00:00")      # source end
+        self.assertEqual(core["cricketdata:ash1:d1"]["expected_end_utc"], "2026-11-21T07:00:00+00:00")  # Test day 7 h 30
+        live = self.asset("live")
+        self.assertEqual(live, {"schema": "sli.live/1", "generated_at": "2026-11-14T13:55:00Z",
+                                "events": [{"id": "api-sports-rugby:301", "status_normalized": "live",
+                                            "status_observed_at": "2026-11-14T13:55:00Z"}]})
+        self.assertEqual(core["api-sports-rugby:301"]["status_observed_at"], "2026-11-14T12:00:00Z")
+        self.assertIn("45 minutes", self.manifest["compatibility"]["live_state_rule"])
+        self.assertEqual(self.manifest["format"], "sli/1.6")
 
     def test_registry_is_data_for_the_reader(self):
         taxonomy = self.asset("taxonomy")

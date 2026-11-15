@@ -25,6 +25,9 @@ DEFAULT = {
     "github": {"owner": "jimmyfazz", "repository": "LiveSports-EPG", "branch": "main",
                "token": "", "enabled": False, "auto_publish": False},
     "publication_approvals": [],
+    # Light live-status lane (API-Sports live boards in match hours, within a daily budget). Runs only when an
+    # API-Sports key is saved and an API-Sports product is enabled; switch off here or on the Scheduler page.
+    "live_status": True,
     # Optional PRIVATE feed for the owner's own TVs (personal use): every collected event plus
     # guide-listed live sport. Uses the GitHub token above; must be a private repository.
     "private_feed": {"owner": "jimmyfazz", "repository": "", "branch": "main", "enabled": False},

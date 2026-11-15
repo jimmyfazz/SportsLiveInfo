@@ -117,23 +117,42 @@ for _cc, _label in EPGSHARE_MARKETS.items():
     EPG["epgshare_" + _cc.lower()] = ("%s · EPG Share %s (verify)" % (_label, _tag),
                                       "https://epgshare01.online/epgshare01/epg_ripper_%s.xml.gz" % _tag)
 # Upstream families: two guides from one family are not independent evidence.
+#
+# Lineage audit for the 0.3.23 "guide_corroborated" rule (feed contract sli/1.6 §4), checked 15 Nov 2026 against
+# each publisher's own repository files, because independence comes from the listing data a guide is built from,
+# not from who hosts the file:
+# * farleyflex: its channels.xml is an iptv-org/epg grabber config with site="mytelly.co.uk" -> family "mytelly".
+# * uk_freeview (dp247/Freeview-EPG): channels.json gives "src": "sky" with Sky service ids, i.e. Sky's own public
+#   EPG. M3UPT's Sky UK/Italy files use Sky service ids too, so both publishers are one family, "sky_epg"; M3UPT's
+#   Freeview and Portugal files share that publisher's pipeline and are kept in the same family (never counted as
+#   a second, independent guide against it).
+# * EPGTalk: channel ids are "<id>.schedulesdirect.org" (Gracenote data through Schedules Direct) -> "schedules_direct".
+# * Matt Huisman (mjh_*): each file is read from one platform's own app or API; one publisher -> "mjh".
+# * XML-TV-Fr (fr_xmltv): its own French scrapers -> "xmltvfr".
+# * Unverified lineage (UNVERIFIED_LINEAGE_FAMILIES below): EPG Share's "ripper" files and IPTV-EPG.org do not say what
+#   they are built from and could not be fetched from the development sandbox; Fazzani/grab is a merge of other
+#   guides; dobleM was not audited; the retired iptv-org builds mixed several sites. They may well copy one of the
+#   families above, so they never count towards two independent families. They still match and link as before.
 EPG_FAMILY = {
-    "farleyflex": "farleyflex", "uk_freeview": "freeview_epg",
+    "farleyflex": "mytelly", "uk_freeview": "sky_epg",
     "epgshare_uk": "epgshare", "epgshare_ie": "epgshare", "epgshare_fr": "epgshare",
     "epgshare_us": "epgshare", "epgshare_us_sports": "epgshare", "epgshare_hk": "epgshare", "epgshare_my": "epgshare",
     "fr_programmetv": "iptv_org", "fr_telerama": "iptv_org", "iptvorg_sky_uk": "iptv_org", "iptvorg_foxtel_au": "iptv_org",
     "fr_xmltv": "xmltvfr", "mjh_sky_uk": "mjh", "mjh_nz": "mjh", "mjh_au_sydney": "mjh",
-    "mjh_skysportnow_nz": "mjh", "mjh_kayo_au": "mjh", "epgtalk_uk": "epgtalk", "epgtalk_sports": "epgtalk",
+    "mjh_skysportnow_nz": "mjh", "mjh_kayo_au": "mjh", "epgtalk_uk": "schedules_direct",
+    "epgtalk_sports": "schedules_direct",
     **{f"iptv_epg_{market}": "iptv_epg_org" for market in ("gb", "au", "de", "it", "es", "nl", "ca")},
     "iptv_epg_fr": "iptv_epg_org", "iptv_epg_hk": "iptv_epg_org", "iptv_epg_ge": "iptv_epg_org",
 }
+UNVERIFIED_LINEAGE_FAMILIES = frozenset({"epgshare", "iptv_epg_org", "fazzani_grab", "doblem", "iptv_org"})
 EPG["epgshare_bein"] = ("beIN Sports MENA (Arabic/English) · EPG Share BEIN1 (verify)",
                         "https://epgshare01.online/epgshare01/epg_ripper_BEIN1.xml.gz")
 EPG_FAMILY.update({"epgshare_" + cc.lower(): "epgshare" for cc in EPGSHARE_MARKETS})
 EPG_FAMILY.update({"epgshare_bein": "epgshare", "es_doblem": "doblem", "fr_mena_grab": "fazzani_grab",
-                   "pt_m3upt": "m3upt", "m3upt_sky": "m3upt", "m3upt_sky_it": "m3upt", "m3upt_freeview_uk": "m3upt",
-                   "epgtalk_us": "epgtalk", "epgtalk_us_local": "epgtalk", "epgtalk_latino": "epgtalk",
-                   "epgtalk_freetv": "epgtalk", "mjh_roku_us": "mjh", "mjh_plex_us": "mjh", "mjh_dstv_za": "mjh",
+                   "pt_m3upt": "sky_epg", "m3upt_sky": "sky_epg", "m3upt_sky_it": "sky_epg", "m3upt_freeview_uk": "sky_epg",
+                   "epgtalk_us": "schedules_direct", "epgtalk_us_local": "schedules_direct",
+                   "epgtalk_latino": "schedules_direct", "epgtalk_freetv": "schedules_direct",
+                   "mjh_roku_us": "mjh", "mjh_plex_us": "mjh", "mjh_dstv_za": "mjh",
                    "mjh_samsung_in": "mjh", "mjh_au_all": "mjh", "mjh_skygo_nz": "mjh", "mjh_plex_gb": "mjh", "mjh_samsung_gb": "mjh", "mjh_pluto_gb": "mjh",
                    **{"iptv_epg_" + cc: "iptv_epg_org" for cc in ("se", "no", "dk", "tr", "pt", "pl", "ru", "al",
                                                                  "bg", "cz", "hu", "ro")}})
@@ -393,12 +412,30 @@ _CANCELLED = {"canc", "cancelled", "canceled", "abd", "abandoned", "intr", "inte
 _SCHEDULED = {"ns", "tbd", "scheduled", "timed", "not started", "time to be defined", ""}
 
 
-def status_of(raw):
+# Audit 15 Nov (C6): API-Sports product codes for play in progress that the shared table above did not know, so live
+# games read "unknown". Kept per product: a bare "IN" means "in progress" only in the MMA API.
+_API_SPORTS_LIVE = {
+    "ice_hockey": {"p1", "p2", "p3", "ot", "pt", "bt"},           # periods, overtime, penalties, break
+    "baseball": {"in%d" % n for n in range(1, 21)},                # innings 1-9 and extra innings
+    "volleyball": {"s1", "s2", "s3", "s4", "s5"},                  # sets
+    "mma": {"in", "eor", "live"},                                  # in progress, end of round
+    "aussie_rules": {"q1", "q2", "q3", "q4", "qt", "ht", "bt"},   # quarters, quarter/half time
+    "basketball": {"q1", "q2", "q3", "q4", "ot", "bt", "ht"},
+    "american_football": {"q1", "q2", "q3", "q4", "ot", "ht"},
+    "handball": {"1h", "2h", "ht", "et", "bt", "pt"},
+    "rugby": {"1h", "2h", "ht", "et", "bt", "pt"},
+}
+
+
+def status_of(raw, sport=None):
+    """Normalised status; ``sport`` (an API-Sports product's sport) adds that product's own live codes."""
     value = str(raw or "").strip().casefold()
     for state, values in (("live", _LIVE), ("finished", _FINISHED), ("postponed", _POSTPONED),
                           ("cancelled", _CANCELLED), ("scheduled", _SCHEDULED)):
         if value in values:
             return state
+    if value in _API_SPORTS_LIVE.get(sport, ()):
+        return "live"
     return "unknown"
 
 
@@ -707,7 +744,7 @@ def api_sports_games_events(data, source_id, sport):
                            "competition_country": country.get("name", "") if isinstance(country, dict) else str(country),
                            "event_type": "match", "title": f"{home} v {away}", "participants": [home, away],
                            "start_utc": start, "start_precision": "time_tbc" if short in ("TBD", "NS-TBD") else "scheduled",
-                           "status": short, "status_normalized": status_of(short),
+                           "status": short, "status_normalized": status_of(short, sport),
                            "round": str(row.get("week") or game.get("week") or game.get("stage") or ""),
                            "venue": (game.get("venue") or {}).get("name", "") if isinstance(game.get("venue"), dict) else "",
                            "source_id": source_id, "broadcasts": [], "broadcast_verified": False})
@@ -737,7 +774,7 @@ def api_sports_mma_events(data, source_id="api_sports_mma"):
                            "title": f"{first} v {second}", "participants": [first, second],
                            "weight_class": row.get("category") or "", "start_utc": start,
                            # Individual bout times on a card are estimates.
-                           "start_precision": "estimated", "status": short, "status_normalized": status_of(short),
+                           "start_precision": "estimated", "status": short, "status_normalized": status_of(short, "mma"),
                            "source_id": source_id, "broadcasts": [], "broadcast_verified": False})
         except (ValueError, KeyError, TypeError, OverflowError):
             continue
@@ -901,8 +938,12 @@ def thesportsdb_events(data):
     return events
 
 
-def cricketdata_events(data, horizon_days=8):
-    """CricAPI /v1/matches. dateTimeGMT is GMT by field definition. Test matches expand to one record per playing day."""
+def cricketdata_events(data, horizon_days=8, now=None):
+    """CricAPI /v1/matches. dateTimeGMT is GMT by field definition. Test matches expand to one record per playing day.
+
+    Audit 15 Nov (C2): a started Test used to become five "live" day records. Only the day in play now may be live;
+    later days are "scheduled" and earlier days "finished" (that day's play, not the match)."""
+    now = now or datetime.now(timezone.utc)
     payload = json.loads(data)
     if not isinstance(payload, dict) or payload.get("status") != "success" or not isinstance(payload.get("data"), list):
         raise ValueError("CricketData.org returned an unsuccessful or invalid response")
@@ -933,11 +974,16 @@ def cricketdata_events(data, horizon_days=8):
             title = " v ".join(teams) if len(teams) == 2 else (parts[0] if parts else "Cricket")
             days = 5 if match_type == "test" else 1
             ended = bool(row.get("matchEnded"))
+            current = max(0, min(days - 1, (now - start) // timedelta(days=1))) if now >= start else 0
             for day in range(min(days, horizon_days)):
                 day_start = start + timedelta(days=day)
-                if ended and day and day_start > datetime.now(timezone.utc):
+                if ended and day and day_start > now:
                     break  # a finished Test has no future playing days
+                day_state = state
+                if days > 1 and state == "live":
+                    day_state = "finished" if day < current else "live" if day == current else "scheduled"
                 event = dict(base, id="cricketdata:%s" % row["id"] + (":d%d" % (day + 1) if days > 1 else ""),
+                             status_normalized=day_state,
                              title=title + (" — Day %d" % (day + 1) if days > 1 else ""),
                              start_utc=day_start.isoformat(timespec="seconds"),
                              start_precision="scheduled" if day == 0 else "not_before")

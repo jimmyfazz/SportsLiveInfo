@@ -442,3 +442,34 @@ def typical_minutes(sport):
 
 def sport_order(sport):
     return SPORTS.get(sport, SPORTS["other"])[2]
+
+
+# Typical duration from the start, used for the published ``expected_end_utc`` (feed contract sli/1.6 §1). These are
+# deliberately separate from SPORTS' "probably live" minutes above, which older readers already use.
+EXPECTED_MINUTES = {
+    "football": 120, "rugby_union": 120, "rugby_league": 120, "rugby": 120, "tennis": 180, "golf": 360,
+    "darts": 240, "snooker": 240, "boxing": 240, "basketball": 150, "ice_hockey": 165, "american_football": 210,
+    "baseball": 210,
+}
+DEFAULT_EXPECTED_MINUTES = 180
+_CRICKET_MINUTES = (("test", 450), ("first class", 450), ("odi", 480), ("list a", 480), ("t20", 240), ("t10", 240),
+                    ("hundred", 240))
+
+
+def expected_minutes(event):
+    """Typical length of this event (contract sli/1.6 §1): football 2 h, rugby 2 h, tennis 3 h, cricket T20 4 h /
+    ODI 8 h / Test day 7 h 30, F1 race 2 h 30, golf round 6 h, darts/snooker session 4 h, boxing card 4 h,
+    basketball 2 h 30, ice hockey 2 h 45, NFL 3 h 30, baseball 3 h 30, otherwise 3 h."""
+    sport = event.get("sport")
+    if sport == "cricket":
+        kind = norm(event.get("match_type") or event.get("event_type"))
+        if event.get("day_number"):
+            return 450
+        for word, minutes in _CRICKET_MINUTES:
+            if word in kind:
+                return minutes
+        return 240          # cricket of unstated format: the shortest common form, so "should be on now" ends early
+    if sport == "motorsport" and (event.get("session") == "race" or norm(event.get("event_type")) == "race"):
+        return 150
+    return EXPECTED_MINUTES.get(sport, DEFAULT_EXPECTED_MINUTES)
+

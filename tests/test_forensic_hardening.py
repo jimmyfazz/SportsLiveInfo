@@ -226,7 +226,7 @@ class PublicFeedRightsTests(unittest.TestCase):
         manifest, files = feed.build_feed(self.store, now=self.now)
         rows = []
         for asset in manifest["assets"]:
-            if asset["kind"].startswith("events:"):
+            if asset["kind"].split(":")[0] in ("events", "events_extra"):     # 1.6: core and long-tail days
                 rows.extend(json.loads(files[asset["path"]])["events"])
         self.assertEqual({e["id"] for e in rows}, {"clean:1"})
         self.assertIn("openf1", manifest["rights"]["events"]["omitted_unapproved_sources"])
@@ -236,7 +236,7 @@ class PublicFeedRightsTests(unittest.TestCase):
                      broadcasts=[{"canonical_channel_id": "gb.sky.sports.main_event"}])
         self.store.save_snapshot("sports", {"events": [event]})
         manifest, files = feed.build_feed(self.store, now=self.now)
-        rows = [e for a in manifest["assets"] if a["kind"].startswith("events:")
+        rows = [e for a in manifest["assets"] if a["kind"].split(":")[0] in ("events", "events_extra")
                 for e in json.loads(files[a["path"]])["events"]]
         self.assertFalse(rows[0]["broadcast_verified"])
         self.assertNotIn("broadcasts", rows[0])

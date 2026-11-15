@@ -5,7 +5,18 @@ Two independent read-only reviews were run against `main` at 0.3.21:
 - collection and feed logic;
 - security, privacy and operations.
 
-Every P1 item below was then checked against the code before it was accepted. "Verified" means the exact code path was read, or the scenario was reproduced. Items fixed in 0.3.22 carry their test.
+Every P1 item below was then checked against the code before it was accepted. "Verified" means the exact code path was read, or the scenario was reproduced. Items fixed in 0.3.22 and 0.3.23 carry their test.
+
+## Fixed in 0.3.23
+
+| # | Severity | Finding | Fix and test |
+|---|---|---|---|
+| C1 | P1 | Corroborated events disappeared from the public feed when any contributing source was unapproved. | The engine also merges approved-source records only (snapshot `sports-public`) and the public feed is built from it; the private feed keeps the full merge. Published records name approved sources only, and a change of approvals falls back to the old fail-closed filter until the next collection. Tests: `ApprovedOnlyPublicMergeTests`. |
+| C2 | P1 | "Live" could be stale or false; a started Test became five "live" day records. | Every event publishes `status_observed_at` and `expected_end_utc`; the manifest's `live_state_rule` trusts "live" only within 45 minutes of the observation and from the start to 30 minutes after the expected end. Only the Test day in play is live. A light live-status lane (API-Sports live boards, at most every 15 minutes in match hours, at most 40 calls a day per product inside the product quota) publishes a small `live` asset. Tests: `HonestLiveStateTests`, `LiveLaneTests`, `test_tiers_live_overlay_and_observation_times`. |
+| C6 | P2 | API-Sports live codes mapped to "unknown" (hockey P1–P3, baseball IN1–IN9, volleyball S1–S5, MMA). | Per-product live codes in `providers.status_of`, passed by each decoder. Test: `ApiSportsLiveCodeTests` (every product). |
+| C9 | P2 | A merged event took its status from the most precise record. | `linking.status_choice`: the most advanced status, then the most recent observation. Test: `MergedStatusTests`. |
+
+C3 (loose guide-listing links kept private) is unchanged: the loose matcher was not tightened, so its links stay out of the public feed. The new `guide_corroborated` status is given only to links from the strict matcher.
 
 ## Fixed in 0.3.22
 
@@ -19,11 +30,6 @@ Every P1 item below was then checked against the code before it was accepted. "V
 
 ### P1
 
-- **C1 — Corroborated events disappear from the public feed when any contributing source is unapproved.** `feed.py licensed()` drops the merged event, so enabling a new private source silently removes approved fixtures. This probably explains why only 16 events are corroborated.
-  - Plan: build the public feed from a merge of approved-source events only, and keep the full merge for the private feed.
-- **C2 — "Live" can be stale or false.** The published reader rule trusts `status_normalized`, which is a snapshot from the 04:00, 12:00 and 17:00 runs. CricketData expands a started Test into five "live" day records.
-  - Plan: publish `status_observed_at`; trust "live" only within start to start + 1.5 × typical duration and for 45 minutes after it was observed; give future Test days `scheduled`.
-  - B1G applies the same limit on its side (see the B1G audit).
 - **C4 — All enabled guides are loaded at once for linking.** `linking.py` calls `list(epg_guides)` and keeps 1,000-character descriptions it never uses. With 10–40 guides this risks out-of-memory on the mini PC.
   - Plan: stream guides one at a time; slim programme records to title, sub-title and times; keep only the next 8 days.
 - **O1 — A slow upstream can hang the collector indefinitely.** Socket timeouts are per read, not per request, and the hang holds the busy lock.
@@ -32,16 +38,14 @@ Every P1 item below was then checked against the code before it was accepted. "V
 ### P2
 
 - **C5 — Clustering for guide-listed live events is quadratic** (55 s on a synthetic Saturday). Index by sport, time slot and team token.
-- **C6 — API-Sports live codes map to "unknown".** Unmapped: hockey P1–P3, baseball IN1–IN9, volleyball S1–S5, MMA. Add a mapping test per product.
 - **C7 — Stale fixtures never leave.**
   - Deleted or re-dated fixtures stay on their old date.
   - Last-good snapshots are used regardless of age.
   - Plan: drop events missing from a complete scope; stop using snapshots after about 36 h.
 - **C8 — Formula 1 duplicates between TheSportsDB and Jolpica/OpenF1:** TheSportsDB events have no session. Derive the session from the title.
-- **C9 — A merged event takes its status from the most precise record.** Delayed football-data "TIMED" hides API-Sports 1H/FT. Use the most advanced, most recent status.
 - **C10 — Public repository growth.**
   - `guide_map` programme counts change every run; at about 3 commits a day this is roughly 1 GB a year of history.
-  - An optional asset over 8 MiB is skipped with no notice.
+  - An optional asset over 8 MiB is skipped with no notice (0.3.23: now reported in the manifest notices).
   - Plan: bucket the counts; add a manifest notice; squash history periodically.
 - **C11 — TheSportsDB "00:00:00" times are treated as confirmed midnight** (suspected; TheSportsDB uses it for "to be confirmed"). Treat as `time_tbc`.
 - **O2 — Backups.**
@@ -69,9 +73,9 @@ Every P1 item below was then checked against the code before it was accepted. "V
 
 ## Highest-value enhancements (free sources)
 
-1. **Tiered public "today".** Publish named competitions, UK/IE/FR football, featured nations, PPV and the main sports; move the long tail to an optional asset or the private feed. About 1,900 events today, mostly low-tier football, would become a few hundred.
-2. **A light live-status lane.** Call `fixtures?live=all` about every 15 minutes in match hours (around 40 of the roughly 100 daily calls per API-Sports product), together with `status_observed_at`.
-3. **A free "verified broadcast" rule.** A strict match, the same slot, a curated registry channel and two or more independent guide families. This is the only free route to `verified_broadcasts` above 0.
+1. **Tiered public "today".** Done in 0.3.23: core events in the day assets and `today`, the long tail in optional `events_extra:<date>` assets.
+2. **A light live-status lane.** Done in 0.3.23 (see C2).
+3. **A free corroboration rule.** Done in 0.3.23 as the `guide_corroborated` link status (strict match, same slot, curated registry channel, two independent guide families after a lineage audit). It is deliberately not `broadcast_verified`, which stays reserved for provider or official evidence.
 4. **Forward fixtures.**
    - Widen the football-data.org range.
    - More OpenLigaDB leagues.
@@ -89,4 +93,4 @@ Every P1 item below was then checked against the code before it was accepted. "V
 - **Quotas:** reserved atomically before each call, paced per provider family, with learned plan windows.
 - **Matching:** the strict channel matcher refuses wrong teams, +1, radio, shopping and foreign ids; regional allocation is conservative.
 - **Rights:** the public event-field allowlist and the rights gate on programme text hold; the owner's channel list never reaches any feed.
-- **Contract:** schemas, code and fixtures agree (`sli/1.5`).
+- **Contract:** schemas, code and fixtures agree (`sli/1.5`; `sli/1.6` from 0.3.23).

@@ -18,7 +18,7 @@ from . import dictionary as channel_dictionary, taxonomy
 from .guide import (COUNTRY_BY_SOURCE, REGIONAL_PARENTS, canonical_channel, channel_families, foreign_guide_channel,
                     normalized_name)
 from .identity import name_signature
-from .providers import EPG_FAMILY, SPORT_FAMILY
+from .providers import EPG_FAMILY, SPORT_FAMILY, UNVERIFIED_LINEAGE_FAMILIES
 
 LONDON = ZoneInfo("Europe/London")
 UNCONFIRMED_START_PRECISIONS = frozenset({"date_only", "time_tbc"})
@@ -194,8 +194,22 @@ def _same_event(a, b):
     return gap <= 1800 and taxonomy.norm(a.get("title")) == taxonomy.norm(b.get("title"))
 
 
+# Audit 15 Nov (C9): how far an event has progressed, for choosing a merged event's status. A terminal state
+# (finished, postponed, cancelled) outranks play in progress, which outranks a schedule.
+STATUS_PROGRESS = {"unknown": 0, "scheduled": 1, "live": 2, "finished": 3, "postponed": 3, "cancelled": 3}
+
+
+def status_choice(rows):
+    """The record whose status a merged event takes: the most advanced status, then the most recently observed.
+
+    A delayed free feed still showing "TIMED" must not hide another source's "1H" or "FT"."""
+    return max(rows, key=lambda r: (STATUS_PROGRESS.get(r.get("status_normalized") or "unknown", 0),
+                                    str(r.get("status_observed_at") or "")))
+
+
 def merge_events(events):
-    """Fuse duplicate fixtures across providers; keep the most precise record as primary."""
+    """Fuse duplicate fixtures across providers; keep the most precise record as primary, and take the status from
+    the most advanced, most recently observed contributor."""
     latest = {}
     for event in events:  # a later copy of the same provider id is the fresher one
         if isinstance(event, dict) and event.get("id"):
@@ -243,6 +257,12 @@ def merge_events(events):
             ends = [r["end_utc"] for r in rows if r.get("end_utc")]
             if ends:
                 primary["end_utc"] = ends[0]
+        status = status_choice(rows)
+        for field in ("status", "status_normalized", "status_observed_at", "live_observed_at", "live_status_unconfirmed"):
+            if field in status:
+                primary[field] = status[field]
+            else:
+                primary.pop(field, None)
         primary.update({
             "sources": sources, "source_events": sorted(r["id"] for r in rows),
             "corroboration": len(families),
@@ -258,13 +278,31 @@ def merge_events(events):
     return merged
 
 
+LIVE_TRUST = timedelta(minutes=45)       # a "live" observation older than this is not trusted (contract sli/1.6 §1)
+LIVE_END_GRACE = timedelta(minutes=30)   # ... nor more than this after the expected end
+
+
+def expected_end(event):
+    """Start + typical duration for the sport/event type (feed contract sli/1.6 §1); a source's own end if given."""
+    start = _dt(event["start_utc"])
+    if event.get("end_utc"):
+        try:
+            end = _dt(event["end_utc"])
+            if end > start:
+                return end
+        except (TypeError, ValueError):
+            pass
+    return start + timedelta(minutes=taxonomy.expected_minutes(event))
+
+
 def live_state(event, now):
     if event.get("live_status_unconfirmed"):
         return "unknown"
     status = event.get("status_normalized") or "unknown"
-    if status == "live" and event.get("live_observed_at"):
+    observed = event.get("live_observed_at") or event.get("status_observed_at")
+    if status == "live" and observed:
         try:
-            if now - _dt(event["live_observed_at"]) > timedelta(minutes=45):
+            if now - _dt(observed) > LIVE_TRUST:
                 return "unknown"
         except (TypeError, ValueError):
             return "unknown"
@@ -275,9 +313,9 @@ def live_state(event, now):
     except (KeyError, ValueError, TypeError):
         return "unknown"
     typical = timedelta(minutes=taxonomy.typical_minutes(event.get("sport")))
-    # A provider "live" flag is trusted only near the event; a stale snapshot or
-    # an expanded future cricket day must not stay LIVE indefinitely.
-    if status == "live" and start - timedelta(minutes=30) <= now < start + typical * 1.5:
+    # A provider "live" flag is trusted only from the start to 30 minutes after the expected end; a stale
+    # snapshot or an expanded future cricket day must not stay LIVE indefinitely.
+    if status == "live" and start <= now <= expected_end(event) + LIVE_END_GRACE:
         return "live"
     if event.get("start_precision") in UNCONFIRMED_START_PRECISIONS:
         return "time_tbc"
@@ -875,7 +913,10 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
         multi = any(len({EPG_FAMILY.get(s, s) for s in c["epg_sources"]}) > 1 for c in candidates)
         result[event["id"]] = ("multi_guide_match" if multi else "single_guide_match", candidates)
     if guide_events is not None:
-        for event in _guide_live_events(by_start, programme_starts, matched_rows, now, timed):
+        # Copies made for the approved-source (public) merge never receive guide listings: the listing step
+        # needs exactly one feed event per fixture, and guide-listed links are private only (audit C3).
+        listing_timed = [(event, start) for event, start in timed if not event.get("_public_copy")]
+        for event in _guide_live_events(by_start, programme_starts, matched_rows, now, listing_timed):
             target = event.pop("_feed_event_id", None)
             if target and target not in result:
                 # The guide confirms a feed fixture the strict title match missed (e.g. "NY Rangers at Vancouver").
@@ -885,6 +926,46 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
             elif not target:
                 guide_events.append(event)
     return result
+
+
+# ---- guide-corroborated links (feed contract sli/1.6 §4) ---------------------
+CORROBORATION_RULE = "independent_guides_v1"
+CORROBORATION_BEFORE = timedelta(minutes=60)   # programme start no earlier than kick-off - 60 min ...
+CORROBORATION_AFTER = timedelta(minutes=20)    # ... and no later than kick-off + 20 min
+CURATED_IDENTITY_METHODS = frozenset({"registry", "identity_registry"})
+STRICT_MATCH_STATUSES = frozenset({"single_guide_match", "multi_guide_match"})
+
+
+def independent_guide_families(sources):
+    """Distinct upstream families among guide ids whose lineage was audited (see providers.EPG_FAMILY); guides of
+    unverified lineage (providers.UNVERIFIED_LINEAGE_FAMILIES) never count as independent evidence."""
+    families = {EPG_FAMILY.get(source, source) for source in sources or ()}
+    return families - UNVERIFIED_LINEAGE_FAMILIES
+
+
+def guide_corroborated(event, candidate):
+    """True when a broadcast candidate meets the free "guide_corroborated" rule (contract sli/1.6 §4):
+
+    * found by the strict title matcher (never the loose guide-listing matcher);
+    * the programme starts between kick-off - 60 min and kick-off + 20 min;
+    * the channel is a curated registry channel (not a dictionary-only id);
+    * two or more independent guide families list it.
+
+    It never makes an event ``broadcast_verified``: the guides show a listing, not provider evidence."""
+    if event.get("broadcast_status") not in STRICT_MATCH_STATUSES or event.get("origin") == "guide_listing":
+        return False
+    if event.get("start_precision") in UNCONFIRMED_START_PRECISIONS or \
+            event.get("status_normalized") in ("postponed", "cancelled"):
+        return False
+    if candidate.get("channel_identity_method") not in CURATED_IDENTITY_METHODS:
+        return False
+    try:
+        kickoff, programme = _dt(event["start_utc"]), _dt(candidate["programme_start_utc"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if not kickoff - CORROBORATION_BEFORE <= programme <= kickoff + CORROBORATION_AFTER:
+        return False
+    return len(independent_guide_families(candidate.get("epg_sources"))) >= 2
 
 
 # ---- guide-listed live sport ------------------------------------------------

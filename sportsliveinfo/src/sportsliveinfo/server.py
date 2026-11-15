@@ -305,7 +305,7 @@ class UI(BaseHTTPRequestHandler):
                 "epg": "sources", "test_source": "sources", "dictionary": "sources", "github": "publishing",
                 "test_github": "publishing", "approvals": "publishing", "publish": "publishing",
                 "private_feed": "publishing", "test_private_github": "publishing",
-                "preview_feed": "publishing", "schedule": "scheduler", "lineup_upload": "coverage",
+                "preview_feed": "publishing", "schedule": "scheduler", "live_status": "scheduler", "lineup_upload": "coverage",
                 "lineup_delete": "coverage", "coverage_survey": "coverage", "coverage_rebuild": "coverage",
                 "tv_export_upload": "coverage", "tv_export_delete": "coverage"}.get(action, page)
         try:
@@ -456,6 +456,10 @@ class UI(BaseHTTPRequestHandler):
                 raise ValueError("Choose 1 to 6 daily refresh times")
             self.store.configure({"schedule": list(dict.fromkeys(times))})
             return "scheduler", message
+        if action == "live_status":
+            enabled = value("enabled") == "on"
+            self.store.configure({"live_status": enabled})
+            return "scheduler", "Live status lane %s" % ("switched on" if enabled else "switched off")
         if action == "finish":
             self.store.configure({"setup_complete": True})
             return "dashboard", "First-run setup complete; collector is ready"
@@ -1152,7 +1156,33 @@ class UI(BaseHTTPRequestHandler):
         local = datetime.now(LONDON)
         beat = self.store._get("scheduler_heartbeat")
         text += '<p class="sub">Current London time: %s · Scheduler last active: %s</p>' % (e(local.strftime("%d %b %Y, %H:%M %Z")), e(when(beat)))
-        return text
+        return text + self._live_card(config)
+
+    def _live_card(self, config):
+        """The live-status lane: switch, whether it can run, and its last pass (Scheduler page and Diagnostics)."""
+        from .engine import LIVE_DAILY_BUDGET, LIVE_PRODUCTS, Engine
+        on = bool(config.get("live_status", True))
+        if not on:
+            state = "Switched off."
+        elif Engine.live_lane_enabled(config):
+            state = "On."
+        else:
+            state = "On, but idle: it needs a saved API-Sports key and an enabled API-Sports football or games product."
+        last = self.store._get("live_lane") or {}
+        usage = self.store.usage()
+        calls = ", ".join("%s %d/%d" % (name, usage.get("live:" + name, 0), LIVE_DAILY_BUDGET)
+                          for name in LIVE_PRODUCTS if config["sports"].get(name)) or "no API-Sports product enabled"
+        form = ('<label><input type="checkbox" name="enabled" value="on" %s> Check live statuses during matches</label>'
+                '<button type="submit">Save</button>' % ("checked" if on else ""))
+        return ('<section class="card" style="margin-top:16px"><h3>Live status lane</h3><p>While a collected event is '
+                'between its start and expected end, SportsLiveInfo reads the API-Sports live board at most every '
+                '15 minutes (football <code>fixtures?live=all</code>, other products <code>games?live=all</code>), '
+                'at most %d calls a day per product, counted in the product\'s own daily quota and always leaving '
+                'calls for the scheduled refreshes. Only status changes are published, as the small <code>live</code> '
+                'asset (when automatic publishing is on). No scores are kept.</p><p class="%s">%s</p>'
+                '<p class="sub">Last pass: %s · %s · Live calls today (UTC): %s</p>%s</section>') % (
+            LIVE_DAILY_BUDGET, "ok" if on else "warn", e(state), e(when(last.get("last_run"))),
+            e(last.get("summary") or "not run yet"), e(calls), self._form("live_status", form))
 
     def _test_result(self, target):
         result = self.store._get("connection_test:" + target)
@@ -1333,7 +1363,7 @@ class UI(BaseHTTPRequestHandler):
             body += '</table>'
         else:
             body += '<p>No source is enabled.</p>'
-        body += '</section><section class="card" style="margin-top:16px"><h3>Requests reserved today (UTC)</h3>'
+        body += '</section>' + self._live_card(config) + '<section class="card" style="margin-top:16px"><h3>Requests reserved today (UTC)</h3>'
         if usage:
             body += '<table><tr><th>Provider</th><th>Count</th></tr>' + ''.join('<tr><td>%s</td><td>%d</td></tr>' % (e(k), v) for k, v in sorted(usage.items())) + '</table>'
         else:
