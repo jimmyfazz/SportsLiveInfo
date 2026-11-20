@@ -2,6 +2,12 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## Unreleased — Operations runbook and documentation consolidation (docs only)
+
+- **New [`docs/RUNBOOK.md`](../docs/RUNBOOK.md):** feed stalled (manifest age, Diagnostics, job rows, `/healthz`), GitHub token expiry, quota counters, the publish regression gate and its manual override, rollback, the exact kill-switch config keys, App backup, checks after an update, and who to ask. Each step was traced to the code.
+- **Gaps recorded there, not fixed:** the App cannot republish an earlier revision (rollback is a manual git procedure); there is no standings source, counter or kill switch; the crest keys have no UI; a regression refusal does not raise the publish-failure notification.
+- **Moved:** `docs/CODE_AUDIT_AND_FIXES_2026-11-13.md` to `docs/archive/` (superseded by the 15 November audit). Its two inbound links are updated. No code changed.
+
 ## Unreleased — Scores per source behind a rights flag (feed `sli/1.7`, default off)
 
 - **Nothing is published until the owner approves a source.** New config `score_approvals` (list of source ids, default empty, separate from `publication_approvals`; Ingress → Publishing → Score approvals, with an attestation checkbox). Eligible: the API-Sports products except MMA (live and final) and football-data.org (final scores of regular-time results only). TheSportsDB, Jolpica, OpenF1 and every other source are rejected by validation. The owner must still read each source's terms and approve.
