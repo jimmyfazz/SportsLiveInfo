@@ -182,6 +182,8 @@ def snapshot(store, now=None, *, started_at=None):
         "token_expires_at": _iso(expiry),
         "token_days_left": None if expiry is None else round((expiry - now).total_seconds() / 86400, 1),
         "budgets": budgets,
+        "asset_budget": store._get("asset_budget"),
+        "feed_growth": (store._get("feed_growth") or {}).get("report"),
     }
 
 
@@ -229,6 +231,20 @@ def raw_reasons(snap, now, settings, active=()):
     started = _parse(snap["collect_running_since"])
     if started is not None and now - started > COLLECT_HANG:
         add("collector_hung", "A collection started at %s has not finished" % snap["collect_running_since"])
+    if snap.get("last_collect_state") == "stuck":
+        add("collector_stuck", "The last collection was abandoned at its overall deadline with a source still running "
+                               "(see Diagnostics; data collected before it was kept)")
+    budget = snap.get("asset_budget") or {}
+    if budget.get("near_limit") or budget.get("skipped"):
+        names = [("%s %.0f%%" % (r["kind"], r["percent"])) for r in budget.get("near_limit", [])[:3]]
+        names += ["%s skipped" % k for k in budget.get("skipped", [])[:3]]
+        add("asset_size", "Published feed assets are close to the %d MiB reader limit (%s)" % (
+            budget.get("limit_bytes", 0) >> 20, ", ".join(names)))
+    growth = snap.get("feed_growth") or {}
+    if growth.get("over_budget"):
+        add("feed_growth", "The public feed repository is growing too fast (%s commits a day, about %d MB a year of history); "
+                           "squash its history (docs/OPERATIONS_HARDENING.md)" % (
+                               growth.get("per_day"), (growth.get("projected_bytes_per_year") or 0) // 1_000_000))
     if snap["publish_expected"] and snap["publish_consecutive_failures"] >= PUBLISH_FAIL_THRESHOLD:
         add("publish_blocked", "Publishing failed %d times in a row (see Diagnostics on the Home Assistant page)" % snap["publish_consecutive_failures"])
     left = snap["token_days_left"]
@@ -310,6 +326,9 @@ TITLES = {
     "manifest_old": "SportsLiveInfo: feed not published",
     "collector_hung": "SportsLiveInfo: collection stuck",
     "publish_blocked": "SportsLiveInfo: publishing is failing",
+    "collector_stuck": "SportsLiveInfo: a source collection was abandoned",
+    "feed_growth": "SportsLiveInfo: feed repository history is growing fast",
+    "asset_size": "SportsLiveInfo: feed asset near the reader size limit",
     "token_expiring": "SportsLiveInfo: GitHub token expiring",
 }
 

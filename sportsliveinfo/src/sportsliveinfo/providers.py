@@ -5,6 +5,8 @@ import io
 import json
 import lzma
 import re
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -366,14 +368,95 @@ def api_sports_error(payload):
     return "Provider rejected the requested scope"
 
 
+# ---- wall-clock deadlines (audit 15 Nov, O1) -----------------------------------------------------------------------
+# urllib's timeout is per socket read, so a server that drips one byte every 29 s could hold a request (and the
+# collector's busy lock) for hours. Every fetch therefore has an overall deadline, read in chunks, and a source
+# collection can carry a wider one. The deadline travels in a thread-local so callers (and test doubles of ``fetch``)
+# keep the same signature.
+REQUEST_DEADLINE = 120.0      # seconds, whole HTTP request including the body
+SOURCE_DEADLINE = 900.0       # seconds, all requests and the parse of one source collection
+READ_CHUNK = 65536
+_clock = time.monotonic       # patched by tests
+_deadline_scope = threading.local()
+
+
+class DeadlineExceeded(TimeoutError):
+    """An upstream request or a source collection ran past its wall-clock deadline."""
+
+
+class Deadline:
+    def __init__(self, seconds, clock=None):
+        self._clock = clock or _clock
+        self.seconds = float(seconds)
+        self.at = self._clock() + self.seconds
+
+    def remaining(self):
+        return self.at - self._clock()
+
+    def expired(self):
+        return self.remaining() <= 0
+
+    def check(self):
+        if self.expired():
+            raise DeadlineExceeded("Upstream request exceeded its deadline")
+
+
+class deadline_scope:
+    """``with deadline_scope(seconds):`` bounds every fetch and XMLTV parse made by this thread inside the block."""
+
+    def __init__(self, seconds):
+        self.deadline = Deadline(seconds)
+
+    def __enter__(self):
+        self._previous = getattr(_deadline_scope, "deadline", None)
+        _deadline_scope.deadline = self.deadline
+        return self.deadline
+
+    def __exit__(self, *exc):
+        _deadline_scope.deadline = self._previous
+        return False
+
+
+def current_deadline():
+    return getattr(_deadline_scope, "deadline", None)
+
+
+def _request_deadline():
+    """The tighter of one request's own limit and the enclosing source collection's remaining time."""
+    own = Deadline(REQUEST_DEADLINE)
+    outer = current_deadline()
+    return outer if outer is not None and outer.at < own.at else own
+
+
+def _bound_socket(response, deadline):
+    """Best effort: make the next blocking read wait no longer than the time left (never raises)."""
+    try:
+        sock = response.fp.raw._sock
+        sock.settimeout(max(0.5, min(30.0, deadline.remaining())))
+    except Exception:
+        pass
+
+
 def fetch(url, headers=None, max_bytes=14_000_000, *, response_headers=None):
     verify_url(url)
     request = urllib.request.Request(url, headers={"User-Agent": "SportsLiveInfo/0.3 (self-hosted EPG and sports collector)", **(headers or {})})
     opener = urllib.request.build_opener(RedirectGuard())
+    deadline = _request_deadline()
     try:
-        with opener.open(request, timeout=30) as response:
+        deadline.check()
+        with opener.open(request, timeout=max(1.0, min(30.0, deadline.remaining()))) as response:
             # +1 permits explicit rejection without unbounded memory consumption.
-            data = response.read(max_bytes + 1)
+            chunks, total = [], 0
+            while total <= max_bytes:
+                deadline.check()
+                _bound_socket(response, deadline)
+                chunk = response.read(min(READ_CHUNK, max_bytes + 1 - total))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+            deadline.check()
+            data = b"".join(chunks)
             if len(data) > max_bytes:
                 raise ValueError("Provider response exceeded configured size limit")
             if response_headers is not None:
@@ -524,6 +607,7 @@ class _LimitedXmlInput:
     """
 
     def __init__(self, stream, byte_limit, strip_xmltv_dtd=False):
+        self.deadline = current_deadline()    # a parse is bounded by the enclosing source collection too
         self.stream = stream
         self.byte_limit = byte_limit
         self.total = 0
@@ -532,6 +616,8 @@ class _LimitedXmlInput:
 
     def read(self, size=-1):
         size = 65536 if size is None or size < 0 else min(size, 65536)
+        if self.deadline is not None:
+            self.deadline.check()
         payload = self.stream.read(min(size, self.byte_limit - self.total + 1))
         self.total += len(payload)
         if self.total > self.byte_limit:
@@ -548,12 +634,51 @@ class _LimitedXmlInput:
         return payload
 
 
-def decode_xmltv(raw, source, max_expanded=None, max_programmes=100_000,
-                 max_channels=40_000):
+class _ParseGate:
+    """Global limit on concurrent XMLTV parses (audit 15 Nov, O3, C4): the scheduled lane, the coverage survey and
+    the Ingress test button each parse in their own thread, and two large guides at once can exhaust the mini PC."""
+
+    def __init__(self, limit=1):
+        self._cond = threading.Condition()
+        self.limit, self.active, self.peak = limit, 0, 0
+
+    def acquire(self, timeout):
+        end = _clock() + timeout
+        with self._cond:
+            while self.active >= self.limit:
+                left = end - _clock()
+                if left <= 0:
+                    raise DeadlineExceeded("Another guide is still being parsed; try again later")
+                self._cond.wait(min(left, 5.0))
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+
+    def release(self):
+        with self._cond:
+            self.active -= 1
+            self._cond.notify()
+
+
+PARSE_CONCURRENCY = 1
+PARSE_WAIT = 600.0            # seconds a parse may queue behind another
+PARSE_GATE = _ParseGate(PARSE_CONCURRENCY)
+
+
+def decode_xmltv(raw, source, max_expanded=None, max_programmes=100_000, max_channels=40_000):
     """Stream bounded XMLTV (plain, gzip or xz) with source-aware programme detail.
 
-    This is private source collection, never licence approval for redistribution.
+    One parse at a time process-wide (``PARSE_GATE``). This is private source collection, never licence approval for
+    redistribution.
     """
+    outer = current_deadline()
+    PARSE_GATE.acquire(max(1.0, min(PARSE_WAIT, outer.remaining())) if outer is not None else PARSE_WAIT)
+    try:
+        return _decode_xmltv(raw, source, max_expanded, max_programmes, max_channels)
+    finally:
+        PARSE_GATE.release()
+
+
+def _decode_xmltv(raw, source, max_expanded, max_programmes, max_channels):
     if not isinstance(raw, bytes) or not raw:
         raise ValueError("Empty XMLTV input")
     if raw[:2] == b"\x1f\x8b":
@@ -601,7 +726,7 @@ def decode_xmltv(raw, source, max_expanded=None, max_programmes=100_000,
                         "start_utc": start, "end_utc": end,
                         "title": title[:240],
                         "subtitle": (node.findtext("sub-title") or "").strip()[:240],
-                        "description": (node.findtext("desc") or "")[:1000],
+                        "description": "",     # never used downstream; not kept (audit C4: slim records)
                         "categories": [cat.text.strip()[:60] for cat in node.findall("category")
                                        if cat.text and cat.text.strip()][:5],
                         "is_live": node.find("live") is not None,

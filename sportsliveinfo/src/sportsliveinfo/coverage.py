@@ -20,7 +20,7 @@ from collections import Counter, defaultdict
 
 from . import dictionary as channel_dictionary
 from . import event_slots
-from .guide import COUNTRY_BY_SOURCE, foreign_guide_channel, local_station_key, market_key, normalized_name
+from .guide import COUNTRY_BY_SOURCE, foreign_guide_channel, local_station_key, market_key
 
 LINEUP_PRODUCT = "coverage:lineup"
 REPORT_PRODUCT = "coverage:report"

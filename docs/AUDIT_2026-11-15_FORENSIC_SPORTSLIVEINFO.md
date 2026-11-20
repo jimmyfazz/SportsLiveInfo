@@ -32,8 +32,10 @@ C3 (loose guide-listing links kept private) is unchanged: the loose matcher was 
 
 - **C4 — All enabled guides are loaded at once for linking.** `linking.py` calls `list(epg_guides)` and keeps 1,000-character descriptions it never uses. With 10–40 guides this risks out-of-memory on the mini PC.
   - Plan: stream guides one at a time; slim programme records to title, sub-title and times; keep only the next 8 days.
+  - Addressed (unreleased, branch `fix/ops-hardening`): guides stream one at a time through `linking.GuideStream` as slim records ([operations](OPERATIONS_HARDENING.md) §2). Status: awaiting release.
 - **O1 — A slow upstream can hang the collector indefinitely.** Socket timeouts are per read, not per request, and the hang holds the busy lock.
   - Plan: chunked reads with an overall deadline, plus a "collector stuck" watchdog state.
+  - Addressed (unreleased, branch `fix/ops-hardening`): per-request 120 s wall-clock deadline, 900 s per source, 45 min per collection, `stuck` state in health ([operations](OPERATIONS_HARDENING.md) §1). Status: awaiting release.
 
 ### P2
 
@@ -47,6 +49,7 @@ C3 (loose guide-listing links kept private) is unchanged: the loose matcher was 
   - `guide_map` programme counts change every run; at about 3 commits a day this is roughly 1 GB a year of history.
   - An optional asset over 8 MiB is skipped with no notice (0.3.23: now reported in the manifest notices).
   - Plan: bucket the counts; add a manifest notice; squash history periodically.
+  - Addressed in part (unreleased, branch `fix/ops-hardening`): assets over the cap are published as parts and alert at 80%; a commit and byte budget with a health alert; the squash procedure is documented ([operations](OPERATIONS_HARDENING.md) §3 to §5). Count bucketing is NOT done (it changes what B1G reads). Status: awaiting release.
 - **C11 — TheSportsDB "00:00:00" times are treated as confirmed midnight** (suspected; TheSportsDB uses it for "to be confirmed"). Treat as `time_tbc`.
 - **O2 — Backups.**
   - SQLite in WAL mode is backed up live, with no `backup: cold` and no pre-backup checkpoint.
@@ -54,6 +57,7 @@ C3 (loose guide-listing links kept private) is unchanged: the loose matcher was 
   - Backups grow with every guide and hold the tokens in plain text.
   - Plan: a small config DB plus an excluded cache DB, a pre-backup checkpoint, and pruning.
 - **O3 — Concurrent XMLTV parses** (survey, test button, scheduled lane) can exhaust memory. Add a global parse semaphore and run tests in the background.
+  - Addressed in part (unreleased, branch `fix/ops-hardening`): one XMLTV parse at a time process-wide, with a bounded wait ([operations](OPERATIONS_HARDENING.md) §2). Running the test button in the background is NOT done. Status: awaiting release.
 - **O4 — Guide-derived metadata (`guide_map`, `identity`) is published once any sport is approved;** the public `health` asset names the providers in use. Add a per-guide public-metadata approval and an aggregate public health asset.
 - **O5 — One broad GitHub token for both feeds, and an unsigned manifest.**
   - Plan: separate tokens; warn before token expiry.

@@ -21,7 +21,7 @@ from collections import namedtuple
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from . import __version__, hints, link_report, linking, metadata, providers, standings, taxonomy
+from . import __version__, dictionary as channel_dictionary, hints, link_report, linking, metadata, providers, standings, taxonomy
 from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, REGIONAL_PARENTS, REGIONAL_RULES, SERVICES, SOURCE_ID_CROSSWALK
 
 FORMAT_MAJOR, FORMAT_MINOR = 1, 6  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset;
@@ -35,6 +35,15 @@ ROOT = "v1"
 # B1G refuses any asset above this size (SliFeedContract.MAX_ASSET_BYTES, sized for 32-bit Fire TV sticks).
 # An optional asset over it is not published; a required one fails the build loudly.
 MAX_READER_ASSET_BYTES = 8 * 1024 * 1024
+# Asset size budget (audit 15 Nov, C10). Deployed TVs refuse an asset over MAX_READER_ASSET_BYTES, so a document that
+# could grow past it is published as parts. A notice and a health incident appear at 80% of the cap, long before
+# anything is dropped; parts are cut at 75% so a part itself never raises the alert.
+ASSET_ALERT_FRACTION = 0.8
+PART_TARGET_FRACTION = 0.75
+
+
+def part_target_bytes():
+    return int(MAX_READER_ASSET_BYTES * PART_TARGET_FRACTION)
 LONDON = ZoneInfo("Europe/London")
 
 EVENT_FIELDS = (
@@ -704,6 +713,145 @@ def live_document(store, events, now=None):
     return {"schema": "sli.live/1", "generated_at": max(r["status_observed_at"] for r in rows), "events": rows}
 
 
+def _chunk_rows(rows, budget, size_of):
+    """Greedy split of ``rows`` into consecutive chunks of at most ``budget`` bytes (a single huge row stays alone)."""
+    chunks, current, used = [], [], 0
+    for row in rows:
+        size = size_of(row)
+        if current and used + size > budget:
+            chunks.append(current)
+            current, used = [], 0
+        current.append(row)
+        used += size
+    if current or not chunks:
+        chunks.append(current)
+    return chunks
+
+
+def _row_size(row):
+    return len(_json(row)) + 1
+
+
+def _dictionary_group(country):
+    """Part a channel belongs to, by its home country: an opted-in world region, else UK/Europe."""
+    for key in sorted(channel_dictionary.REGIONS):
+        if country in channel_dictionary.REGIONS[key][1].split():
+            return key
+    return None
+
+
+def dictionary_parts(document):
+    """``[(kind, part_document, part_info)]`` for a dictionary too big for one reader asset (contract §2.3).
+
+    Channels are grouped by home country: ``dictionary:uk-eu`` (UK, Europe and anything outside the opted-in
+    regions) then ``dictionary:world-<region>`` per opted-in region; a group over the part target is cut into
+    ``-2``, ``-3`` ... Every part is a complete ``sli.dictionary/1`` document (same rules, aliases and tables) whose
+    ``channels`` are one slice, so readers concatenate the channels of all parts."""
+    channels = document.get("channels") or []
+    groups = {}
+    for channel in channels:
+        groups.setdefault(_dictionary_group(channel.get("country")), []).append(channel)
+    order = [None] + sorted(k for k in groups if k is not None)
+    base = {k: v for k, v in document.items() if k != "channels"}
+    overhead = len(_json(dict(base, channels=[], part={"id": "world-" + "x" * 40, "index": 99, "of": 99, "merge": ""}))) + 400
+    planned = []
+    for key in order:
+        rows = groups.get(key) or []
+        if not rows and key is None:
+            continue
+        name = "uk-eu" if key is None else "world-" + key
+        total = overhead + sum(_row_size(r) for r in rows)
+        pieces = ([rows] if total <= MAX_READER_ASSET_BYTES and key is None else
+                  _chunk_rows(rows, part_target_bytes() - overhead, _row_size))
+        for number, piece in enumerate(pieces, 1):
+            planned.append((name if number == 1 else "%s-%d" % (name, number), key, piece))
+    out = []
+    for index, (name, key, piece) in enumerate(planned, 1):
+        part = dict(base, channels=piece, regions=[key] if key else [],
+                    scope=base.get("scope", "") + " [part %s]" % name,
+                    part={"id": name, "index": index, "of": len(planned),
+                          "merge": "Concatenate the channels of every dictionary part (kind dictionary or "
+                                   "dictionary:*); all other fields are identical in every part."})
+        out.append(("dictionary:" + name, part, part["part"]))
+    return out
+
+
+def guide_map_parts(document):
+    """``[(kind, part_document, part_info)]`` for a guide map over the part target: guides are never split, so a
+    reader unions ``guides`` and ``service_aliases`` across parts (``guide_map:1`` ...)."""
+    guides = document.get("guides") or []
+    base = {k: v for k, v in document.items() if k != "guides"}
+    overhead = len(_json(dict(base, guides=[], part={"id": "1", "index": 99, "of": 99, "merge": ""}))) + 400
+    chunks = _chunk_rows(guides, part_target_bytes() - overhead, _row_size)
+    out = []
+    for index, piece in enumerate(chunks, 1):
+        part = dict(base, guides=piece,
+                    part={"id": str(index), "index": index, "of": len(chunks),
+                          "merge": "Union the guides and service_aliases of every guide_map part (kind guide_map "
+                                   "or guide_map:*)."})
+        out.append(("guide_map:%d" % index, part, part["part"]))
+    return out
+
+
+# ---- feed repository growth budget (audit 15 Nov, C10) -------------------------------------------------------------
+# Every published revision is a git commit whose new files stay in the repository's history forever (the working tree
+# keeps FEED_RETAIN revisions, history keeps everything). The ledger records one entry per commit; the report projects
+# a year of history growth and raises an alert (health incident, see health.py) when either budget is exceeded, so the
+# owner squashes the history (docs/OPERATIONS_HARDENING.md section 5) before the repository gets slow to clone.
+GROWTH_WINDOW_DAYS = 7
+GROWTH_COMMITS_PER_DAY_BUDGET = 8.0
+GROWTH_BYTES_PER_YEAR_BUDGET = 1_000_000_000      # about 1 GB of new blobs a year
+GROWTH_LEDGER_MAX = 800
+
+
+def growth_record(ledger, at, new_bytes, files):
+    """Ledger with one more commit appended (newest last, bounded)."""
+    rows = [r for r in (ledger or []) if isinstance(r, dict)]
+    rows.append({"at": at, "bytes": int(new_bytes), "files": int(files)})
+    return rows[-GROWTH_LEDGER_MAX:]
+
+
+def growth_report(ledger, now):
+    """Commits and new bytes over the last ``GROWTH_WINDOW_DAYS``, the projected bytes per year, and whether either
+    budget is exceeded. Pure. A ledger shorter than a day is not projected (too little evidence)."""
+    stamps = []
+    for row in ledger or []:
+        try:
+            at = datetime.fromisoformat(str(row["at"]).replace("Z", "+00:00"))
+            if at.tzinfo is None:
+                at = at.replace(tzinfo=timezone.utc)
+            stamps.append((at, int(row.get("bytes", 0))))
+        except (KeyError, ValueError, TypeError):
+            continue
+    cutoff = now - timedelta(days=GROWTH_WINDOW_DAYS)
+    recent = [(at, size) for at, size in stamps if at >= cutoff]
+    report = {"window_days": GROWTH_WINDOW_DAYS, "commits": len(recent), "bytes": sum(size for _, size in recent),
+              "budget": {"commits_per_day": GROWTH_COMMITS_PER_DAY_BUDGET, "bytes_per_year": GROWTH_BYTES_PER_YEAR_BUDGET},
+              "per_day": None, "projected_bytes_per_year": None, "over_budget": [], "at": now.isoformat(timespec="seconds")}
+    if not recent:
+        return report
+    span = now - min(at for at, _ in recent)
+    if span < timedelta(days=1):
+        return report
+    span_days = min(span.total_seconds() / 86400, float(GROWTH_WINDOW_DAYS))
+    report["per_day"] = round(len(recent) / span_days, 2)
+    report["projected_bytes_per_year"] = int(report["bytes"] / span_days * 365)
+    if report["per_day"] > GROWTH_COMMITS_PER_DAY_BUDGET:
+        report["over_budget"].append("commits_per_day")
+    if report["projected_bytes_per_year"] > GROWTH_BYTES_PER_YEAR_BUDGET:
+        report["over_budget"].append("bytes_per_year")
+    return report
+
+
+def asset_budget(assets, skipped=()):
+    """Size report against the reader cap: every asset at or over ``ASSET_ALERT_FRACTION`` of it, and what was
+    skipped. Pure; used for the manifest notices and the health incident."""
+    near = [{"kind": a["kind"], "bytes": a["bytes"], "percent": round(100.0 * a["bytes"] / MAX_READER_ASSET_BYTES, 1)}
+            for a in assets if a["bytes"] >= ASSET_ALERT_FRACTION * MAX_READER_ASSET_BYTES]
+    return {"limit_bytes": MAX_READER_ASSET_BYTES, "alert_percent": int(ASSET_ALERT_FRACTION * 100),
+            "near_limit": sorted(near, key=lambda r: -r["bytes"]), "skipped": sorted(skipped)}
+
+
 def build_feed(store, now=None, previous_revision=None, private=False):
     """Return (manifest_dict, {path: bytes}) without any network IO.
 
@@ -792,11 +940,33 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     if identity_doc:
         add("identity", identity_doc, "sli.identity/1", False)
     dictionary_doc = dictionary_document(store, conf)
+    dictionary_split = False
     if dictionary_doc:
-        add("dictionary", dictionary_doc, "sli.dictionary/1", False)
+        if len(_json(dictionary_doc)) <= MAX_READER_ASSET_BYTES:
+            add("dictionary", dictionary_doc, "sli.dictionary/1", False)
+        else:
+            # Over the cap (world regions on): publish regional parts instead of silently dropping the dictionary.
+            dictionary_split = True
+            parts = dictionary_parts(dictionary_doc)
+            for kind, part_doc, info in parts:
+                add(kind, part_doc, "sli.dictionary/1", False, part=info)
+            single_uk_eu = (parts and parts[0][0] == "dictionary:uk-eu"
+                            and not any(kind.startswith("dictionary:uk-eu-") for kind, _, _ in parts))
+            if single_uk_eu:
+                # Existing readers know only the single "dictionary" kind: give them the UK/Europe part (same bytes,
+                # same file, so no extra storage) so they keep what they had before regions were switched on.
+                first = next((a for a in assets if a["kind"] == "dictionary:uk-eu"), None)
+                if first:
+                    assets.append(dict(first, kind="dictionary", part=dict(first["part"], legacy_alias=True)))
     guide_map_doc = guide_map_document(store)
+    guide_map_split = False
     if guide_map_doc:
-        add("guide_map", guide_map_doc, "sli.guide-map/1", False)
+        if len(_json(guide_map_doc)) <= MAX_READER_ASSET_BYTES:
+            add("guide_map", guide_map_doc, "sli.guide-map/1", False)
+        else:
+            guide_map_split = True
+            for kind, part_doc, info in guide_map_parts(guide_map_doc):
+                add(kind, part_doc, "sli.guide-map/1", False, part=info)
     # §4.5 history: yesterday's core events with their last known status; never part of today.
     history_rows = sorted(by_day.get(history_day, []), key=lambda e: (e["start_utc"], e["id"]))
     add("events:" + history_day, {"schema": "sli.events-day/1", "date": history_day, "timezone": "Europe/London",
@@ -843,7 +1013,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
         add("standings:" + doc["competition_id"], doc, "sli.standings/1", False, competition_id=doc["competition_id"],
             records=doc["teams"])
     standings_docs = [d for d in standings_docs if any(a["kind"] == "standings:" + d["competition_id"] for a in assets)]
-    add("health", health_document(store, conf, snapshots, selected, private), "sli.health/1", False)
+    add("health", health_document(store, conf, snapshots, selected, private, asset_budget(assets, skipped)), "sli.health/1", False)
 
     schedule = sorted(conf.get("schedule", []))
     # Revision = data assets + meaningful manifest settings. The health asset is
@@ -863,6 +1033,20 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     notices = [] if events else ["No rights-approved sporting events in this revision; registry assets remain valid."]
     notices += ["Optional asset %s exceeded the %d MiB reader limit and was not published." % (kind, MAX_READER_ASSET_BYTES >> 20)
                 for kind in skipped]
+    budget = asset_budget(assets, skipped)
+    notices += ["Asset %s is %.0f%% of the %d MiB reader limit (alert at %d%%)." % (
+        row["kind"], row["percent"], MAX_READER_ASSET_BYTES >> 20, budget["alert_percent"])
+        for row in budget["near_limit"]]
+    if dictionary_split:
+        notices.append("The channel dictionary exceeded the %d MiB reader limit and is published as regional parts "
+                       "(dictionary:uk-eu, dictionary:world-<region>); merge the channels of every part." % (MAX_READER_ASSET_BYTES >> 20))
+    if guide_map_split:
+        notices.append("The guide map exceeded the %d MiB reader limit and is published as parts (guide_map:<n>); "
+                       "union the guides of every part." % (MAX_READER_ASSET_BYTES >> 20))
+    try:        # read by the health report (sli_health asset and /healthz incidents); never blocks a build
+        store._put("asset_budget", dict(budget, at=now.isoformat(timespec="seconds"), private=bool(private)))
+    except Exception:
+        pass
     manifest = {
         "feed": "sportsliveinfo", "format": "sli/%d.%d" % (FORMAT_MAJOR, minor),
         "format_major": FORMAT_MAJOR, "format_minor": minor,
@@ -907,6 +1091,8 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                         + (["channel_identity"] if identity_doc else [])
                         + ["channel_hints"]
                         + (["channel_dictionary"] if dictionary_doc else [])
+                        + (["channel_dictionary_parts"] if dictionary_split else [])
+                        + (["guide_map_parts"] if guide_map_split else [])
                         + (["guide_map"] if guide_map_doc else [])
                         + (["live_status"] if live_doc else [])
                         + (["verified_broadcasts"] if any(e["broadcast_verified"] for e in events) else [])
@@ -1003,7 +1189,7 @@ def _interval_minutes(schedule):
     return max(gaps)
 
 
-def health_document(store, conf, snapshots, events=None, private=False):
+def health_document(store, conf, snapshots, events=None, private=False, budget=None):
     jobs = store.recent_jobs(300)
     latest = {}
     for job in jobs:
@@ -1037,4 +1223,6 @@ def health_document(store, conf, snapshots, events=None, private=False):
         document["link_coverage"] = link_report.link_coverage(events, private=private, tier_of=event_tier)
         document["binds_dry_run"] = dict(link_report.dry_run_binds(events, private=private, own_epg=policy.own_epg),
                                          active_rule=policy.binds_rule)
+    if budget and (budget["near_limit"] or budget["skipped"]):
+        document["asset_budget"] = budget      # only when an asset is at 80% of the reader cap or was skipped
     return document

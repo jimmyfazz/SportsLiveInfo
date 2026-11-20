@@ -563,3 +563,12 @@ Measured (labelled fixtures, `tests/test_binds_hints_coverage.py`):
 
 NOT RUN: the dry run and gap histogram on the real Home Assistant snapshot (run `tools/link_report.py --db <App sqlite>` there; the real 11/121 reasons are unknown until then), copying the regenerated `schemas/fixtures/sli-v1` into B1's `sli-v1-6` test resources, any B1G reader change (it ignores `home_market`, `slot_hint`, `channel_hints`; it already uses `binds` as published), a deploy or publish. Version not bumped. `rights_holder_prior` ships OFF.
 
+## Operations hardening (branch `fix/ops-hardening`, from `integration/all` 13a8994, 20 Nov 2026)
+
+Audit O1, O3, C4, C10 plus CI and release mechanics; owner steps in [OPERATIONS_HARDENING.md](OPERATIONS_HARDENING.md). Done: request/source/collection wall-clock deadlines and a `stuck` collector state in health; a global XMLTV parse gate and one-guide-at-a-time slim linking; dictionary and guide map published as regional parts under 8 MiB with an 80% alert; a feed-growth ledger, budget and health alert with the squash procedure; CI (pyflakes, schemas parse, version agreement, fixture drift); `tools/bump_version.py`; the LiveSports-EPG dead-man workflow as an uninstalled example.
+
+Gate: `python3 -m compileall -q sportsliveinfo/src tests` and `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests` pass, 481 tests (442 baseline plus 39 new; the MemoryError line is mock output). `tools/generate_feed_fixtures.py` leaves the committed fixtures unchanged. pyflakes clean.
+
+NOT RUN: Home Assistant deployment, a real GitHub commit or squash, the dead-man workflow on GitHub, any run against real 11 to 33 MB dictionaries, a live slow upstream. The header phase of a request is not bound by the wall-clock deadline (documented). B1G reading `dictionary:*`/`guide_map:*` parts is NOT DONE: it needs the separate B1G change; until then TVs that read only `dictionary` receive the UK/Europe part when it fits alone, and nothing for a dictionary over the cap (as before, but now announced in `notices`).
+
+

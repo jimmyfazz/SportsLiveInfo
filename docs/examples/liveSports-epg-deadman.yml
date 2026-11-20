@@ -1,0 +1,99 @@
+# Dead-man workflow for the PUBLIC FEED repository (jimmyfazz/LiveSports-EPG). NOT installed anywhere: the owner copies
+# it to  .github/workflows/deadman.yml  in that repository (steps: docs/OPERATIONS_HARDENING.md section 7).
+#
+# Every 30 minutes it reads v1/manifest.json from the repository itself. The feed is overdue when the newest
+# expected publication slot that passed more than 3 hours ago (refresh.schedule_europe_london, Europe/London) is
+# later than the manifest's generated_at. That is the same rule the add-on applies to itself, judged from outside, so
+# it still fires when the Home Assistant host, the add-on, its scheduler or the GitHub token is down. Overdue opens
+# ONE GitHub issue (label feed-stalled); the issue is closed again by the next healthy run. GitHub e-mails the owner
+# about new issues.
+#
+# Limits: GitHub pauses scheduled workflows in a repository with no activity for 60 days (a dead feed that long
+# disables this check; re-enable it in the Actions tab); scheduled runs can start several minutes late.
+name: Feed dead-man
+on:
+  schedule:
+    - cron: "11,41 * * * *"      # every 30 minutes, off the top of the hour
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+env:
+  GRACE_HOURS: "3"               # how long after a scheduled slot the manifest may still be older than it
+  FALLBACK_MAX_AGE_HOURS: "30"   # used only when the manifest carries no schedule
+  ISSUE_LABEL: feed-stalled
+jobs:
+  deadman:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Judge the manifest
+        id: judge
+        run: |
+          python3 - <<'PY' > verdict.json
+          # DEADMAN-SCRIPT-BEGIN
+          import json, os
+          from datetime import datetime, timedelta, timezone
+          from zoneinfo import ZoneInfo
+
+          LONDON = ZoneInfo("Europe/London")
+          grace = timedelta(hours=float(os.environ.get("GRACE_HOURS", "3")))
+          fallback = timedelta(hours=float(os.environ.get("FALLBACK_MAX_AGE_HOURS", "30")))
+          now = datetime.fromisoformat(os.environ["DEADMAN_NOW"]) if os.environ.get("DEADMAN_NOW") else datetime.now(timezone.utc)
+
+          def verdict(stale, message, **extra):
+              print(json.dumps(dict(stale=stale, message=message, **extra)))
+              raise SystemExit(0)
+
+          try:
+              with open(os.environ.get("MANIFEST", "v1/manifest.json"), encoding="utf-8") as handle:
+                  manifest = json.load(handle)
+              generated = datetime.fromisoformat(str(manifest["generated_at"]).replace("Z", "+00:00"))
+              if generated.tzinfo is None:
+                  generated = generated.replace(tzinfo=timezone.utc)
+          except (OSError, ValueError, KeyError, TypeError) as exc:
+              verdict(True, "v1/manifest.json is missing or unreadable (%s)" % type(exc).__name__)
+
+          slots = (manifest.get("refresh") or {}).get("schedule_europe_london") or []
+          cutoff = now - grace
+          due = None
+          for back in (0, 1, 2):
+              day = (now.astimezone(LONDON) - timedelta(days=back)).date()
+              for slot in slots:
+                  try:
+                      at = datetime(day.year, day.month, day.day, int(slot[:2]), int(slot[3:5]), tzinfo=LONDON).astimezone(timezone.utc)
+                  except (TypeError, ValueError):
+                      continue
+                  if at <= cutoff and (due is None or at > due):
+                      due = at
+          age_h = round((now - generated).total_seconds() / 3600, 1)
+          if due is not None and generated < due:
+              verdict(True, "The manifest was generated at %s UTC (%s h ago), before the %s UTC slot that was due more than %g h ago."
+                      % (generated.isoformat(timespec="seconds"), age_h, due.isoformat(timespec="seconds"), grace.total_seconds() / 3600),
+                      generated_at=generated.isoformat(timespec="seconds"), due_slot=due.isoformat(timespec="seconds"))
+          if not slots and now - generated > fallback:
+              verdict(True, "The manifest is %s h old and lists no schedule." % age_h, generated_at=generated.isoformat(timespec="seconds"))
+          verdict(False, "Healthy: manifest generated %s h ago." % age_h, generated_at=generated.isoformat(timespec="seconds"))
+          # DEADMAN-SCRIPT-END
+          PY
+          cat verdict.json
+          echo "stale=$(python3 -c 'import json;print(str(json.load(open("verdict.json"))["stale"]).lower())')" >> "$GITHUB_OUTPUT"
+      - name: Open or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STALE: ${{ steps.judge.outputs.stale }}
+        run: |
+          MESSAGE="$(python3 -c 'import json;print(json.load(open("verdict.json"))["message"])')"
+          gh label create "$ISSUE_LABEL" --color B60205 --description "Public feed has not been republished" 2>/dev/null || true
+          OPEN="$(gh issue list --label "$ISSUE_LABEL" --state open --json number --jq '.[0].number // empty')"
+          if [ "$STALE" = "true" ]; then
+            if [ -z "$OPEN" ]; then
+              gh issue create --label "$ISSUE_LABEL" --title "Feed not published: the SportsLiveInfo feed is stale" \
+                --body "$MESSAGE
+
+          Check, in this order: the Home Assistant app log and the SportsLiveInfo Diagnostics page (the add-on also sends a Home Assistant notification), the GitHub token (expired or revoked), then whether the mini PC is up.
+          This issue closes itself when the next run finds a fresh manifest."
+            fi
+          elif [ -n "$OPEN" ]; then
+            gh issue close "$OPEN" --comment "Recovered: $MESSAGE"
+          fi

@@ -96,6 +96,16 @@
           }
         }
       }
+    },
+    "asset_budget": {
+      "type": "object",
+      "description": "Optional. Present only while an asset is at or above 80% of the reader cap or an optional asset was skipped.",
+      "properties": {
+        "limit_bytes": {"type": "integer"},
+        "alert_percent": {"type": "integer"},
+        "near_limit": {"type": "array", "items": {"type": "object", "required": ["kind", "bytes", "percent"]}},
+        "skipped": {"type": "array", "items": {"type": "string"}}
+      }
     }
   }
 }

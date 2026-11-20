@@ -74,7 +74,7 @@
         "type": "object",
         "required": ["kind", "path", "sha256", "bytes", "schema", "content_type", "required"],
         "properties": {
-"kind": {"type": "string", "description": "taxonomy | channels | identity | dictionary | guide_map | events:YYYY-MM-DD | events:<history_from> (optional, required false, previous London day, contract 4.6) | events_extra:YYYY-MM-DD (1.6, optional, tier extra) | today | live (1.6, optional, sli.live/1) | standings:<competition_id> (optional, sli.standings/1, capability standings) | health | (future kinds: ignore)"},
+          "kind": {"type": "string", "description": "taxonomy | channels | identity | dictionary | guide_map | events:YYYY-MM-DD | events:<history_from> (optional, required false, previous London day, contract 4.5) | events_extra:YYYY-MM-DD (1.6, optional, tier extra) | today | live (1.6, optional, sli.live/1) | standings:<competition_id> (optional, sli.standings/1, capability standings) | channel_hints (S2, optional, sli.channel-hints/1) | health | dictionary:uk-eu, dictionary:world-<region>[-n] (dictionary parts, only when the dictionary exceeds the 8 MiB reader cap) | guide_map:<n> (guide map parts, same rule) | (future kinds: ignore)"},
           "path": {"type": "string", "pattern": "^v1/assets/[a-z_]+/[0-9a-f]{24}\\.json$"},
           "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "bytes": {"type": "integer", "minimum": 1},
@@ -84,7 +84,11 @@
           "date": {"type": "string"},
 "competition_id": {"type": "string", "description": "standings:<competition_id> assets only"},
           "records": {"type": "integer"},
-          "history": {"type": "boolean", "description": "Contract 4.5, optional: true on the events:<history_from> asset"}
+          "history": {"type": "boolean", "description": "Contract 4.5, optional: true on the events:<history_from> asset"},
+          "part": {"type": "object", "description": "Optional. Present on dictionary:* and guide_map:<n> assets: one part of a document too large for one reader asset (id, index, of, merge rule). `legacy_alias: true` marks the plain `dictionary` kind that points at the same file as dictionary:uk-eu.",
+                   "required": ["id", "index", "of"],
+                   "properties": {"id": {"type": "string"}, "index": {"type": "integer", "minimum": 1}, "of": {"type": "integer", "minimum": 1},
+                                  "merge": {"type": "string"}, "legacy_alias": {"type": "boolean"}}}
         }
       }
     },

@@ -92,7 +92,8 @@ class GoldenFixtureContractTests(unittest.TestCase):
                                                                                 return_value=big):
             manifest, _files = fixtures_tool.build()
         kinds = {a["kind"] for a in manifest["assets"]}
-        self.assertNotIn("dictionary", kinds)                     # optional: skipped, the TV keeps everything else
+        # 0.3.25: not dropped but published as parts, each under the cap (see tests/test_ops_hardening.py).
+        self.assertTrue(any(k.startswith("dictionary:uk-eu") for k in kinds))
         self.assertIn("guide_map", kinds)
         self.assertTrue(all(a["bytes"] <= 60_000 for a in manifest["assets"]))
         with patch.object(feed, "MAX_READER_ASSET_BYTES", 1_000):
