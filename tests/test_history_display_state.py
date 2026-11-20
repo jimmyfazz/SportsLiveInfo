@@ -105,7 +105,7 @@ class TimePrecisionAndGuaranteeTests(unittest.TestCase):
                                                 end_utc="2026-07-15T14:00:00+00:00"), at=NOW)
             self.assertEqual(out["start_utc"], "2026-07-14T23:00:00+00:00", precision)     # 00:00 on 15 July, London
             self.assertNotIn("end_utc", out)
-            self.assertEqual(out["expected_end_utc"], "2026-07-15T01:00:00+00:00")        # sport default placeholder
+            self.assertEqual(out["expected_end_utc"], "2026-07-15T01:00:00Z")              # sport default placeholder
             self.assertEqual(out["display_state"], "tbc")
         confirmed = feed._event_public(self.event(start_utc="2026-07-15T12:00:00+00:00"))
         self.assertEqual(confirmed["start_utc"], "2026-07-15T12:00:00+00:00")             # scheduled times untouched

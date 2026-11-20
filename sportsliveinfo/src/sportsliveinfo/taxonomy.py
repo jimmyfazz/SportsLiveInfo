@@ -472,7 +472,9 @@ def sport_order(sport):
 EXPECTED_MINUTES = {
     "football": 120, "rugby_union": 120, "rugby_league": 120, "rugby": 120, "tennis": 180, "golf": 360,
     "darts": 240, "snooker": 240, "boxing": 240, "basketball": 150, "ice_hockey": 165, "american_football": 210,
-    "baseball": 210, "handball": 120, "volleyball": 150,
+    "baseball": 210,
+    "horse_racing": 300, "cycling": 300, "mma": 240,
+    "aussie_rules": 150, "handball": 100, "netball": 90, "volleyball": 120,
 }
 DEFAULT_EXPECTED_MINUTES = 180
 _CRICKET_MINUTES = (("test", 450), ("first class", 450), ("odi", 480), ("list a", 480), ("t20", 240), ("t10", 240),

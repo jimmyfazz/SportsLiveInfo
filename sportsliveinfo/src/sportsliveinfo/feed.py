@@ -196,10 +196,10 @@ def standings_rights(docs):
                         for src in sorted({d["source"] for d in docs}) if src in ATTRIBUTION]}
 
 
-LIVE_MAX_AGE = timedelta(minutes=45)
+LIVE_MAX_AGE = linking.LIVE_MAX_AGE
 LIVE_LANE_INTERVAL_MINUTES = 15       # published in refresh.live_lane; applies only while events are in play
 LIVE_QUIET_SLOT_GUARD_MINUTES = 3     # the lane stays quiet this long either side of a scheduled refresh
-LIVE_END_GRACE = timedelta(minutes=30)
+LIVE_END_GRACE = linking.LIVE_END_GRACE
 
 
 def live_until(status, observed_at, start_utc, expected_end_utc):
@@ -585,7 +585,7 @@ def _event_public(event, private=False, observed_fallback=None, score_sources=fr
             ended = dict(event, start_utc=midnight, end_utc=None)
     if row.get("start_utc"):
         try:
-            row["expected_end_utc"] = linking.expected_end(ended).isoformat(timespec="seconds")
+            row["expected_end_utc"] = linking.expected_end(ended).strftime("%Y-%m-%dT%H:%M:%SZ")
         except (TypeError, ValueError):
             pass
     until = live_until(row.get("status_normalized"), row["status_observed_at"], row.get("start_utc"),
@@ -976,7 +976,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                       if isinstance(src, str) and src not in approved})
     by_day, extra_by_day = {}, {}
     for event in events:
-        day = datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date().isoformat()
+        day = datetime.fromisoformat(event["start_utc"].replace("Z", "+00:00")).astimezone(LONDON).date().isoformat()
         (by_day if event["tier"] == "core" else extra_by_day).setdefault(day, []).append(event)
     today = now.astimezone(LONDON).date()
     window = [(today + timedelta(days=i)).isoformat() for i in range(8)]
