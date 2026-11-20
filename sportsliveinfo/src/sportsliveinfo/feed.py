@@ -17,10 +17,11 @@ release:
 import hashlib
 import json
 import re
+from collections import namedtuple
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from . import __version__, linking, providers, taxonomy
+from . import __version__, hints, link_report, linking, providers, taxonomy
 from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, REGIONAL_PARENTS, REGIONAL_RULES, SERVICES, SOURCE_ID_CROSSWALK
 
 FORMAT_MAJOR, FORMAT_MINOR = 1, 6  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset;
@@ -389,7 +390,20 @@ def _crests_public(event):
     return out if any(out) else None
 
 
-def _event_public(event, private=False, observed_fallback=None, score_sources=frozenset(), crests=False):
+# Link policy (S2). `binds_rule`: "narrow" (default) or "legacy" (kill switch); `own_epg`: a broadcaster's own EPG family
+# corroborates its own channels; `rights_prior`: publish rights-holder prior links (off until the owner enables it).
+LinkPolicy = namedtuple("LinkPolicy", "binds_rule own_epg rights_prior", defaults=("narrow", True, False))
+
+
+def link_policy(conf):
+    """The link policy from the App config. An unknown ``binds_rule`` falls back to the default ("narrow")."""
+    conf = conf or {}
+    rule = conf.get("binds_rule")
+    return LinkPolicy(rule if rule in linking.BINDS_RULES else "narrow", conf.get("own_epg_corroboration") is not False,
+                      conf.get("rights_holder_prior") is True)
+
+
+def _event_public(event, private=False, observed_fallback=None, score_sources=frozenset(), crests=False, policy=None):
     row = {k: event[k] for k in EVENT_FIELDS if k != "participant_crests" and k in event
            and event[k] not in (None, "", [])}
     refs = _crests_public(event) if crests else None
@@ -420,9 +434,12 @@ def _event_public(event, private=False, observed_fallback=None, score_sources=fr
     if row["broadcast_verified"]:
         row["broadcasts"] = [{k: b[k] for k in ("canonical_channel_id", "name", "coverage_start_utc", "transmission") if k in b}
                              for b in event.get("broadcasts", []) if isinstance(b, dict)]
-    links = _broadcast_links(event, private)
+    links = _broadcast_links(event, private, policy)
     if links:
         row["broadcast_links"] = links
+        hint = hints.slot_hint(event)
+        if hint:
+            row["slot_hint"] = hint
     if private and event.get("origin") == "guide_listing":
         row["origin"] = "guide_listing"     # live sport listed in the guides, no event-source fixture
     row["b1g_priority_group"] = _priority_group(event.get("sport"), event.get("competition_id"))
@@ -434,7 +451,7 @@ def _event_public(event, private=False, observed_fallback=None, score_sources=fr
     return row
 
 
-def _broadcast_links(event, private=False):
+def _broadcast_links(event, private=False, policy=None):
     """Owner decision D8: publish guide-listed event->channel links as canonical ids and confidence only.
 
     No guide channel names, programme titles or programme times are published,
@@ -444,12 +461,13 @@ def _broadcast_links(event, private=False):
     # Audit 15 Nov (P1): links found only by the looser guide-listing matcher (team words stripped, ±3 h) can name the
     # wrong match ("Man City v Liverpool" 14:30 → "Manchester United v Liverpool" 17:30). Until that matcher is as
     # strict as the main one they stay in the owner's private feed and are never published publicly.
+    policy = policy or LinkPolicy()
     if not private and event.get("broadcast_status") == "guide_listing_match":
         return []
     links = []
     # Published best first (linking.candidate_rank); readers keep this order and use `binds`, so ranking and binding
     # are decided here and improve without a reader update.
-    for candidate in linking.rank_candidates(event.get("broadcast_candidates") or [], event):
+    for candidate in linking.rank_candidates(event.get("broadcast_candidates") or [], event, policy.own_epg):
         if not candidate.get("canonical_channel_id"):
             continue
         link = {"canonical_channel_id": str(candidate["canonical_channel_id"]),
@@ -457,11 +475,13 @@ def _broadcast_links(event, private=False):
                 "coverage": candidate.get("coverage") or "network",
                 "confidence": "high" if candidate.get("match_confidence") == "high" else "medium",
                 "guides": len(candidate.get("epg_sources") or [])}
-        if linking.guide_corroborated(event, candidate):
-            # Contract sli/1.6 §4: strict match, same slot, curated channel, two independent guide families.
-            # Still not "verified": broadcast_verified is reserved for provider or official evidence.
+        rule = linking.corroboration_rule(event, candidate, policy.own_epg)
+        if rule:
+            # Contract sli/1.6 §4: strict match, same slot, curated channel, two independent guide families (or, since
+            # S2, the broadcaster's own EPG for its own channel). Still not "verified": broadcast_verified is
+            # reserved for provider or official evidence.
             link["status"] = "guide_corroborated"
-            link["verification"] = linking.CORROBORATION_RULE
+            link["verification"] = rule
         if candidate.get("parent_channel_id"):
             link["parent_channel_id"] = str(candidate["parent_channel_id"])
         if candidate.get("not_on"):
@@ -471,9 +491,20 @@ def _broadcast_links(event, private=False):
                 if candidate.get(field):
                     link[field] = str(candidate[field])[:120]
         # May this link name the channel that shows the event ("on now", Sports Today)? Weaker links are "may be on".
-        link["binds"] = link["status"] == "guide_corroborated" or link["confidence"] == "high"
+        # Contract §4.3: corroborated, or high confidence AND a curated channel of the owner's or the event's home market.
+        link["home_market"] = linking.home_market_link(event, candidate)
+        link["binds"] = linking.link_binds(event, candidate, rule is not None, policy.binds_rule)
         link["rank"] = len(links) + 1
         links.append(link)
+    if policy.rights_prior and not any(link["binds"] for link in links):
+        # A prior, never evidence: suggested only when nothing binds, never binds, ranked after every real link.
+        home = linking.event_home_markets(event)
+        for channel in hints.rights_holder_prior(event):
+            if any(link["canonical_channel_id"] == channel for link in links):
+                continue
+            links.append({"canonical_channel_id": channel, "status": "rights_holder_prior", "coverage": "network",
+                          "confidence": "medium", "guides": 0, "home_market": linking.channel_market(channel) in home,
+                          "binds": False, "rank": len(links) + 1})
     return links
 
 
@@ -590,7 +621,8 @@ def build_feed(store, now=None, previous_revision=None, private=False):
         approved = {src for e in all_events for src in (e.get("sources") or [e.get("source_id")])
                     if isinstance(src, str) and src != "guide_listing"}
     crests_apisports, crests_device = crest_settings(conf, approved)
-    events = [_event_public(e, private, observed_fallback, score_sources, crests_apisports) for e in selected]
+    policy = link_policy(conf)
+    events = [_event_public(e, private, observed_fallback, score_sources, crests_apisports, policy) for e in selected]
     omitted = sorted({src for e in all_events if e.get("origin") != "guide_listing"
                       for src in (e.get("sources") or [e.get("source_id")])
                       if isinstance(src, str) and src not in approved})
@@ -618,6 +650,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
 
     add("taxonomy", taxonomy_document(), "sli.taxonomy/1", True)
     add("channels", channels_document(), "sli.channels/1", True)
+    add("channel_hints", hints.channel_hints_document(), hints.SCHEMA, False)
     identity_doc = identity_document(store)
     if identity_doc:
         add("identity", identity_doc, "sli.identity/1", False)
@@ -655,7 +688,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                                      for e in selected if e.get("id") in published_ids], now=now)
     if live_doc:
         add("live", live_doc, "sli.live/1", False, records=len(live_doc["events"]))
-    add("health", health_document(store, conf, snapshots), "sli.health/1", False)
+    add("health", health_document(store, conf, snapshots, selected, private), "sli.health/1", False)
 
     schedule = sorted(conf.get("schedule", []))
     # Revision = data assets + meaningful manifest settings. The health asset is
@@ -691,7 +724,10 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                           "link_order": "best_first",
                           "link_rule": "broadcast_links are published best first (rank 1 = best); keep that order. A "
                                        "link with binds=true may name the channel showing the event; binds=false is "
-                                       "'may be on' only",
+                                       "'may be on' only. binds is true for a guide-corroborated link, or a "
+                                       "high-confidence curated channel of the owner's or the event's home market "
+                                       "(home_market=true); a status you do not know is guide_listed_unverified",
+                          "binds_rule": policy.binds_rule,
                           "live_until_rule": "when an event (or its live-asset row) has live_until_utc, show LIVE only "
                                              "while start_utc <= now < live_until_utc; without it apply live_state_rule",
                           "live_max_age_minutes": int(LIVE_MAX_AGE.total_seconds() // 60),
@@ -708,6 +744,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
         "capabilities": ["taxonomy", "channel_registry", "channel_families", "guide_catalogue", "events_by_day",
                          "today", "source_health", "fixture_corroboration", "status_observed_at", "event_tiers"]
                         + (["channel_identity"] if identity_doc else [])
+                        + ["channel_hints"]
                         + (["channel_dictionary"] if dictionary_doc else [])
                         + (["guide_map"] if guide_map_doc else [])
                         + (["live_status"] if live_doc else [])
@@ -787,7 +824,7 @@ def _interval_minutes(schedule):
     return max(gaps)
 
 
-def health_document(store, conf, snapshots):
+def health_document(store, conf, snapshots, events=None, private=False):
     jobs = store.recent_jobs(300)
     latest = {}
     for job in jobs:
@@ -813,5 +850,12 @@ def health_document(store, conf, snapshots):
                            "recognised_services": q.get("matched_canonical_channels", []),
                            "families": {k: {"channels": v["channels"], "full_24h": v["full_24h"]} for k, v in q.get("families", {}).items()},
                            "analysed_at": q.get("analysed_at")})
-    return {"schema": "sli.health/1", "sources": rows, "guides": guides,
-            "note": "Measured on the SportsLiveInfo host; no programme text, URLs with credentials or error payloads."}
+    document = {"schema": "sli.health/1", "sources": rows, "guides": guides,
+                "note": "Measured on the SportsLiveInfo host; no programme text, URLs with credentials or error payloads."}
+    if events is not None:
+        # S2 (optional): why events have no channel link, and what the narrow binds rule changes. Counts and ids only.
+        policy = link_policy(conf)
+        document["link_coverage"] = link_report.link_coverage(events, private=private, tier_of=event_tier)
+        document["binds_dry_run"] = dict(link_report.dry_run_binds(events, private=private, own_epg=policy.own_epg),
+                                         active_rule=policy.binds_rule)
+    return document

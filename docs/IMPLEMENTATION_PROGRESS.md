@@ -508,3 +508,16 @@ Gate: `python3 -m compileall -q sportsliveinfo/src tests` and `PYTHONPATH=sports
 
 **Home Assistant verification: NOT RUN.** After the owner merges and updates: confirm the watchdog request from the Supervisor is accepted by the Ingress address check (`/healthz?scope=liveness` returns 200, no restart loop); approve the new Home Assistant API permission; check that `persistent_notification.create` through `http://supervisor/core/api` works (for example stop publishing by revoking the token, or set a tiny `stall_threshold_hours` and wait past a slot) and that the notification dismisses on recovery; confirm the token-expiry header appears for the fine-grained token.
 
+
+## Narrow binds, channel hints, link coverage (branch `feat/channel-hints-and-binds`, from integration/all 13a8994, 20 Nov 2026)
+
+Root cause (binds): the 0.3.24 rule bound any link whose identity confidence was "high", but "high" only says the guide channel was identified well, so a single foreign guide listing (NBCUniverso.us, hk.bein.*, nz.sky.sport.*) could name the channel for a German or European fixture. Root cause (coverage): the per-event gap reasons existed only in the Home Assistant snapshot, and guide-title matching required every distinctive feed token, so "1. FC Koeln" vs "Köln", "Bayer 04 Leverkusen" vs "Leverkusen" or "Borussia Dortmund" vs "Dortmund" never linked.
+
+Changes: `linking.py` (`link_binds`, `event_home_markets`, `corroboration_rule`/own-EPG, name aliases and `_CLUB_NUMBER`), `feed.py` (`LinkPolicy`, `home_market`, `slot_hint`, `channel_hints` asset, health additions, `compatibility.binds_rule`), `storage.py` (`binds_rule`, `own_epg_corroboration`, `rights_holder_prior`), new `hints.py`, `link_report.py`, `tools/link_report.py`, schemas, contract §4.3.
+
+Measured (labelled fixtures, `tests/test_binds_hints_coverage.py`):
+- Dry run on a stored synthetic snapshot of the report's cases: 8 links, binds legacy 8 -> narrow 3, demoted 5 (hk 2, ie 1, nz 1, us 1; 4 foreign_market, 1 not_curated_channel), false->true 0. Golden feed fixture: 1 link, 0 demoted, corroborated count unchanged (1).
+- Guide-title name cases: 10/23 correct before, 23/23 after (13 gaps closed, 9 must-not-match cases still unlinked).
+- Gate: `python3 -m compileall -q sportsliveinfo/src tests` and `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests`: 472 tests pass (442 + 30 new). Golden fixtures regenerated.
+
+NOT RUN: the dry run and gap histogram on the real Home Assistant snapshot (run `tools/link_report.py --db <App sqlite>` there; the real 11/121 reasons are unknown until then), copying the regenerated `schemas/fixtures/sli-v1` into B1's `sli-v1-6` test resources, any B1G reader change (it ignores `home_market`, `slot_hint`, `channel_hints`; it already uses `binds` as published), a deploy or publish. Version not bumped. `rights_holder_prior` ships OFF.

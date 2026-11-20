@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sli.channel-hints/1",
+  "title": "Channel hints: sports class, tier and per-sport broadcaster order",
+  "description": "Optional asset (capability channel_hints). Decisions B1G used to hard-code (keyword tiers, broadcasterRank) published as data from the curated registry. Hints only: never evidence that an event is on a channel. Readers MUST ignore unknown fields and fall back to their own tiers when the asset is absent or a channel has no entry.",
+  "type": "object",
+  "required": [
+    "schema",
+    "as_of",
+    "tiers",
+    "broadcasters",
+    "channels",
+    "broadcaster_rank",
+    "competition_rights",
+    "rules"
+  ],
+  "properties": {
+    "schema": {
+      "const": "sli.channel-hints/1"
+    },
+    "as_of": {
+      "type": "string"
+    },
+    "market": {
+      "type": "string",
+      "description": "market the broadcaster_rank tables are for (GB, the owner's)"
+    },
+    "tiers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "broadcasters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "market"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "channels": {
+      "type": "object",
+      "description": "curated registry channel id -> hint",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "sports_class",
+          "tier"
+        ],
+        "properties": {
+          "sports_class": {
+            "enum": [
+              "sports",
+              "general",
+              "news",
+              "other"
+            ],
+            "description": "unknown values: treat as other"
+          },
+          "tier": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "broadcaster": {
+            "type": "string"
+          },
+          "sports": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "sports this channel is the natural home of (taxonomy sport ids)"
+          },
+          "parent": {
+            "type": "string",
+            "description": "regional service: its network service"
+          }
+        }
+      }
+    },
+    "broadcaster_rank": {
+      "type": "object",
+      "description": "taxonomy sport id (or default) -> broadcaster ids, best first, for the owner's market",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "competition_rights": {
+      "type": "object",
+      "description": "taxonomy competition id -> channel ids that usually hold the rights (a PRIOR, not evidence)",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "rules": {
+      "type": "object"
+    }
+  }
+}

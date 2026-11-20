@@ -30,7 +30,10 @@ FEATURED_TAGS = {"team:england", "team:england_women", "team:scotland", "team:wa
 _STOP = {"fc", "afc", "cf", "sc", "ac", "club", "the", "de", "cd", "ud", "sv", "fk", "sk", "bk", "if", "and",
          "v", "vs", "calcio", "1", "football", "rfc", "rlfc", "cc", "ccc",
          # Club-form prefixes that sources add or drop ("DSC Arminia Bielefeld", "TSV Havelse", "RCD Espanyol").
-         "dsc", "tsv", "vfl", "vfb", "fsv", "ssv", "spvgg", "rcd"}
+         "dsc", "tsv", "vfl", "vfb", "fsv", "ssv", "spvgg", "rcd", "tsg",
+         # S2: name prefixes a guide or source drops ("Borussia Dortmund" / "Dortmund", "Eintracht Frankfurt" /
+         # "Frankfurt", "Bayer 04 Leverkusen" / "Leverkusen", "Olympique Marseille" / "Marseille", "RB Leipzig").
+         "borussia", "bor", "eintracht", "bayer", "olympique", "rb"}
 _ABBR = {"man": "manchester", "utd": "united", "spurs": "tottenham", "wolves": "wolverhampton",
          "nottm": "nottingham", "munchen": "munich", "w": "women", "womens": "women", "ladies": "women", "st": "saint",
          "frauen": "women", "damen": "women", "feminin": "women", "feminine": "women", "feminines": "women",
@@ -38,6 +41,14 @@ _ABBR = {"man": "manchester", "utd": "united", "spurs": "tottenham", "wolves": "
          # German exonyms ("1. FC Koeln" / "Cologne", "Nuernberg" / "Nuremberg", "Gladbach"). Dictionary aliases are
          # channel-name rewrites, so team-name spellings belong here.
          "cologne": "koln", "nuremberg": "nurnberg", "gladbach": "monchengladbach",
+         # S2 (link coverage): transliterated umlauts and other exonyms, so a feed's "Koeln"/"Muenchen"/"Kiev" meets a
+         # guide's "Köln"/"Munich"/"Kyiv". Exact tokens only; both sides of every comparison pass through here.
+         "koeln": "koln", "nuernberg": "nurnberg", "moenchengladbach": "monchengladbach", "mgladbach": "monchengladbach",
+         "muenchen": "munich", "duesseldorf": "dusseldorf", "fuerth": "furth", "wuerzburg": "wurzburg",
+         "wuerzburger": "wurzburger", "luebeck": "lubeck", "saarbruecken": "saarbrucken", "osnabrueck": "osnabruck",
+         "hanover": "hannover", "kiev": "kyiv", "bruges": "brugge", "prague": "praha", "vienna": "wien",
+         "moscow": "moskva", "lisboa": "lisbon", "lyonnais": "lyon", "psg": "paris saint germain",
+        
          "cymru": "wales", "lloegr": "england", "rep": "republic", "ny": "new york"}
 # Alias expansion is deliberately exact and small. Feed-provided short names are
 # also considered below; arbitrary fuzzy/substring team matching is not safe.
@@ -48,6 +59,10 @@ _TEAM_ALIASES = {
     "qpr": "queens park rangers", "nz": "new zealand", "all blacks": "new zealand",
     "springboks": "south africa", "wallabies": "australia",
     "estac troyes": "troyes", "es troyes ac": "troyes", "es troyes": "troyes", "troyes ac": "troyes",
+    # S2: whole-name aliases where one source adds or drops a word that is not a stop word.
+    "bayern munich": "bayern", "bayern munchen": "bayern", "bayern muenchen": "bayern", "fc bayern": "bayern",
+    "fc bayern munich": "bayern", "fc bayern munchen": "bayern", "fc bayern muenchen": "bayern",
+    "hertha bsc": "hertha", "hertha berlin": "hertha", "karlsruher sc": "karlsruhe", "sporting cp": "sporting lisbon",
     "yr alban": "scotland", "gogledd iwerddon": "northern ireland", "iwerddon": "ireland",
 }
 _CLUB_YEAR = re.compile(r"^(?:18|19|20)\d\d$")  # founding-year tokens ("Heidenheim 1846") are droppable, not identifying
@@ -691,9 +706,19 @@ def _clean_listing(value):
     return _LISTING_DATE.sub("", text).strip()
 
 
+# Founding numbers that a guide may drop or add ("Mainz 05", "Hannover 96", "Schalke 04", "Heidenheim 1846"). Only
+# the guide-title check ignores them, and only beside another distinctive word: the feed's "FSV Mainz 05" meets a
+# guide's "Mainz". Clock fragments ("20", "00") are not in this set.
+_CLUB_NUMBER = re.compile(r"^(?:0[4579]|9[689]|(?:18|19|20)\d\d)$")
+
+
 def _side_matches(segment, team, allowed):
     words = set(tokens(segment)) - _STOP
     distinctive = set(team) - _GENERIC - _LOW_SIGNAL_TEAM_TOKENS
+    named = {t for t in distinctive if not _CLUB_NUMBER.match(t)}
+    if named:
+        distinctive = named
+        words = {t for t in words if not _CLUB_NUMBER.match(t) or t in team}
     extra = words - set(team) - _LOW_SIGNAL_TEAM_TOKENS
     # A guide may add a club suffix the feed omits ("Cheltenham" -> "Cheltenham Town",
     # "Brighton" -> "Brighton & Hove Albion"), as same_team allows. Only when the
@@ -1119,7 +1144,7 @@ def channel_market(canonical_id):
     return "gb" if found.group(1) == "uk" else found.group(1)
 
 
-def candidate_rank(candidate, event=None):
+def candidate_rank(candidate, event=None, own_epg=True):
     """Sort key, best first, for one broadcast candidate of ``event``:
 
     1. guide-corroborated (contract sli/1.6 §4) before everything else;
@@ -1134,7 +1159,7 @@ def candidate_rank(candidate, event=None):
     cid = str(candidate.get("canonical_channel_id") or "")
     sources = candidate.get("epg_sources") or ()
     market = channel_market(cid)
-    corroborated = bool(event) and guide_corroborated(event, candidate)
+    corroborated = bool(event) and guide_corroborated(event, candidate, own_epg)
     return (0 if corroborated else 1,
             HOME_MARKETS.index(market) if market in HOME_MARKETS else len(HOME_MARKETS),
             0 if candidate.get("channel_identity_method") in CURATED_IDENTITY_METHODS else 1,
@@ -1144,12 +1169,42 @@ def candidate_rank(candidate, event=None):
             cid.casefold(), cid)
 
 
-def rank_candidates(candidates, event=None):
+def rank_candidates(candidates, event=None, own_epg=True):
     """Broadcast candidates best first (see ``candidate_rank``)."""
-    return sorted((c for c in candidates if isinstance(c, dict)), key=lambda c: candidate_rank(c, event))
+    return sorted((c for c in candidates if isinstance(c, dict)), key=lambda c: candidate_rank(c, event, own_epg))
 
 
-def guide_corroborated(event, candidate):
+# A broadcaster's own EPG is first-hand evidence for its own channels (S2, lineage audit 15 Nov 2026): the family
+# "sky_epg" is Sky's own public EPG (dp247/Freeview-EPG "src": "sky" and the M3UPT Sky files), so a strict, in-window
+# listing of a Sky channel in it needs no second family. It never covers another broadcaster's channel (Sky's EPG
+# listing of ITV1 is a carriage listing, not ITV's own), and guides of unverified lineage never qualify. Kill switch:
+# config ``own_epg_corroboration`` false (feed._link_policy) or emptying this table.
+OWN_EPG_FAMILY = {"sky_epg": ("gb.sky.",)}
+OWN_EPG_RULE = "broadcaster_own_epg_v1"
+
+
+def own_epg_listing(candidate):
+    """True when a family that is the broadcaster's own EPG lists one of that broadcaster's channels."""
+    cid = str(candidate.get("canonical_channel_id") or "")
+    families = {EPG_FAMILY.get(source, source) for source in candidate.get("epg_sources") or ()}
+    return any(family in families and cid.startswith(prefixes) for family, prefixes in OWN_EPG_FAMILY.items())
+
+
+def corroboration_rule(event, candidate, own_epg=True):
+    """The corroboration rule a candidate meets (``CORROBORATION_RULE`` or ``OWN_EPG_RULE``), else None."""
+    if not _corroboration_base(event, candidate):
+        return None
+    if len(independent_guide_families(candidate.get("epg_sources"))) >= 2:
+        return CORROBORATION_RULE
+    return OWN_EPG_RULE if own_epg and own_epg_listing(candidate) else None
+
+
+def guide_corroborated(event, candidate, own_epg=True):
+    """See ``corroboration_rule``; the free "guide_corroborated" rule (contract sli/1.6 §4) as a boolean."""
+    return corroboration_rule(event, candidate, own_epg) is not None
+
+
+def _corroboration_base(event, candidate):
     """True when a broadcast candidate meets the free "guide_corroborated" rule (contract sli/1.6 §4):
 
     * found by the strict title matcher (never the loose guide-listing matcher);
@@ -1169,9 +1224,67 @@ def guide_corroborated(event, candidate):
         kickoff, programme = _dt(event["start_utc"]), _dt(candidate["programme_start_utc"])
     except (KeyError, TypeError, ValueError):
         return False
-    if not kickoff - CORROBORATION_BEFORE <= programme <= kickoff + CORROBORATION_AFTER:
-        return False
-    return len(independent_guide_families(candidate.get("epg_sources"))) >= 2
+    return kickoff - CORROBORATION_BEFORE <= programme <= kickoff + CORROBORATION_AFTER
+
+
+# ---- binding (feed contract §4.3, S2) -------------------------------------------
+# A link "binds" when it may name the channel showing the event (Sports Today, "on now"). Legacy rule (0.3.24): guide
+# corroborated OR identity confidence high. That let weak foreign listings bind: NBCUniverso.us for Bayern v Köln,
+# hk.bein.* for a German third-tier match, nz.sky.sport.* for a European fixture, because "high" only says the guide
+# channel was identified well, not that the channel carries the event for this household.
+# Narrow rule: guide corroborated, OR (identity confidence high AND a curated registry channel AND the channel's market
+# is the owner's market or one of the event's own home markets). Config ``binds_rule``: "narrow" (default) or "legacy".
+BINDS_RULES = ("narrow", "legacy")
+_COUNTRY_MARKET = {
+    "england": "gb", "scotland": "gb", "wales": "gb", "northern ireland": "gb", "united kingdom": "gb", "uk": "gb",
+    "great britain": "gb", "britain": "gb", "ireland": "ie", "republic of ireland": "ie", "eire": "ie",
+    "france": "fr", "germany": "de", "spain": "es", "italy": "it", "portugal": "pt", "netherlands": "nl",
+    "belgium": "be", "switzerland": "ch", "austria": "at", "sweden": "se", "norway": "no", "denmark": "dk",
+    "finland": "fi", "turkey": "tr", "poland": "pl", "greece": "gr", "usa": "us", "united states": "us",
+    "us": "us", "canada": "ca", "australia": "au", "new zealand": "nz", "hong kong": "hk", "malaysia": "my",
+    "singapore": "sg", "india": "in", "south africa": "za", "georgia": "ge", "japan": "jp", "brazil": "br",
+    "argentina": "ar", "mexico": "mx",
+}
+_TAG_MARKET = {"england": "gb", "england_women": "gb", "scotland": "gb", "wales": "gb", "northern_ireland": "gb",
+               "great_britain": "gb", "ireland": "ie", "lions": "gb"}
+
+
+def event_home_markets(event):
+    """Markets whose channels may bind for ``event``: the owner's (``HOME_MARKETS``) plus the markets of the event's own
+    country (competition country, national-team tags). "World" or an unknown country adds nothing."""
+    markets = set(HOME_MARKETS)
+    country = taxonomy.norm(event.get("competition_country") or event.get("country") or "")
+    if country in _COUNTRY_MARKET:
+        markets.add(_COUNTRY_MARKET[country])
+    for tag in event.get("tags") or ():
+        if isinstance(tag, str) and tag.startswith("team:"):
+            slug = tag[5:]
+            market = _TAG_MARKET.get(slug) or _COUNTRY_MARKET.get(slug.replace("_", " "))
+            if market:
+                markets.add(market)
+    return markets
+
+
+def is_curated_candidate(candidate):
+    method = candidate.get("channel_identity_method")
+    if method is not None:
+        return method in CURATED_IDENTITY_METHODS
+    return bool(_CURATED_ID.match(str(candidate.get("canonical_channel_id") or "")))
+
+
+def home_market_link(event, candidate):
+    """True when the candidate's channel market is the owner's or one of the event's home markets."""
+    return channel_market(candidate.get("canonical_channel_id")) in event_home_markets(event)
+
+
+def link_binds(event, candidate, corroborated, rule="narrow"):
+    """May this link name the channel showing the event? ``rule`` is "narrow" (default) or "legacy" (kill switch)."""
+    high = candidate.get("match_confidence") == "high"
+    if corroborated:
+        return True
+    if rule == "legacy":
+        return high
+    return high and is_curated_candidate(candidate) and home_market_link(event, candidate)
 
 
 # ---- guide-listed live sport ------------------------------------------------

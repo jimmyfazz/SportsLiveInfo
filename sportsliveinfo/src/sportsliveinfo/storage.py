@@ -31,6 +31,13 @@ DEFAULT = {
     # Team crest references (contract sli/1.6 additive "team_crests"). Off until the owner has re-read the API-Sports
     # terms: the public feed carries no participant_crests and rights.crests.monogram_only is true.
     "publish_crest_refs": False,
+    # Link policy (contract §4.3). binds_rule "narrow" (default; "legacy" is the kill switch: the 0.3.24 rule, a link
+    # binds when its identity confidence is high). own_epg_corroboration: a broadcaster's own EPG family corroborates
+    # its own channels. rights_holder_prior: publish competition->rights-holder links (status rights_holder_prior,
+    # never binding); off until the owner enables it.
+    "binds_rule": "narrow",
+    "own_epg_corroboration": True,
+    "rights_holder_prior": False,
     "crest_device_lookup_thesportsdb": False,
    # Light live-status lane (API-Sports live boards in match hours, within a daily budget). Runs only when an
     # API-Sports key is saved and an API-Sports product is enabled; switch off here or on the Scheduler page.
@@ -168,6 +175,8 @@ class Store:
                         raise ValueError("Source is not eligible for score publication")
                     config[key] = value
                 else:
+                    if key == "binds_rule" and value not in ("narrow", "legacy"):
+                        raise ValueError("binds_rule must be narrow or legacy")
                     config[key] = value
             self._put("config", config)
             return config
