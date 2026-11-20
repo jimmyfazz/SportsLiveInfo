@@ -214,6 +214,34 @@ def status_choice(rows):
                                     str(r.get("status_observed_at") or "")))
 
 
+def _merged_crests(rows, primary):
+    """``participant_crests`` for a merged fixture, index-aligned with the primary record's ``participants``.
+
+    Each contributor that carries crests is mapped onto the primary's sides with ``same_team`` (straight or home/away
+    swapped). A side keeps a crest only when every contributor naming it agrees; an uncertain orientation, a conflict
+    or a missing match gives None for that side, never a possibly wrong crest. Returns None when no side has one."""
+    teams = primary.get("_teams") or []
+    if len(teams) != 2 or len(primary.get("participants") or []) != 2:
+        return None
+    generic = _GENERIC | _RUGBY_GENERIC if _sport_family(primary["sport"]) == "rugby" else _GENERIC
+    seen = [set(), set()]
+    for row in rows:
+        crests = row.get("participant_crests")
+        row_teams = row.get("_teams") or []
+        if (not isinstance(crests, list) or len(crests) != 2 or len(row_teams) != 2
+                or len(row.get("participants") or []) != 2):
+            continue
+        straight = same_team(row_teams[0], teams[0], generic) and same_team(row_teams[1], teams[1], generic)
+        swapped = same_team(row_teams[0], teams[1], generic) and same_team(row_teams[1], teams[0], generic)
+        if straight == swapped:
+            continue                       # neither, or both: orientation is uncertain
+        for index, crest in enumerate(crests if straight else crests[::-1]):
+            if isinstance(crest, dict) and crest.get("src") and crest.get("ref"):
+                seen[index].add((crest["src"], crest["ref"]))
+    out = [{"src": next(iter(s))[0], "ref": next(iter(s))[1]} if len(s) == 1 else None for s in seen]
+    return out if any(out) else None
+
+
 def merge_events(events):
     """Fuse duplicate fixtures across providers; keep the most precise record as primary, and take the status from
     the most advanced, most recently observed contributor."""
@@ -278,6 +306,11 @@ def merge_events(events):
         })
         if primary["start_conflict"]:
             primary["start_alternatives"] = starts
+        crests = _merged_crests(rows, primary)
+        if crests:
+            primary["participant_crests"] = crests
+        else:
+            primary.pop("participant_crests", None)
         primary.pop("_start", None)
         primary.pop("_teams", None)
         merged.append(primary)

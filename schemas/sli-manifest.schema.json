@@ -74,6 +74,18 @@
       "required": ["events", "epg_programmes", "attribution"],
       "properties": {
         "epg_programmes": {"const": "not_published"},
+        "crests": {
+          "type": "object",
+          "description": "Optional (capability team_crests). Master kill switch: crests can be switched off centrally without a TV update. References only, never images.",
+          "required": ["sources", "device_lookup", "monogram_only"],
+          "properties": {
+            "sources": {"type": "object", "properties": {"apisports": {"type": "object", "required": ["enabled", "url_template", "attribution", "cache_days"],
+              "properties": {"enabled": {"type": "boolean"}, "url_template": {"type": "string"}, "attribution": {"type": "string"}, "cache_days": {"type": "integer", "minimum": 1}}}}},
+            "device_lookup": {"type": "object", "properties": {"thesportsdb": {"type": "object", "required": ["enabled", "attribution"],
+              "properties": {"enabled": {"type": "boolean"}, "attribution": {"type": "string"}}}}},
+            "monogram_only": {"type": "boolean"}
+          }
+        },
         "attribution": {"type": "array", "items": {"type": "object", "required": ["source", "text", "licence"]}}
       }
     },

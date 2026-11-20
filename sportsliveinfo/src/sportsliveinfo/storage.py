@@ -25,6 +25,10 @@ DEFAULT = {
     "github": {"owner": "jimmyfazz", "repository": "LiveSports-EPG", "branch": "main",
                "token": "", "enabled": False, "auto_publish": False},
     "publication_approvals": [],
+    # Team crest references (contract sli/1.6 additive "team_crests"). Off until the owner has re-read the API-Sports
+    # terms: the public feed carries no participant_crests and rights.crests.monogram_only is true.
+    "publish_crest_refs": False,
+    "crest_device_lookup_thesportsdb": False,
     # Light live-status lane (API-Sports live boards in match hours, within a daily budget). Runs only when an
     # API-Sports key is saved and an API-Sports product is enabled; switch off here or on the Scheduler page.
     "live_status": True,
