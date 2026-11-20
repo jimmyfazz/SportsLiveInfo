@@ -2,6 +2,8 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.26 — 20 Nov 2026 follow-ups: blocked-publish alert, crest toggles, seeded tables review and overrides
+
 ## 0.3.25 — 20 Nov 2026 release: history, scores, crests, standings, channel hints, health alerts, ops hardening
 
 ### Follow-ups: blocked-publish alert, crest toggles, seeded-table overrides (after 0.3.25 was cut; the lead bumps the version)
