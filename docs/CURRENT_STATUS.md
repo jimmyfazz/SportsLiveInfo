@@ -34,3 +34,19 @@ PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests
 ```
 
 **Local result on `chore/defaults-owner-assertion` (20 Nov 2026):** 451 tests passed (442 baseline plus 9 in `tests/test_owner_defaults_20nov.py`). **Earlier result:** 329 tests passed on 0.3.24 (`origin/main` 8da6e83, re-run 20 Nov 2026). The 315 figure belongs to the earlier 0.3.23 run (15 Nov 2026) and is kept only in [implementation progress](IMPLEMENTATION_PROGRESS.md). CI (`verify.yml`) passes on every merged PR. See [implementation progress](IMPLEMENTATION_PROGRESS.md) for measurements and the [document index](DOCUMENTATION_INDEX.md) for earlier records.
+
+## SportsLiveInfo — 20 Nov 2026 handover (release/20nov, merged to main)
+
+Written so Claude or ChatGPT can resume. Nothing was deployed and no version file was bumped; the owner updates Home Assistant.
+
+**Branch map (all merged into `release/20nov`, in this order):** `integration/all` (live-lane expiry and publish regression gate, cross-source dedupe, settle pass, F1 and cricket fixes, crest refs, scores, health alerts, rights docs) → `feat/history-display-state` (yesterday asset `events:<history_from>`, `display_state`, `state_until_utc`, `finished_at_utc`, guaranteed `competition_id`; contract 4.5) → `feat/event-metadata-ranking` (icons, short names, participant ids, competition logos, `feature_rank`, PPV, F1 weekends; contract 4.3) → `feat/standings-asset` (optional `standings:<competition_id>` assets; contract 4.6, kill switch `publish_standings`) → `chore/defaults-owner-assertion` (fresh-install defaults: scores for `api_sports` and `football_data`, crest refs on) → `docs/runbook-and-consolidation` (`docs/RUNBOOK.md`) → `feat/channel-hints-and-binds` (`channel_hints` asset, narrow `binds` rule with `binds_rule: legacy` kill switch, link coverage and binds dry run in health) → `fix/ops-hardening` (collection deadline, asset size budget with 80% alert, dictionary and guide-map parts above the 8 MiB reader cap).
+
+**Open items (owner or next agent):**
+- Defaults: crest refs, scores, standings and the narrow binds rule are on for fresh installs; existing installs keep their saved values. `publication_approvals` is still empty, so nothing is public until the owner ticks a source and attests. Rights rest on the owner's statement only (`docs/RIGHTS_RECORD.md`); supplier terms were not read.
+- Standings (football-data.org, API-Sports) and several score payload shapes follow public documentation and are NOT verified against a live response.
+- Home Assistant verification NOT RUN: the Supervisor watchdog request may be refused by the Ingress address check (403 risk, restart loop); check `/healthz?scope=liveness`.
+- Rollback is unsupported by the App (manual git procedure in the runbook).
+- A regression-gate refusal is recorded as publisher state `blocked` and is silent: no notification, no stall count.
+- Dictionary and guide-map parts (`dictionary:*`, `guide_map:<n>`, capabilities `channel_dictionary_parts`, `guide_map_parts`) are not read by B1G yet; the plain `dictionary` kind is kept as an alias of the UK/Europe part.
+- B1G reader changes for history, display state, metadata, standings, hints and binds are not done; B1G device acceptance not run.
+- Release gate result: compileall clean; `unittest discover` 597 tests pass at the final merge (MemoryError line from a mock is expected).

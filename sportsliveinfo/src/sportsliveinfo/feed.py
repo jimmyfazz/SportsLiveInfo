@@ -18,7 +18,7 @@ import hashlib
 import json
 import re
 from collections import namedtuple
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from . import __version__, dictionary as channel_dictionary, hints, link_report, linking, metadata, providers, standings, taxonomy
