@@ -81,10 +81,10 @@ class SourceRefreshTests(unittest.TestCase):
 
         with patch.object(self.engine, "_plan", return_value=planned), patch.object(self.engine, "_request", side_effect=request) as fetch:
             self.assertTrue(self.engine._collect_sport("api_sports", conf))
-            self.assertEqual(fetch.call_count, 7)
+            self.assertEqual(fetch.call_count, 8)   # yesterday (history) + 7 days
             fetch.reset_mock()
             self.assertTrue(self.engine._collect_sport("api_sports", conf))
-            self.assertEqual([call.args[1]["scope"] for call in fetch.call_args_list], [planned[0]["scope"], failure])
+            self.assertEqual([call.args[1]["scope"] for call in fetch.call_args_list], [planned[1]["scope"], failure])   # yesterday is cached
         self.assertIn("Provider plan or season restriction", self.store.recent_jobs(1)[0]["details"])
 
     def test_free_plan_date_window_is_learned_and_not_requested_again(self):
@@ -104,14 +104,14 @@ class SourceRefreshTests(unittest.TestCase):
         with patch.object(providers, "fetch", side_effect=fetch) as calls, patch.object(Engine, "_pace"):
             self.assertTrue(self.engine._collect_sport("api_sports_rugby", conf))
             # today and tomorrow succeed; day 3 is refused and teaches the window; days 4-7 are never requested
-            self.assertEqual(calls.call_count, 3)
+            self.assertEqual(calls.call_count, 4)   # yesterday, today, tomorrow; day 3 is refused
         job = self.store.recent_jobs(1)[0]
         self.assertEqual(job["state"], "no_events_reported")
         self.assertIn("outside the provider plan", job["details"])
         self.assertEqual(self.engine._plan_window("api_sports_rugby"), (-1, 1))
         # The next full discovery plans only the allowed days.
         days = self.engine._days("api_sports_rugby", None, today)
-        self.assertEqual(days, [today, today + timedelta(days=1)])
+        self.assertEqual(days, [today - timedelta(days=1), today, today + timedelta(days=1)])
         snapshot = self.store.snapshot("sports:api_sports_rugby")["data"]
         self.assertIsNotNone(snapshot["full_discovery_at"])
 
@@ -128,7 +128,7 @@ class SourceRefreshTests(unittest.TestCase):
                                                   "learned_at": (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()})
         self.assertIsNone(self.engine._plan_window("api_sports"))
         today = datetime.now(LONDON).date()
-        self.assertEqual(len(self.engine._days("api_sports", None, today)), 7)
+        self.assertEqual(len(self.engine._days("api_sports", None, today)), 8)
 
     def test_thesportsdb_competitions_cover_the_week_once_a_day(self):
         """Per-competition day requests fill the week ahead; later runs the same day ask for today only."""

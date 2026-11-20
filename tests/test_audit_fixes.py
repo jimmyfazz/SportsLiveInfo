@@ -233,8 +233,8 @@ class EngineTests(StoreCase):
         old = {"data": {"full_discovery_at": (datetime.now(timezone.utc) - timedelta(hours=26)).isoformat()}}
         legacy = {"updated_at": datetime.now(timezone.utc).isoformat(), "data": {}}
         self.assertEqual(len(engine._days("api_sports", fresh, today)), 1)
-        self.assertEqual(len(engine._days("api_sports", old, today)), 7)
-        self.assertEqual(len(engine._days("api_sports", legacy, today)), 7, "a recent today-only write must not suppress discovery")
+        self.assertEqual(len(engine._days("api_sports", old, today)), 8)   # yesterday (history) + 7
+        self.assertEqual(len(engine._days("api_sports", legacy, today)), 8, "a recent today-only write must not suppress discovery")
 
     def test_future_fixture_retained_after_repeated_incomplete_responses(self):
         self.store.configure({"setup_complete": True, "sports": {"jolpica": False, "openf1": True}})

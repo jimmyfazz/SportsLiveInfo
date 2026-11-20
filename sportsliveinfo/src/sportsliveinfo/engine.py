@@ -30,6 +30,8 @@ LONDON = ZoneInfo("Europe/London")
 PACING = {"thesportsdb": 2.1, "football_data": 6.5, **{n: 6.1 for n in providers.SPORTS if n.startswith("api_sports")}}
 # TheSportsDB: whole-sport day requests cover today only (the free key returns 3 events per request, so later days
 # added little); the week ahead comes from per-competition requests (providers.THESPORTSDB_LEAGUES).
+HISTORY_DAYS = 1                 # London days before today kept for the history asset (contract §4.5)
+SNAPSHOT_RETENTION_DAYS = 3     # source records older than this are dropped (yesterday and the day before stay)
 DAY_HORIZON = {**{n: 7 for n in providers.SPORTS if n.startswith("api_sports")}, "thesportsdb": 1}
 SAFE_ERRORS = (ValueError, RuntimeError, TimeoutError, OSError, EOFError,
                json.JSONDecodeError, TypeError, KeyError, OverflowError, ET.ParseError)
@@ -328,6 +330,11 @@ class Engine:
         # Full multi-day discovery once per London day (and at most every 20 h); other runs refresh today only.
         recent = self._full_discovery_recent(previous, today)
         days = [today] if recent else [today + timedelta(days=i) for i in range(DAY_HORIZON.get(name, 1))]
+        if not recent and name.startswith("api_sports") and DAY_HORIZON.get(name, 1) > 1:
+            # Yesterday's last known status for the feed's history asset (contract §4.5): one more request per
+            # product, in the first full discovery of each London day only; the learned plan window drops it when
+            # the plan does not cover it, and the product's quota reserve applies as for every other day.
+            days.insert(0, today - timedelta(days=HISTORY_DAYS))
         window = self._plan_window(name)
         if window:
             first, last = window
@@ -377,7 +384,8 @@ class Engine:
                 plan.append(dict(url="%s/%s/%d" % (base, league, season), scope="league:" + league,
                                  decode=partial(providers.openligadb_events, league=league), max_bytes=7_000_000))
         elif name == "football_data":
-            query = urllib.parse.urlencode({"dateFrom": today.isoformat(), "dateTo": (today + timedelta(days=7)).isoformat()})
+            query = urllib.parse.urlencode({"dateFrom": (today - timedelta(days=HISTORY_DAYS)).isoformat(),
+                                            "dateTo": (today + timedelta(days=7)).isoformat()})
             plan.append(dict(url=base + "?" + query, headers={"X-Auth-Token": key}, scope="range",
                              decode=providers.football_data_events, max_bytes=5_000_000))
         elif name.startswith("api_sports"):
@@ -544,7 +552,7 @@ class Engine:
                 interval = timedelta(hours=12)
             elif name == "jolpica":
                 interval = timedelta(days=3) if scope == f"season:{today.year + 1}" else timedelta(hours=12)
-            elif name.startswith(("api_sports", "thesportsdb")) and scope.split("|")[0] > today.isoformat():
+            elif name.startswith(("api_sports", "thesportsdb")) and scope.split("|")[0] != today.isoformat():
                 interval = timedelta(hours=20)
             else:
                 continue
@@ -599,7 +607,7 @@ class Engine:
             state = "deferred" if deferred and not failed else "failed"
             self.store.job(name, state, detail or "No request scopes configured")
             return None if state == "deferred" else False
-        cutoff = datetime.now(timezone.utc) - timedelta(days=2)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=SNAPSHOT_RETENTION_DAYS)
         # A 200 OK with a partial free-plan response does NOT prove all other
         # fixtures in that competition/day have disappeared. Keep unexpired
         # old IDs, then allow new records for the same IDs to supersede them.
@@ -866,7 +874,8 @@ class Engine:
             for event in rows:
                 try:
                     local_day = datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date()
-                    if london_today <= local_day <= london_today + timedelta(days=7):
+                    # Yesterday stays for the feed's history asset only (today's rail is built from today's date).
+                    if london_today - timedelta(days=HISTORY_DAYS) <= local_day <= london_today + timedelta(days=7):
                         kept.append(event)
                 except (ValueError, KeyError, TypeError):
                     continue

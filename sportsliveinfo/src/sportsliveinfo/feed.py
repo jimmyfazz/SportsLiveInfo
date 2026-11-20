@@ -162,6 +162,86 @@ def _z(value):
         return None
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+# Display state (contract §4.5): decided here from the status, the clock and the observation time, so readers do not
+# re-implement the clock rules. ``state_until_utc`` says when the published state expires.
+DISPLAY_STATES = ("upcoming", "starting_soon", "live", "should_be_on", "finished", "postponed", "cancelled", "tbc")
+STARTING_SOON = timedelta(minutes=30)
+UNCONFIRMED_START = ("date_only", "time_tbc")
+DISPLAY_STATE_RULE = (
+    "display_state is computed by SportsLiveInfo (day assets: as of the collection that produced the event; live rows: "
+    "as of their build); show it as published while now < state_until_utc (absent: until the status changes). Order: postponed, cancelled, finished (finished_at_utc when known); live while "
+    "start_utc <= now < live_until_utc; tbc for date_only/time_tbc events; then the clock: upcoming until start_utc - "
+    "30 min, starting_soon until start_utc, should_be_on until expected_end_utc + 30 min, then finished without "
+    "finished_at_utc (probably finished). A reader past state_until_utc applies the same order with its own clock.")
+HISTORY_RULE = (
+    "window.history_from is the Europe/London day before today. The optional asset events:<history_from> (required "
+    "false, tier core, same schema) carries that day's events with their last known status, including finished and, "
+    "when approved and known, the final score; broadcast_links name the channels the guides listed. It is never in "
+    "today. Older days are not published. Readers use it to recognise a replay of an event that already finished.")
+TIME_PRECISION_RULE = (
+    "start_precision date_only or time_tbc: start_utc is 00:00 Europe/London of that date (23:00Z in summer, 00:00Z in "
+    "winter), never a clock time; show the date or 'time TBC', not the clock. expected_end_utc is then only the sport "
+    "default after that placeholder and must not be shown.")
+
+
+def _zdt(moment):
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_z(value):
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return moment if moment.tzinfo else None
+
+
+def london_midnight_utc(value):
+    """00:00 Europe/London on the London date of ``value`` (ISO string), as an ISO string with +00:00; None if unparsable.
+    Idempotent: the convention for date_only and time_tbc starts (contract §4.5)."""
+    moment = _parse_z(value)
+    if moment is None:
+        return None
+    day = moment.astimezone(LONDON).date()
+    return datetime.combine(day, datetime.min.time(), LONDON).astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def display_state(row, at):
+    """``{display_state, state_until_utc?, finished_at_utc?}`` for a published event row evaluated at ``at`` (aware
+    datetime), or None when the row lacks what the rule needs. The one place the rule lives (DISPLAY_STATE_RULE)."""
+    status = row.get("status_normalized") or "scheduled"
+    start, end = _parse_z(row.get("start_utc")), _parse_z(row.get("expected_end_utc"))
+    if status in ("postponed", "cancelled"):
+        return {"display_state": status}
+    if status == "finished":
+        out = {"display_state": "finished"}
+        observed = _parse_z(row.get("status_observed_at"))
+        if observed:
+            out["finished_at_utc"] = _zdt(observed)
+        return out
+    if start is None:
+        return None
+    until_live = _parse_z(row.get("live_until_utc"))
+    if status == "live" and until_live and start <= at < until_live:
+        return {"display_state": "live", "state_until_utc": _zdt(until_live)}
+    if row.get("start_precision") in UNCONFIRMED_START:
+        out = {"display_state": "tbc"}
+        next_day = datetime.combine(start.astimezone(LONDON).date() + timedelta(days=1), datetime.min.time(), LONDON)
+        if next_day > at:
+            out["state_until_utc"] = _zdt(next_day)
+        return out
+    if end is None:
+        return None
+    soon, over = start - STARTING_SOON, end + LIVE_END_GRACE
+    if at < soon:
+        return {"display_state": "upcoming", "state_until_utc": _zdt(soon)}
+    if at < start:
+        return {"display_state": "starting_soon", "state_until_utc": _zdt(start)}
+    if at < over:
+        return {"display_state": "should_be_on", "state_until_utc": _zdt(over)}
+    return {"display_state": "finished"}
+
+
 # B1G SportsPriorityStore groups. New taxonomy sports map to a group here; a
 # group B1G has never seen is appended to the user's order by the reader.
 B1G_PRIORITY_GROUP = {
@@ -389,7 +469,7 @@ def _crests_public(event):
     return out if any(out) else None
 
 
-def _event_public(event, private=False, observed_fallback=None, score_sources=frozenset(), crests=False):
+def _event_public(event, private=False, observed_fallback=None, score_sources=frozenset(), crests=False, at=None):
     row = {k: event[k] for k in EVENT_FIELDS if k != "participant_crests" and k in event
            and event[k] not in (None, "", [])}
     refs = _crests_public(event) if crests else None
@@ -399,9 +479,17 @@ def _event_public(event, private=False, observed_fallback=None, score_sources=fr
     # Contract sli/1.6 §1: when the status was last observed (always present) and the typical end.
     row["status_observed_at"] = _z(event.get("status_observed_at")) or _z(observed_fallback) or "1970-01-01T00:00:00Z"
     row.pop("expected_end_utc", None)
-    if event.get("start_utc") and event.get("start_precision") != "date_only":
+    ended = event
+    if row.get("start_precision") in UNCONFIRMED_START and row.get("start_utc"):
+        # §4.5: an unconfirmed time never looks like a clock time: 00:00 Europe/London of the date, no source end.
+        midnight = london_midnight_utc(row["start_utc"])
+        if midnight:
+            row["start_utc"] = midnight
+            row.pop("end_utc", None)
+            ended = dict(event, start_utc=midnight, end_utc=None)
+    if row.get("start_utc"):
         try:
-            row["expected_end_utc"] = linking.expected_end(event).isoformat(timespec="seconds")
+            row["expected_end_utc"] = linking.expected_end(ended).isoformat(timespec="seconds")
         except (TypeError, ValueError):
             pass
     until = live_until(row.get("status_normalized"), row["status_observed_at"], row.get("start_utc"),
@@ -409,6 +497,8 @@ def _event_public(event, private=False, observed_fallback=None, score_sources=fr
     if until:
         row["live_until_utc"] = until
     row["tier"] = event_tier(event)
+    # §4.5: every event names a competition; the catch-all "<sport>.other" when the taxonomy does not know it.
+    row.setdefault("competition_id", "%s.other" % (row.get("sport") or "other"))
     # A cached event must not become a "verified broadcaster" merely
     # because an untrusted source sets a boolean. A reviewed, versioned
     # evidence rule must be attached before publishing clickable TV claims.
@@ -431,6 +521,8 @@ def _event_public(event, private=False, observed_fallback=None, score_sources=fr
                                 row["status_normalized"], final_only=True)
         if score:
             row["score"] = score        # day assets: the final score of a finished event only
+    if at is not None:
+        row.update(display_state(row, at) or {})
     return row
 
 
@@ -534,6 +626,15 @@ def live_document(store, events, now=None):
                 row["live_until_utc"] = until
                 if now is not None and datetime.fromisoformat(until.replace("Z", "+00:00")) <= now:
                     continue
+            # §4.5: the same display rule, over this row's status and the event's times.
+            precision = event.get("start_precision")
+            start = event.get("start_utc")
+            if precision in UNCONFIRMED_START and start:
+                start = london_midnight_utc(start)
+            if precision in UNCONFIRMED_START and start:
+                end = linking.expected_end(dict(event, start_utc=start, end_utc=None)).isoformat(timespec="seconds")
+            row.update(display_state(dict(row, start_utc=start, start_precision=precision, expected_end_utc=end),
+                                     now or _parse_z(observed)) or {})
             rows.append(row)
     if not rows:
         return None
@@ -590,7 +691,12 @@ def build_feed(store, now=None, previous_revision=None, private=False):
         approved = {src for e in all_events for src in (e.get("sources") or [e.get("source_id")])
                     if isinstance(src, str) and src != "guide_listing"}
     crests_apisports, crests_device = crest_settings(conf, approved)
-    events = [_event_public(e, private, observed_fallback, score_sources, crests_apisports) for e in selected]
+    # Day assets state the display state as of the collection that produced the events (not the build time), so a live
+    # republish leaves them byte-identical and uploads only the small `live` asset; readers past a row's
+    # state_until_utc apply the same rule (§4.5), and live rows are evaluated at the build time.
+    state_at = _parse_z(observed_fallback) or now
+    events = [_event_public(e, private, observed_fallback, score_sources, crests_apisports, at=state_at)
+              for e in selected]
     omitted = sorted({src for e in all_events if e.get("origin") != "guide_listing"
                       for src in (e.get("sources") or [e.get("source_id")])
                       if isinstance(src, str) and src not in approved})
@@ -600,6 +706,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
         (by_day if event["tier"] == "core" else extra_by_day).setdefault(day, []).append(event)
     today = now.astimezone(LONDON).date()
     window = [(today + timedelta(days=i)).isoformat() for i in range(8)]
+    history_day = (today - timedelta(days=1)).isoformat()
 
     assets, files, skipped = [], {}, []
 
@@ -627,6 +734,11 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     guide_map_doc = guide_map_document(store)
     if guide_map_doc:
         add("guide_map", guide_map_doc, "sli.guide-map/1", False)
+    # §4.5 history: yesterday's core events with their last known status; never part of today.
+    history_rows = sorted(by_day.get(history_day, []), key=lambda e: (e["start_utc"], e["id"]))
+    add("events:" + history_day, {"schema": "sli.events-day/1", "date": history_day, "timezone": "Europe/London",
+                                  "events": history_rows}, "sli.events-day/1", False, date=history_day,
+        records=len(history_rows), history=True)
     for day in window:
         rows = sorted(by_day.get(day, []), key=lambda e: (e["start_utc"], e["id"]))
         add("events:" + day, {"schema": "sli.events-day/1", "date": day, "timezone": "Europe/London", "events": rows},
@@ -694,19 +806,25 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                                        "'may be on' only",
                           "live_until_rule": "when an event (or its live-asset row) has live_until_utc, show LIVE only "
                                              "while start_utc <= now < live_until_utc; without it apply live_state_rule",
+                          "display_state_rule": DISPLAY_STATE_RULE,
+                          "history_rule": HISTORY_RULE,
+                          "time_precision_rule": TIME_PRECISION_RULE,
+                          "starting_soon_minutes": int(STARTING_SOON.total_seconds() // 60),
                           "live_max_age_minutes": int(LIVE_MAX_AGE.total_seconds() // 60),
                           "live_end_grace_minutes": int(LIVE_END_GRACE.total_seconds() // 60)},
         "revision": revision, "previous_revision": previous_revision,
         "generated_at": now.isoformat(timespec="seconds"),
         "publisher": {"app": "SportsLiveInfo", "version": __version__},
-        "timezone_reference": "Europe/London", "window": {"from": window[0], "to": window[-1]},
+        "timezone_reference": "Europe/London",
+        "window": {"from": window[0], "to": window[-1], "history_from": history_day},
         "refresh": {"schedule_europe_london": schedule, "expected_interval_minutes": interval,
                     "reader_poll_minutes": 30, "stale_after_hours": 30,
                     "live_stale_after_minutes": int(LIVE_MAX_AGE.total_seconds() // 60),
                     "live_lane": live_lane_refresh(store, conf),
                     "expires_at": (now + timedelta(hours=48)).isoformat(timespec="seconds")},
         "capabilities": ["taxonomy", "channel_registry", "channel_families", "guide_catalogue", "events_by_day",
-                         "today", "source_health", "fixture_corroboration", "status_observed_at", "event_tiers"]
+                         "today", "source_health", "fixture_corroboration", "status_observed_at", "event_tiers",
+                         "event_history", "display_state"]
                         + (["channel_identity"] if identity_doc else [])
                         + (["channel_dictionary"] if dictionary_doc else [])
                         + (["guide_map"] if guide_map_doc else [])

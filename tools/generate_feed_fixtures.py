@@ -58,6 +58,11 @@ SNAPSHOTS = {
         _e(id="api-sports:9007", source_id="api_sports", sport="football", competition="Liga Nacional",
            competition_country="Honduras", title="Olimpia v Motagua", participants=["Olimpia", "Motagua"],
            start_utc="2026-11-14T20:00:00+00:00", status_normalized="scheduled"),
+        # Contract 1.6 history (§4.5): yesterday's match, last known status finished (read at the 04:00 discovery).
+        _e(id="api-sports:9010", source_id="api_sports", sport="football", competition="Premier League", competition_code="as:39",
+           competition_country="England", title="Everton v Fulham", participants=["Everton", "Fulham"],
+           start_utc="2026-11-13T15:00:00+00:00", status="FT", status_normalized="finished",
+           status_observed_at="2026-11-14T04:00:00+00:00"),
     ],
     "api_sports_rugby": [
         _e(id="api-sports-rugby:301", source_id="api_sports_rugby", sport="rugby", competition="Autumn Nations Series",
@@ -77,6 +82,10 @@ SNAPSHOTS = {
     "thesportsdb": [
         _e(id="thesportsdb:6001", source_id="thesportsdb", sport="Darts", competition="Grand Slam of Darts", title="Luke Littler vs Luke Humphries",
            participants=["Luke Littler", "Luke Humphries"], start_utc="2026-11-14T19:00:00+00:00", status_normalized="scheduled"),
+        # §4.5 time precision: the provider gave only a date (stored at noon UTC); the feed publishes 00:00 Europe/London.
+        _e(id="thesportsdb:6002", source_id="thesportsdb", sport="Darts", competition="Players Championship Finals",
+           title="Players Championship Finals", start_utc="2026-11-16T12:00:00+00:00", start_precision="date_only",
+           status_normalized="scheduled"),
     ],
     "jolpica": [
         _e(id="f1:2026:22:race", source_id="jolpica", sport="motorsport", competition="Formula 1", event_type="race", session="race",
@@ -117,6 +126,9 @@ def _schedule(channel_id, first_start, offset_minutes=0):
     return rows
 
 
+GUIDE["programmes"].append({"channel_id": "skysportsmainevent.uk", "start_utc": "2026-11-13T14:30:00+00:00",
+                            "end_utc": "2026-11-13T17:15:00+00:00", "title": "Live Premier League",
+                            "subtitle": "Everton v Fulham", "is_live": True, "is_repeat": False})
 GUIDE["programmes"] += _schedule("skysportsmainevent.uk", NOW)
 GUIDE_B = {"source_id": "epgtalk_uk",
            "channels": {"SkySpMainEvHD.uk": "UK - Sky Sports Main Event HD", "SkySpMainEv1.uk": "Sky Sports Main Event +1"},

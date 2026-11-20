@@ -46,7 +46,9 @@ class SettlePassTests(StoreCase):
         with patch("sportsliveinfo.feed.datetime", engine_module.datetime):
             doc = feed.live_document(self.store, events)
         self.assertEqual(doc["events"], [{"id": "api-sports:1", "status_normalized": "finished",
-                                          "status_observed_at": iso(LATER).replace("+00:00", "Z")}])
+                                          "status_observed_at": iso(LATER).replace("+00:00", "Z"),
+                                          "display_state": "finished",
+                                          "finished_at_utc": iso(LATER).replace("+00:00", "Z")}])
         usage = self.store.usage()
         self.assertEqual((usage["settle:api_sports"], usage["api_sports"]), (1, 1))
         self.assertNotIn("live:api_sports", usage)
