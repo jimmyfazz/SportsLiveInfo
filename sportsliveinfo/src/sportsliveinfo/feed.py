@@ -127,10 +127,44 @@ _YOUTH = re.compile(r"\b(?:u ?1[5-9]|u ?2[0-3]|under ?(?:1[5-9]|2[0-3])|youth|re
                     r"premier league 2|professional development)\b")
 
 
+# Tennis is core only for the top of the sport (owner decision 20 Nov 2026, CA-17): Grand Slams, ATP/WTA main tour
+# (250, 500, 1000, Finals), Davis Cup, Billie Jean King Cup, United Cup and the Olympics. ITF, Challenger, UTR,
+# WTA 125, exhibitions and any tour the taxonomy cannot name go to the extra tier.
+_TENNIS_CORE_IDS = frozenset({"tennis.australian_open", "tennis.roland_garros", "tennis.wimbledon", "tennis.us_open",
+                              "tennis.tour_finals", "tennis.davis_cup", "tennis.bjk_cup", "tennis.united_cup",
+                              "tennis.atp_tour", "tennis.wta_tour"})
+_TENNIS_MINOR = re.compile(r"\b(?:itf|challenger|utr|futures|wta 125|exhibition|junior|juniors|wheelchair|legends|"
+                           r"m\d{2,3}|w\d{2,3})\b")
+_TENNIS_OLYMPICS = re.compile(r"\bolympic")
+
+
+def tennis_tier(event):
+    name = taxonomy.norm(event.get("competition"))
+    if _TENNIS_MINOR.search(name):
+        return "extra"
+    if event.get("competition_id") in _TENNIS_CORE_IDS or _TENNIS_OLYMPICS.search(name):
+        return "core"
+    return "extra"
+
+
+def tennis_lapsed(event, at):
+    """True for a tennis row that is not live and has no final status although it is past expected end + settle grace."""
+    if event.get("sport") != "tennis" or event.get("status_normalized") in ("live", "finished", "postponed", "cancelled"):
+        return False
+    if event.get("start_precision") in UNCONFIRMED_START or not event.get("start_utc"):
+        return False
+    try:
+        return at >= linking.expected_end(event) + LIVE_END_GRACE
+    except (TypeError, ValueError):
+        return False
+
+
 def event_tier(event):
     """'core' or 'extra' (contract sli/1.6 §3)."""
     if event.get("origin") == "guide_listing":
         return "core"              # private feed: live sport the owner's guides list on a recognised channel
+    if event.get("sport") == "tennis":
+        return tennis_tier(event)
     category = event.get("category_id") or ""
     # A named taxonomy category (anything but "<sport>.other") covers named competitions, including the NFL, NBA, NHL
     # and MLB top leagues, the national-team categories and boxing PPV.
@@ -811,14 +845,21 @@ def guide_map_parts(document):
 # owner squashes the history (docs/OPERATIONS_HARDENING.md section 5) before the repository gets slow to clone.
 GROWTH_WINDOW_DAYS = 7
 GROWTH_COMMITS_PER_DAY_BUDGET = 8.0
+# Live-lane commits (a status change or the 15-minute re-stamp while play is in progress, owner decision 20 Nov 2026)
+# are counted in a separate budget: about 4 an hour for the hours a day events are in play, far above 8 a day. They
+# carry only the small live asset and the manifests, so the bytes budget still counts them. 7-day average.
+GROWTH_LIVE_COMMITS_PER_DAY_BUDGET = 60.0
 GROWTH_BYTES_PER_YEAR_BUDGET = 1_000_000_000      # about 1 GB of new blobs a year
 GROWTH_LEDGER_MAX = 800
 
 
-def growth_record(ledger, at, new_bytes, files):
-    """Ledger with one more commit appended (newest last, bounded)."""
+def growth_record(ledger, at, new_bytes, files, live=False):
+    """Ledger with one more commit appended (newest last, bounded); ``live`` marks a live-lane commit."""
     rows = [r for r in (ledger or []) if isinstance(r, dict)]
-    rows.append({"at": at, "bytes": int(new_bytes), "files": int(files)})
+    row = {"at": at, "bytes": int(new_bytes), "files": int(files)}
+    if live:
+        row["kind"] = "live"
+    rows.append(row)
     return rows[-GROWTH_LEDGER_MAX:]
 
 
@@ -831,24 +872,32 @@ def growth_report(ledger, now):
             at = datetime.fromisoformat(str(row["at"]).replace("Z", "+00:00"))
             if at.tzinfo is None:
                 at = at.replace(tzinfo=timezone.utc)
-            stamps.append((at, int(row.get("bytes", 0))))
+            stamps.append((at, int(row.get("bytes", 0)), row.get("kind") == "live"))
         except (KeyError, ValueError, TypeError):
             continue
     cutoff = now - timedelta(days=GROWTH_WINDOW_DAYS)
-    recent = [(at, size) for at, size in stamps if at >= cutoff]
-    report = {"window_days": GROWTH_WINDOW_DAYS, "commits": len(recent), "bytes": sum(size for _, size in recent),
-              "budget": {"commits_per_day": GROWTH_COMMITS_PER_DAY_BUDGET, "bytes_per_year": GROWTH_BYTES_PER_YEAR_BUDGET},
-              "per_day": None, "projected_bytes_per_year": None, "over_budget": [], "at": now.isoformat(timespec="seconds")}
+    recent = [(at, size, live) for at, size, live in stamps if at >= cutoff]
+    regular = [r for r in recent if not r[2]]
+    live_commits = len(recent) - len(regular)
+    report = {"window_days": GROWTH_WINDOW_DAYS, "commits": len(recent), "live_commits": live_commits,
+              "bytes": sum(size for _, size, _ in recent),
+              "budget": {"commits_per_day": GROWTH_COMMITS_PER_DAY_BUDGET,
+                         "live_commits_per_day": GROWTH_LIVE_COMMITS_PER_DAY_BUDGET,
+                         "bytes_per_year": GROWTH_BYTES_PER_YEAR_BUDGET},
+              "per_day": None, "live_per_day": None, "projected_bytes_per_year": None, "over_budget": [], "at": now.isoformat(timespec="seconds")}
     if not recent:
         return report
-    span = now - min(at for at, _ in recent)
+    span = now - min(at for at, _, _ in recent)
     if span < timedelta(days=1):
         return report
     span_days = min(span.total_seconds() / 86400, float(GROWTH_WINDOW_DAYS))
-    report["per_day"] = round(len(recent) / span_days, 2)
+    report["per_day"] = round(len(regular) / span_days, 2)
+    report["live_per_day"] = round(live_commits / span_days, 2)
     report["projected_bytes_per_year"] = int(report["bytes"] / span_days * 365)
     if report["per_day"] > GROWTH_COMMITS_PER_DAY_BUDGET:
         report["over_budget"].append("commits_per_day")
+    if report["live_per_day"] > GROWTH_LIVE_COMMITS_PER_DAY_BUDGET:
+        report["over_budget"].append("live_commits_per_day")
     if report["projected_bytes_per_year"] > GROWTH_BYTES_PER_YEAR_BUDGET:
         report["over_budget"].append("bytes_per_year")
     return report
@@ -904,7 +953,8 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     else:
         # Private feed, or approvals changed since the last collection: the full merge, fail-closed.
         selected = all_events
-    selected = [e if "category_id" in e else taxonomy.classify(e) for e in selected if licensed(e)]
+    selected = [e if "category_id" in e else taxonomy.classify(e) for e in selected
+                if licensed(e) and not providers.is_not_carried(e.get("sport"), e.get("competition"), e.get("title"))]
     # Legacy/unclassified snapshot rows still need category fields the schema requires.
     score_sources = score_approvals(conf)
     if private:
@@ -916,6 +966,9 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     # republish leaves them byte-identical and uploads only the small `live` asset; readers past a row's
     # state_until_utc apply the same rule (§4.5), and live rows are evaluated at the build time.
     state_at = _parse_z(observed_fallback) or now
+    # CA-17: a tennis row nobody has settled (no evidence it finished) is dropped once it is past its expected end plus
+    # the settle grace, evaluated at the collection time like the display state. It is never published as finished.
+    selected = [e for e in selected if not tennis_lapsed(e, state_at)]
     events = [_event_public(e, private, observed_fallback, score_sources, crests_apisports, at=state_at, policy=policy)
               for e in selected]
     omitted = sorted({src for e in all_events if e.get("origin") != "guide_listing"

@@ -597,3 +597,7 @@ Written so Claude or ChatGPT can resume. Nothing was deployed and no version fil
 - Dictionary and guide-map parts (`dictionary:*`, `guide_map:<n>`, capabilities `channel_dictionary_parts`, `guide_map_parts`) are not read by B1G yet; the plain `dictionary` kind is kept as an alias of the UK/Europe part.
 - B1G reader changes for history, display state, metadata, standings, hints and binds are not done; B1G device acceptance not run.
 - Release gate result: compileall clean; `unittest discover` 597 tests pass at the final merge (MemoryError line from a mock is expected).
+
+## 20 Nov 2026 — owner decisions on CA-09, CA-16, CA-17, CA-18 (branch `s5-owner-calls`, no version bump)
+
+Decisions: CA-09 no change; CA-18 live refresh 15 minutes; CA-16 wrestling and sumo removed (not moved to extra); CA-17 tennis rows without a final status dropped after expected end + 30 minutes and minor tours moved to the extra tier. Implementation and rationale are in the CHANGELOG "Unreleased" entry. Live-commit budget decision: live-lane commits are marked in the growth ledger and counted against their own 60-a-day budget, exempt from the 8-a-day budget (OPERATIONS_HARDENING section 4). Results: compileall clean; `unittest discover` passes (646 tests: 633 plus 13 in `tests/test_owner_calls_20nov.py`; MemoryError line from a mock is expected). Not verified in production: live commit volume on a Saturday, and the regression gate on the first publish after the upgrade.

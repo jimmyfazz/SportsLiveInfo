@@ -34,6 +34,7 @@ Every revision is a git commit; its new files stay in history forever. `engine._
 | Budget | Value | Why |
 |---|---|---|
 | Commits per day (7-day average) | 8 | about 3 a day is normal (04:00, 12:00, 17:00) plus live-lane changes |
+| Live-lane commits per day (7-day average) | 60 | Decision 20 Nov 2026 (CA-18): `LIVE_REFRESH` is 15 minutes, so an unchanged live status is re-committed about 4 times an hour while events are in play (a busy Saturday is 40 or more). The ledger marks these commits `kind: live`; they are exempt from the 8-a-day budget and counted against this one, so the alert cannot fire permanently just because matches are on. They are small (live asset plus manifests) and still count towards the bytes budget |
 | New blobs per year | 1 GB | audit estimate at 3 commits a day with `guide_map` counts changing every run |
 
 Over either budget health raises `feed_growth` (advisory, a Home Assistant notification); no projection is made from less than a day of history. Tests: `FeedGrowthTests`.

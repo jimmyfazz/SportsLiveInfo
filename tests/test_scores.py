@@ -355,8 +355,8 @@ class LaneScoreTests(live.LiveLaneBase):
         self.snapshot()
         self.assertEqual(self.run_lane(self.board("1H", 0, 0)), 1)
         self.assertEqual(self.obs()["score"], {"home": 0, "away": 0, "period": "1H"})
-        # Same status, same score, 15 minutes later: nothing new (no extra commit).
-        self.assertEqual(self.run_lane(self.board("1H", 0, 0), now=NOW + timedelta(minutes=15)), 0)
+        # Same status, same score, 14 minutes later: nothing new (no extra commit).
+        self.assertEqual(self.run_lane(self.board("1H", 0, 0), now=NOW + timedelta(minutes=14)), 0)
         # A goal: same status but a new observation, so the live asset is republished.
         self.assertEqual(self.run_lane(self.board("1H", 1, 0), now=NOW + timedelta(minutes=16)), 1)
         self.assertEqual(self.obs()["score"], {"home": 1, "away": 0, "period": "1H"})
@@ -387,7 +387,7 @@ class LaneScoreTests(live.LiveLaneBase):
         self.snapshot()
         self.assertEqual(self.run_lane(self.board("1H", 0, 0)), 1)
         self.assertNotIn("score", self.obs())
-        self.assertEqual(self.run_lane(self.board("1H", 1, 0), now=NOW + timedelta(minutes=15)), 0)
+        self.assertEqual(self.run_lane(self.board("1H", 1, 0), now=NOW + timedelta(minutes=14)), 0)
 
     def test_older_score_is_not_published_with_a_newer_status(self):
         self.snapshot()

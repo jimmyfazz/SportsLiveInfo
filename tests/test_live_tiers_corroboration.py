@@ -224,7 +224,7 @@ class TierTests(StoreCase):
         self.assertEqual(tier(competition="U18 Premier League", competition_country="England"), "extra")
         self.assertEqual(tier(competition="Liga Nacional", competition_country="Honduras"), "extra")
         self.assertEqual(tier(competition="Friendlies", competition_country="World", participants=["England", "Japan"]), "core")
-        self.assertEqual(tier(sport="tennis", competition="ITF M15 Example"), "core")
+        self.assertEqual(tier(sport="tennis", competition="ITF M15 Example"), "extra")      # CA-17: minor tours
         self.assertEqual(tier(sport="cricket", competition="Ranji Trophy"), "core")
         self.assertEqual(tier(sport="horse_racing", competition="Kempton"), "core")
         self.assertEqual(tier(sport="boxing", competition="Fight night", title="Main event PPV"), "core")
@@ -390,12 +390,20 @@ class LiveLaneTests(LiveLaneBase):
         self.assertEqual((observation["status_normalized"], observation["status_observed_at"]), ("live", iso(NOW)))
         usage = self.store.usage()
         self.assertEqual((usage["live:api_sports"], usage["api_sports"]), (1, 1))   # shares the product's quota
-        # Unchanged and confirmed 15 minutes ago: no new observation, so no new asset or commit.
-        self.assertEqual(self.run_lane(board((1, "2H")), now=NOW + timedelta(minutes=15)), 0)
+        # Unchanged and confirmed 14 minutes ago: no new observation, so no new asset or commit.
+        self.assertEqual(self.run_lane(board((1, "2H")), now=NOW + timedelta(minutes=14)), 0)
+        # CA-18 (owner, 20 Nov 2026): an unchanged live status is re-stamped every 15 minutes (LIVE_REFRESH), so a
+        # reader polling every 15 minutes through a 5 minute CDN cache never sees it older than 45 minutes.
+        self.assertEqual(engine_module.LIVE_REFRESH, timedelta(minutes=15))
+        self.assertLess(engine_module.LIVE_REFRESH + timedelta(minutes=5) + timedelta(minutes=15), feed.LIVE_MAX_AGE)
+        self.assertEqual(self.run_lane(board((1, "2H")), now=NOW + timedelta(minutes=15)), 1)
+        self.assertEqual(self.store._get("live_observations")["events"]["api-sports:1"]["status_observed_at"],
+                         iso(NOW + timedelta(minutes=15)))
+        self.assertEqual(self.run_lane(board((1, "2H")), now=NOW + timedelta(minutes=29)), 0)
         # Left the live board: not claimed finished, only "unknown".
         self.assertEqual(self.run_lane(board(), now=NOW + timedelta(minutes=30)), 1)
         self.assertEqual(self.store._get("live_observations")["events"]["api-sports:1"]["status_normalized"], "unknown")
-        self.assertEqual(self.store.usage()["live:api_sports"], 3)
+        self.assertEqual(self.store.usage()["live:api_sports"], 5)
 
     def test_games_products_use_the_games_live_board(self):
         self.snapshot(hockey=True)

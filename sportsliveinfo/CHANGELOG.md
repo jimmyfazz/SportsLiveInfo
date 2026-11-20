@@ -2,6 +2,14 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## Unreleased — owner decisions of 20 Nov 2026 (CA-09, CA-16, CA-17, CA-18; no version bump)
+
+- **CA-09: no change (owner).** `LIVE_DAILY_BUDGET` (40) and the live candidate gating are untouched.
+- **CA-18: `LIVE_REFRESH` 30 to 15 minutes.** An unchanged live status is re-stamped every 15 minutes, so LIVE no longer flickers (15 + 5 CDN + 15 poll is inside `LIVE_MAX_AGE` 45, which is unchanged; `refresh.live_stale_after_minutes` stays 45). No extra API calls. About 4 live commits an hour in play: the growth ledger now marks live-lane commits (`kind: live`), `feed.growth_report` gains `live_commits`, `live_per_day` and a separate `live_commits_per_day` budget of 60 (7-day average); `commits_per_day` (8) counts only the other commits, so the alert does not fire just because matches are on. Contract section 4.2, RUNBOOK section 3, OPERATIONS_HARDENING section 4.
+- **CA-16: wrestling and sumo removed.** `providers.is_not_carried` (whole words WWE, WWF, AEW, NXT, TNA, wrestling, sumo, basho in sport, league or title) drops them in `thesportsdb_events` and again in `build_feed`, so no day, extra, live or history asset (also from snapshots collected before the upgrade) carries them. Boxing, MMA/UFC, BKFC and kickboxing are untouched, and the midnight `date_only` rule is unchanged.
+- **CA-17: tennis.** (a) A tennis row with no final status is omitted from every asset once the collection time is past `expected_end_utc` + 30 minutes (`feed.tennis_lapsed`); never published as `finished`. (b) Tennis is core only for Grand Slams, ATP/WTA main tour, Davis Cup, Billie Jean King Cup, United Cup and the Olympics; ITF, Challenger, UTR, WTA 125, exhibitions and unknown tours are `extra` (`feed.tennis_tier`). Day assets are evaluated at collection time, so lapsed rows leave at the next collection, not at every live build (keeps live commits small). The first automatic publish after the upgrade may fall under the 20 % regression gate because past tennis rows disappear at once; a manual publish overrides.
+- Tests: `tests/test_owner_calls_20nov.py`; live-lane tests updated for the 15 minute re-stamp. Golden fixtures regenerated: unchanged (they hold no tennis or wrestling).
+
 ## 0.3.26 — 20 Nov 2026 follow-ups: blocked-publish alert, crest toggles, seeded tables review and overrides
 
 ### Audit 20 Nov follow-ups (SLI side of `COMBINED_AUDIT_2026-11-20`; no version bump)
@@ -12,7 +20,7 @@
 - **CA-03 dictionary budget.** Confirmed existing: parts splitter, 80% alert, plain `dictionary` alias when UK/Europe fits in one part. Added `tests/test_audit_20nov_sli.py` with the recorded live size (6,969,653 bytes, 83%) and a headroom test (fails when the recorded size plus 15% reaches the cap). B1G cannot read parts yet.
 - **CA-12 crest preview.** The Publishing page says "Crest references: OFF/ON, N of M collected events would carry / carry crests" (`feed.crest_preview`). Enabling is still owner configuration.
 - **CA-24** README, CLAUDE.md, CURRENT_STATUS and the contract header now say `sli/1.7` / 0.3.26 with the capability list.
-- Not done: CA-09, CA-18 (they trade API budget against flicker, owner decision), CA-16 (a real 00:00Z kick-off is plausible for US events), CA-17 (tennis settle, size M), CA-19.
+- Not done at that point: CA-09, CA-18, CA-16, CA-17 (decided by the owner later on 20 Nov: see the Unreleased entry above), CA-19.
 
 ## 0.3.25 — 20 Nov 2026 release: history, scores, crests, standings, channel hints, health alerts, ops hardening
 

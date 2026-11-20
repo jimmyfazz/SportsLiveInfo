@@ -105,6 +105,7 @@ There are three kinds of counter, all stored per UTC day in the `requests` table
 |---|---|---|---|
 | Sports sources | the source name, for example `api_sports` | the source's daily limit in `providers.SPORTS` | A scheduled refresh raises `QuotaExhausted`. The source is recorded as `deferred` with `Provider quota or throttling; retry after …`, or `Local daily request budget exhausted`. Last-good data is kept. |
 | Live status lane | `live:<product>` | `LIVE_DAILY_BUDGET` = 40 per product | The lane skips a product once its usage reaches the product limit minus `LIVE_RESERVE` (20). It records the note "remaining calls kept for scheduled refreshes". It is not a failed job. |
+| Live commits | `feed_growth` ledger, rows with `kind: live` | 60 a day (7-day average), separate from the 8 a day for other commits | With `LIVE_REFRESH` at 15 minutes an unchanged live status is re-stamped and committed every 15 minutes while events are in play (about 4 an hour; they carry only the small `live` asset and the manifests). They are counted in `live_commits_per_day`, never in `commits_per_day`; over 60 a day health raises `feed_growth`. |
 | Settle pass (final results) | `settle:<product>` | `SETTLE_DAILY_BUDGET` = 4 per product | At most one call an hour, and it also counts against the product quota. |
 | EPG guides | the guide name | the guide's daily limit | `Local daily guide request budget exhausted; resets at 00:00 UTC`, recorded as `deferred`. |
 

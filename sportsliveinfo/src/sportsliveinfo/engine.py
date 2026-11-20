@@ -45,7 +45,11 @@ FEED_RETAIN = 10  # published manifests (and the assets they reference) kept for
 LIVE_INTERVAL = timedelta(minutes=15)
 LIVE_DAILY_BUDGET = 40          # live calls per product per UTC day
 LIVE_RESERVE = 20               # product calls kept back for the scheduled refreshes
-LIVE_REFRESH = timedelta(minutes=30)   # re-confirm an unchanged "live" this often, so readers keep trusting it
+# Re-confirm (re-stamp) an unchanged "live" this often so readers keep trusting it. 15 minutes (owner decision 20 Nov
+# 2026, CA-18): re-stamp 15 + CDN cache 5 + TV poll 15 = 35 minutes, inside LIVE_MAX_AGE (45), so LIVE never flickers.
+# No extra provider calls (the lane already reads the board every LIVE_INTERVAL); it costs about 4 live commits an
+# hour while events are in play, counted against the separate live commit budget (feed.GROWTH_LIVE_COMMITS_PER_DAY_BUDGET).
+LIVE_REFRESH = timedelta(minutes=15)
 LIVE_RETAIN = timedelta(hours=36)
 LIVE_SLOT_GUARD = 3             # minutes either side of a scheduled refresh when the lane stays quiet
 LIVE_UNSUPPORTED_DAYS = 3       # a product that refuses live=all is not asked again for this long
@@ -231,6 +235,7 @@ class Engine:
         self._last_call = {}
         self._pace_lock = threading.Lock()
         self._publish_lock = threading.Lock()
+        self._tls = threading.local()
         self._publish_start = threading.Lock()
         self._publish_thread = None
         self._publish_outcome = None
@@ -1783,6 +1788,7 @@ class Engine:
     def _publish_job(self, trigger):
         """Run one publication and always record its outcome (Diagnostics, Publishing page, App log)."""
         LOGGER.info("Feed publication started (%s)", trigger)
+        self._tls.trigger = trigger          # lets the growth ledger tell live-lane commits from the others
         self._set_publish_status("running", "Publication in progress", trigger)
         conf = self.store.config()
         private_note = ""
@@ -1947,7 +1953,8 @@ class Engine:
             try:    # C10: one ledger entry per history commit; the health report alerts when the budget is exceeded
                 now = datetime.now(timezone.utc)
                 ledger = feed.growth_record((self.store._get("feed_growth") or {}).get("ledger"), utcnow(),
-                                            sum(len(d) for d in uploads.values()), len(uploads))
+                                            sum(len(d) for d in uploads.values()), len(uploads),
+                                            live=getattr(self._tls, "trigger", None) == "live")
                 self.store._put("feed_growth", {"ledger": ledger, "report": feed.growth_report(ledger, now)})
             except Exception:
                 LOGGER.warning("Feed growth ledger not updated")

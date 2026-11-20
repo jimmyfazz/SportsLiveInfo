@@ -263,9 +263,9 @@ def raw_reasons(snap, now, settings, active=()):
             budget.get("limit_bytes", 0) >> 20, ", ".join(names)))
     growth = snap.get("feed_growth") or {}
     if growth.get("over_budget"):
-        add("feed_growth", "The public feed repository is growing too fast (%s commits a day, about %d MB a year of history); "
+        add("feed_growth", "The public feed repository is growing too fast (%s commits a day plus %s live-lane commits, about %d MB a year of history); "
                            "squash its history (docs/OPERATIONS_HARDENING.md)" % (
-                               growth.get("per_day"), (growth.get("projected_bytes_per_year") or 0) // 1_000_000))
+                               growth.get("per_day"), growth.get("live_per_day"), (growth.get("projected_bytes_per_year") or 0) // 1_000_000))
     if snap["publish_expected"] and snap["publish_consecutive_failures"] >= PUBLISH_FAIL_THRESHOLD:
         add("publish_blocked", "Publishing failed %d times in a row (see Diagnostics on the Home Assistant page)" % snap["publish_consecutive_failures"])
     gate = snap.get("publish_gate")

@@ -1151,6 +1151,18 @@ _MIDNIGHT_STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T00:00:00(?:Z|\+00:00)?")
 _DAY_ONLY_SPORTS = {"golf", "snooker", "darts", "motorsport"}
 
 
+# Owner decision 20 Nov 2026 (CA-16): professional wrestling and sumo are not sport this feed carries (they were being
+# labelled MMA). They are removed at collection, not moved to the extra tier. Real combat sports (boxing, MMA/UFC, BKFC,
+# kickboxing) never match: only these whole words in the league, title or sport name count.
+_NOT_CARRIED = re.compile(r"\b(?:wwe|wwf|aew|nxt|tna|wrestling|sumo|basho)\b", re.I)
+
+
+def is_not_carried(*names):
+    """True for an event whose sport, competition/league or title identifies professional wrestling or sumo
+    (WWE, WWF, AEW, NXT, TNA, wrestling, sumo, basho, grand sumo). Pure; used by the decoder and the feed build."""
+    return bool(_NOT_CARRIED.search(" ".join(str(n or "") for n in names)))
+
+
 def thesportsdb_events(data):
     """TheSportsDB v1 eventsday. strTimestamp/strTime are UTC by provider convention."""
     payload = json.loads(data)
@@ -1187,6 +1199,8 @@ def thesportsdb_events(data):
             sport = row.get("strSport") or "other"
             league = row.get("strLeague") or ""
             title = row.get("strEvent") or " v ".join(participants)
+            if is_not_carried(sport, league, title):
+                continue
             if sport.casefold() == "fighting" and re.search(r"\bboxing\b", f"{league} {title}", re.I):
                 sport = "boxing"
             events.append({"id": "thesportsdb:%s" % row["idEvent"], "sport": sport,

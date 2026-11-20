@@ -36,6 +36,14 @@ PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests
 
 **Local result on `chore/defaults-owner-assertion` (20 Nov 2026):** 451 tests passed (442 baseline plus 9 in `tests/test_owner_defaults_20nov.py`). **Earlier result:** 329 tests passed on 0.3.24 (`origin/main` 8da6e83, re-run 20 Nov 2026). The 315 figure belongs to the earlier 0.3.23 run (15 Nov 2026) and is kept only in [implementation progress](IMPLEMENTATION_PROGRESS.md). CI (`verify.yml`) passes on every merged PR. See [implementation progress](IMPLEMENTATION_PROGRESS.md) for measurements and the [document index](DOCUMENTATION_INDEX.md) for earlier records.
 
+## Owner decisions, 20 Nov 2026 (implemented on main after v0.3.26, not yet released)
+
+- **CA-09: no change.** Live budget (40 a day per product) and candidate gating stay.
+- **CA-18: live refresh 15 minutes** (`LIVE_REFRESH`), `LIVE_MAX_AGE` stays 45. About 4 live commits an hour in play, tracked in a separate live budget (60 a day, 7-day average) so the `feed_growth` alert is not tripped by live commits.
+- **CA-16: wrestling and sumo removed** from the feed entirely (decoder and feed build).
+- **CA-17: tennis.** Unsettled rows dropped after expected end + 30 minutes (never published `finished`); only Grand Slams, ATP/WTA main tour, Davis Cup, BJK Cup, United Cup and Olympics are core, all other tennis is extra.
+- First automatic publish after the upgrade may be refused by the regression gate (past tennis rows vanish); publish manually once.
+
 ## SportsLiveInfo — 20 Nov 2026 handover (release/20nov, merged to main)
 
 Written so Claude or ChatGPT can resume. Nothing was deployed and no version file was bumped; the owner updates Home Assistant.
