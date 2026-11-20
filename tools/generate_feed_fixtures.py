@@ -131,6 +131,41 @@ LIVE_OBSERVATIONS = {"events": {"api-sports-rugby:301": {"status": "2H", "status
                                                          "status_observed_at": "2026-11-14T13:55:00+00:00"}}}
 
 
+# Standings (optional asset kind standings:<competition_id>): a complete synthetic Premier League table and a partial
+# Champions League league-phase table, decoded by the production football-data decoder from stub payloads.
+STANDINGS_OBSERVED = "2026-11-14T04:00:20Z"
+STANDINGS_TEAMS = ["Northtown United", "Southport Rovers", "Lake City", "River Wanderers", "Hill Hawks", "Bay Bears",
+                   "Harbour Town", "Castle Albion", "Mill Rovers", "Forest Athletic", "Bridge County", "Valley Rangers",
+                   "Moor Park", "Crown Villa", "Abbey Wanderers", "Ridge Town", "Quay City", "Dale United",
+                   "Fenland Albion", "Stone Rovers"]
+
+
+def _standings_payload(code, name, teams, *, stage="REGULAR_SEASON", group=None, matchday=12):
+    table = []
+    for i, team in enumerate(teams, 1):
+        drawn = i % 3
+        won = max(0, min(matchday - drawn, 9 - i // 2))
+        lost = matchday - won - drawn
+        table.append({"position": i, "team": {"id": 900 + i, "name": team, "shortName": team.split()[0], "tla": team[:3].upper()},
+                      "playedGames": matchday, "form": "W,D,L,W,W" if i % 2 else None, "won": won, "draw": drawn,
+                      "lost": lost, "points": won * 3 + drawn, "goalsFor": 30 - i, "goalsAgainst": 10 + i,
+                      "goalDifference": 20 - 2 * i})
+    return json.dumps({"filters": {"season": "2026"}, "competition": {"code": code, "name": name},
+                       "season": {"startDate": "2026-08-15", "endDate": "2027-05-23", "currentMatchday": matchday},
+                       "standings": [{"stage": stage, "type": "TOTAL", "group": group, "table": table},
+                                     {"stage": stage, "type": "HOME", "group": group, "table": table[:1]}]}).encode()
+
+
+def standings_snapshot():
+    from sportsliveinfo import standings
+    return {"competitions": {
+        "football.premier_league": standings.football_data_standings(
+            _standings_payload("PL", "Premier League", STANDINGS_TEAMS), "football.premier_league", STANDINGS_OBSERVED),
+        "football.champions_league": standings.football_data_standings(
+            _standings_payload("CL", "UEFA Champions League", STANDINGS_TEAMS[:3], stage="LEAGUE_STAGE", matchday=4),
+            "football.champions_league", STANDINGS_OBSERVED)}, "tried": {}}
+
+
 # sli/1.7 scores variant (schemas/fixtures/sli-v1-scores): the same feed with score_approvals set. The football fixture
 # is reported by two sources that name the sides in opposite order (football-data first), so the golden file proves the
 # score stays attached to participants[0]/[1] of the merged event; the rugby is live with a live score.
@@ -181,6 +216,7 @@ def build(scores=False):
                          "dictionary": {"iptvorg": True}, **({"score_approvals": SCORE_APPROVALS} if scores else {})})
         for name, events in snapshots.items():
             store.save_snapshot("sports:" + name, {"events": events, "source_id": name})
+        store.save_snapshot("standings", standings_snapshot())
         store.save_snapshot("epg:farleyflex", GUIDE)
         store.save_snapshot("epg-quality:farleyflex", analyze_guide(GUIDE, now=NOW))
         store.save_snapshot("epg:epgtalk_uk", GUIDE_B)

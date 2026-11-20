@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sli.standings/1",
+  "title": "League table of one competition (optional asset kind 'standings:<competition_id>', capability 'standings')",
+  "description": "The current table of one competition: season, one or more groups of rows (a single group with name null for a league table, the league phase included; named groups for cups), whether the table is complete, and where and when it was read. Readers show it only while the manifest carries rights.standings with enabled true, treat table_complete false as a partial table, and ignore a table older than rights.standings.max_age_days. No fixtures, scores or programme data.",
+  "type": "object",
+  "required": ["schema", "competition_id", "competition", "season", "season_start_year", "groups", "teams", "expected_teams", "table_complete", "observed_at", "source"],
+  "properties": {
+    "schema": {"const": "sli.standings/1"},
+    "competition_id": {"type": "string", "description": "SportsLiveInfo taxonomy competition id, the same id as events' competition_id (for example football.premier_league)"},
+    "competition": {"type": "string"},
+    "season": {"type": "string", "description": "Label such as 2026-27"},
+    "season_start_year": {"type": "integer", "minimum": 1900},
+    "season_start": {"type": "string", "description": "YYYY-MM-DD, when the source states it"},
+    "season_end": {"type": "string", "description": "YYYY-MM-DD, when the source states it"},
+    "matchday": {"type": "integer", "minimum": 1, "description": "Current matchday, when the source states it"},
+    "groups": {"type": "array", "items": {"type": "object", "required": ["name", "rows"],
+      "properties": {
+        "name": {"type": ["string", "null"], "description": "null for a single league table; the group name (Group A) for cup groups"},
+        "stage": {"type": "string", "description": "Source stage such as REGULAR_SEASON or LEAGUE_STAGE, when stated"},
+        "rows": {"type": "array", "items": {"type": "object",
+          "required": ["position", "participant", "played", "won", "drawn", "lost", "goals_for", "goals_against", "goal_diff", "points"],
+          "properties": {
+            "position": {"type": "integer", "minimum": 1},
+            "participant": {"type": "string", "description": "Team name as the source writes it (football-data.org: Arsenal FC); match to events by normalised name"},
+            "participant_short": {"type": "string", "description": "Short name, when it differs"},
+            "participant_id": {"type": "string", "description": "fd:<football-data.org team id> or as:<API-Sports team id>; events do not carry ids yet"},
+            "played": {"type": "integer", "minimum": 0}, "won": {"type": "integer", "minimum": 0},
+            "drawn": {"type": "integer", "minimum": 0}, "lost": {"type": "integer", "minimum": 0},
+            "goals_for": {"type": "integer", "minimum": 0}, "goals_against": {"type": "integer", "minimum": 0},
+            "goal_diff": {"type": "integer"}, "points": {"type": "integer", "minimum": 0},
+            "form": {"type": "string", "description": "Optional, oldest to newest, letters W D L (at most 10)"}}}}}}},
+    "teams": {"type": "integer", "minimum": 0, "description": "Rows across all groups"},
+    "expected_teams": {"type": "integer", "minimum": 1, "description": "Rows a complete table of this competition has"},
+    "table_complete": {"type": "boolean", "description": "teams == expected_teams, positions 1..n in every group, no dropped row"},
+    "observed_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+    "source": {"type": "string", "description": "football_data or api_sports (attribution in rights.standings.sources)"}
+  }
+}

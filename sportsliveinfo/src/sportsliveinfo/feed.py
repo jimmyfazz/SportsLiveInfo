@@ -20,7 +20,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from . import __version__, linking, providers, taxonomy
+from . import __version__, linking, providers, standings, taxonomy
 from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, REGIONAL_PARENTS, REGIONAL_RULES, SERVICES, SOURCE_ID_CROSSWALK
 
 FORMAT_MAJOR, FORMAT_MINOR = 1, 6  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset;
@@ -128,6 +128,25 @@ def event_tier(event):
             and not _YOUTH.search(taxonomy.norm(event.get("competition")))):
         return "core"              # UK, Irish and French leagues and cups not named in the taxonomy (youth excepted)
     return "extra"
+
+
+# Optional asset kind ``standings:<competition_id>`` (contract §4.5, capability "standings"), on by default (config
+# ``publish_standings`` is the kill switch). Additive: no format minor change, readers ignore unknown assets.
+STANDINGS_RULE = ("Take a competition's table only from its standings:<competition_id> asset, and only while the manifest "
+                  "lists the capability standings and carries rights.standings with enabled true (otherwise show none "
+                  "from the feed and drop any cached feed table). Show the table as complete only when table_complete is "
+                  "true; teams < expected_teams (or a false table_complete) is a partial table. Do not show a table whose "
+                  "observed_at is older than rights.standings.max_age_days. Show the attribution lines. Rows are in "
+                  "position order within each group; group.name is null for a single league table (league phase "
+                  "included) and the group's name for cup groups. Match rows to events by participant name, or by "
+                  "participant_id (fd:<football-data team id>, as:<API-Sports team id>).")
+
+
+def standings_rights(docs):
+    """``rights.standings``: master switch, attribution of every source actually used, and the maximum table age."""
+    return {"enabled": True, "max_age_days": standings.MAX_AGE_DAYS,
+            "sources": [{"source": src, "text": ATTRIBUTION[src][0], "licence": ATTRIBUTION[src][1]}
+                        for src in sorted({d["source"] for d in docs}) if src in ATTRIBUTION]}
 
 
 LIVE_MAX_AGE = timedelta(minutes=45)
@@ -655,6 +674,11 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                                      for e in selected if e.get("id") in published_ids], now=now)
     if live_doc:
         add("live", live_doc, "sli.live/1", False, records=len(live_doc["events"]))
+    standings_docs = standings.documents(store, conf, now)
+    for doc in standings_docs:
+        add("standings:" + doc["competition_id"], doc, "sli.standings/1", False, competition_id=doc["competition_id"],
+            records=doc["teams"])
+    standings_docs = [d for d in standings_docs if any(a["kind"] == "standings:" + d["competition_id"] for a in assets)]
     add("health", health_document(store, conf, snapshots), "sli.health/1", False)
 
     schedule = sorted(conf.get("schedule", []))
@@ -715,6 +739,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                         + (["broadcast_links"] if any(e.get("broadcast_links") for e in events) else [])
                         + (["guide_corroborated_broadcasts"] if corroborated_links else [])
                         + (["scores"] if score_sources else [])
+                        + (["standings"] if standings_docs else [])
                         + (["team_crests"] if crests_apisports else []),
         "assets": assets,
         "coverage": {"events": len(events), "today": len(todays), "by_sport": dict(sorted(by_sport.items())),
@@ -747,6 +772,14 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                            "user_settings_override": True},
         "notices": notices,
     }
+    if standings_docs:
+        # Kill switch: publish_standings false (or no table inside the age limit) and these are absent: readers show none.
+        manifest["compatibility"]["standings"] = {"enabled": True, "rule": STANDINGS_RULE}
+        manifest["rights"]["standings"] = standings_rights(standings_docs)
+        known = {row["source"] for row in manifest["rights"]["attribution"]}
+        manifest["rights"]["attribution"] += [{"source": row["source"], "text": row["text"], "licence": row["licence"]}
+                                              for row in manifest["rights"]["standings"]["sources"]
+                                              if row["source"] not in known]
     if score_sources:
         # Kill switch: remove a source from score_approvals and the next feed says enabled=false by omission.
         manifest["compatibility"]["scores"] = {"enabled": True, "rule": SCORE_RULE}
