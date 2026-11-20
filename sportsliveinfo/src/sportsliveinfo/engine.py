@@ -73,6 +73,14 @@ def publish_regression(previous, manifest):
 
 
 LIVE_PRODUCTS = tuple(name for name in providers.SPORTS if name.startswith("api_sports") and name != "api_sports_mma")
+# Settle pass: an event that has left the live board is never "finished" by that alone. Once it is past its expected
+# end plus the live grace (and at most SETTLE_WINDOW after), one date=<London start day> call per product per hour reads
+# the provider's explicit final status (FT/AET/PEN, PST, CANC ...) while unsettled events exist. Its own daily counter
+# "settle:<product>" is also counted in the product's quota and obeys the same reserve as the live lane.
+SETTLE_DAILY_BUDGET = 4         # settle calls per product per UTC day
+SETTLE_INTERVAL = timedelta(hours=1)
+SETTLE_WINDOW = timedelta(hours=12)    # how long after the live grace an unsettled event is still looked up
+SETTLE_FINAL = ("finished", "postponed", "cancelled")
 
 
 class _NoGitHubRedirect(urllib.request.HTTPRedirectHandler):
@@ -1096,6 +1104,10 @@ class Engine:
                 LOGGER.exception("Live status lane failed")
                 self.store.job("live_status", "failed", "Unexpected error; previous statuses kept")
                 changed = 0
+            try:
+                changed += self.settle_pass()
+            except Exception:
+                LOGGER.exception("Settle pass failed")
             finally:
                 self._busy.release()
             if changed:
@@ -1244,6 +1256,124 @@ class Engine:
                                       "summary": summary[:300]})
         if candidates or notes:
             self.store.job("live_status", "ok" if not notes else "partial", summary)
+        return changed
+
+    def _settle_candidates(self, conf, now, observations):
+        """{product: {london_day: [(event, [source event ids])]}} for events past expected end + grace (and within
+        SETTLE_WINDOW of that) whose latest known status is not final."""
+        snapshot = self.store.snapshot("sports")
+        events = ((snapshot or {}).get("data") or {}).get("events") or []
+        found = {}
+        products = [name for name in LIVE_PRODUCTS if conf["sports"].get(name)]
+        for event in events:
+            if (event.get("origin") == "guide_listing"
+                    or event.get("start_precision") in linking.UNCONFIRMED_START_PRECISIONS):
+                continue
+            try:
+                start = datetime.fromisoformat(event["start_utc"])
+                due = linking.expected_end(event) + linking.LIVE_END_GRACE
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not due < now <= due + SETTLE_WINDOW:
+                continue
+            ids = event.get("source_events") or [event.get("id")]
+            seen = [observations[sid] for sid in ids if isinstance(observations.get(sid), dict)] + [event]
+            latest = max(seen, key=lambda o: str(o.get("status_observed_at") or ""))
+            if latest.get("status_normalized") in SETTLE_FINAL:
+                continue
+            day = start.astimezone(LONDON).date()
+            for name in products:
+                prefix = name.replace("_", "-") + ":"
+                mine = [sid for sid in ids if isinstance(sid, str) and sid.startswith(prefix)]
+                if mine:
+                    found.setdefault(name, {}).setdefault(day, []).append((event, mine))
+        return found
+
+    def settle_pass(self, now=None):
+        """Read the provider's explicit final status for events that ended and are still not final; returns the number
+        of observations written.
+
+        At most one ``date=`` call per product per SETTLE_INTERVAL (oldest unsettled London day first), at most
+        SETTLE_DAILY_BUDGET a day (counter ``settle:<product>``), never into the product's reserve. Only an explicit
+        finished/postponed/cancelled status is stored: absence from the response, or any other status, says nothing."""
+        now = now or datetime.now(timezone.utc)
+        conf = self.store.config()
+        stamp = now.isoformat(timespec="seconds")
+        if not conf["setup_complete"] or not self.live_lane_enabled(conf):
+            return 0
+        stored = self.store._get("live_observations") or {}
+        observations = dict(stored.get("events") or {})
+        candidates = self._settle_candidates(conf, now, observations)
+        if not candidates:
+            return 0
+        today = now.astimezone(LONDON).date()
+        calls, changed, notes = 0, 0, []
+        for name, days in sorted(candidates.items()):
+            _, base, key_name, daily_limit = providers.SPORTS[name]
+            last = self.store._get("settle_last:" + name) or ""
+            try:
+                if now - datetime.fromisoformat(last) < SETTLE_INTERVAL:
+                    continue
+            except (TypeError, ValueError):
+                pass
+            day = min(days)
+            window = self._plan_window(name)
+            if window and not window[0] <= (day - today).days <= window[1]:
+                notes.append("%s: %s is outside the provider plan's dates" % (name, day))
+                continue
+            if self.store.usage().get(name, 0) >= daily_limit - LIVE_RESERVE:
+                notes.append("%s: remaining calls kept for scheduled refreshes" % name)
+                continue
+            if name == "api_sports":
+                decode = providers.api_sports_events
+            else:
+                decode = partial(providers.api_sports_games_events, source_id=name, sport=providers.API_SPORTS_SPORT[name])
+            query = urllib.parse.urlencode({"date": day.isoformat(), "timezone": "Europe/London"})
+            item = dict(url=base + "?" + query, headers={"x-apisports-key": conf["keys"].get(key_name, "")},
+                        scope="settle:" + day.isoformat(), decode=decode, max_bytes=7_000_000)
+            try:
+                self._check_sport_backoff(name)
+                try:
+                    self.store.increment("settle:" + name, SETTLE_DAILY_BUDGET)
+                except RuntimeError:
+                    notes.append("%s: daily settle budget (%d) used" % (name, SETTLE_DAILY_BUDGET))
+                    continue
+                self.store._put("settle_last:" + name, stamp)
+                board = {row["id"]: row for row in self._request(name, item, daily_limit)}
+                calls += 1
+            except QuotaExhausted as exc:
+                notes.append("%s: %s" % (name, str(exc)[:80]))
+                continue
+            except providers.PlanWindow as exc:
+                self._learn_plan_window(name, exc, today)
+                notes.append("%s: %s is outside the provider plan's dates" % (name, day))
+                continue
+            except SAFE_ERRORS as exc:
+                reason = _sports_failure(exc)
+                if getattr(exc, "status", None) == 429 or reason == "Provider quota or rate limit":
+                    self._defer_sport(name, exc)
+                notes.append("%s: %s" % (name, reason))
+                continue
+            for _, ids in days[day]:
+                for sid in ids:
+                    row = board.get(sid)
+                    status = (row or {}).get("status_normalized")
+                    if status not in SETTLE_FINAL:
+                        continue               # still in progress, or not listed: never claimed finished
+                    previous = observations.get(sid)
+                    if previous and previous.get("status_normalized") == status:
+                        continue
+                    observations[sid] = {"status": str(row.get("status") or "")[:20], "status_normalized": status,
+                                         "status_observed_at": stamp}
+                    changed += 1
+        if changed:
+            self.store._put("live_observations", {"events": observations, "updated_at": stamp})
+        unsettled = sum(len(rows) for days in candidates.values() for rows in days.values())
+        summary = "%d unsettled events; %d settle calls; %d settled" % (unsettled, calls, changed)
+        if notes:
+            summary += "; " + "; ".join(notes[:3])
+        self.store._put("settle_lane", {"last_run": stamp, "unsettled": unsettled, "calls": calls, "changed": changed,
+                                        "summary": summary[:300]})
         return changed
 
     def _prune_live_observations(self, now):

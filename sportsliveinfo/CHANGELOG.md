@@ -14,6 +14,13 @@
 - **Now:** club-form prefixes (dsc, tsv, vfl, vfb, fsv, ssv, spvgg, rcd) are ignored; a four-digit founding year may be dropped (never the only difference between two different years); frauen/damen/feminin* mean women; Koeln/Cologne, Nuernberg/Nuremberg and Gladbach/Moenchengladbach are one team each; Troyes spellings are aliased (team spellings live in `linking`, the dictionary aliases only rewrite channel names).
 - **Anchored rule** in `_same_event`: kick-offs within 15 minutes, same sport, compatible competition, one side equal and the other a strictly contained shorter name. Women, youth, reserve and squad words (U21, II, Castilla, ...) and rugby-only words (RC) still block it.
 - Not changed: contract, versions. Tests: 343 pass (14 new in `tests/test_event_dedupe_names.py`).
+## Unreleased — Settle pass: events that ended are settled by the provider's final status
+
+- **Before:** collection fetched only `date>=today` at 12:00 and 17:00 and the live lane watched only start..expected end + 30 min, so an event that ended stayed `scheduled` (or fell to `unknown` when it left the live board) until it dropped out of the window; nothing ever said `finished`.
+- **Now:** for events past expected end + 30 min (and at most 12 h after that) whose status is not final, the engine makes at most one `date=<London start day>` call per API-Sports product per hour, only while unsettled events exist, decodes it with the existing decoders and stores an explicit `finished`, `postponed` or `cancelled` as a `live_observation`; the `live` asset then carries that row. Leaving the live board still never means finished: absence from the response, or any non-final status, writes nothing.
+- **Quota:** own counter `settle:<product>`, 4 calls a day per product (also counted in the product's quota), same reserve check as the live lane (`usage >= daily_limit - 20` skips), provider back-off and plan-window checks. Counters are shown on the Live status lane card and in the usage table. Estimate: at most 4 extra calls per product per day (a paged response costs one call per page).
+- No wire change: the `live` schema already allows `finished`, `postponed` and `cancelled`; no new fields, providers or secrets. MMA has no live board and is not settled.
+- Tests: 340 pass (11 new in `tests/test_settle_pass.py`).
 
 ## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
 

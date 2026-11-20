@@ -469,3 +469,12 @@ Diagnosed: the live asset kept rows after `live_until_utc`, and stored `live` ob
 Results: `python3 -m compileall -q sportsliveinfo/src tests` and `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests` pass (335 tests; 6 new in `tests/test_live_tiers_corroboration.py`). Golden manifest fixture regenerated. Version files not bumped (owner releases).
 
 NOT RUN: Home Assistant deployment, a real GitHub commit, and any check against the live 20 Nov manifest. The cause of the 04:00 UK publication stall is not proven; see the hand-off report for the code paths that can skip publishing.
+## Settle pass (branch `feat/settle-pass`, from `origin/main` 8da6e83)
+
+Root cause: events never left `scheduled`/`unknown` after ending (collection `date>=today` at 12:00/17:00; live lane watches start..end+30 min only). Added `Engine.settle_pass` (engine.py, new functions and constants only; `live_lane` untouched) called after the live lane by its scheduler worker: one `date=` call per product per hour, `settle:<product>` counter capped at 4 a day, live reserve, back-off and plan-window checks, existing decoders, explicit final statuses only, stored as `live_observations`. Counters on the Live status lane card.
+
+- `python3 -m compileall -q sportsliveinfo/src tests`: passed.
+- `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests`: 340 tests pass (329 + 11 new; the MemoryError line is the expected mock output).
+- Golden fixtures: not regenerated (wire output unchanged).
+- NOT RUN: real API-Sports date calls for finished fixtures, a Home Assistant deploy, a publish to the feed repo, B1G acceptance of `finished` rows. Version not bumped.
+
