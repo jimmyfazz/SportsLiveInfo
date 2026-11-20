@@ -2,7 +2,16 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
-## Unreleased — owner decisions of 20 Nov 2026 (CA-09, CA-16, CA-17, CA-18; no version bump)
+## 0.3.27 — 20 Nov 2026: audit fixes (expected_end_utc gaps, year boundary, Z-suffix)
+
+- **`EXPECTED_MINUTES` gaps filled:** `horse_racing` 300 min, `cycling` 300, `mma` 240, `aussie_rules` 150, `netball` 90; corrected `handball` 120→100, `volleyball` 150→120. B1G was showing wrong LIVE status for these sports.
+- **Year-boundary fix in `names_past_year`:** used `window_start.year` instead of the programme's own `start.year` — wrong at the Dec/Jan boundary.
+- **`expected_end_utc` Z-suffix:** now always `…Z` (was `…+00:00`), matching every other UTC field in the feed.
+- **Python < 3.11 `fromisoformat` Z-guard:** `.replace("Z", "+00:00")` before `fromisoformat` in engine and feed.
+- **Dead code removed:** redundant `db.commit()` in `storage._put()`, unreachable code after `return` in `server.e()`.
+- Tests: `test_live_tiers_corroboration`, `test_event_titles_and_durations`, `test_history_display_state` updated; golden fixtures regenerated.
+
+### owner decisions of 20 Nov 2026 (CA-09, CA-16, CA-17, CA-18; no version bump)
 
 - **CA-09: no change (owner).** `LIVE_DAILY_BUDGET` (40) and the live candidate gating are untouched.
 - **CA-18: `LIVE_REFRESH` 30 to 15 minutes.** An unchanged live status is re-stamped every 15 minutes, so LIVE no longer flickers (15 + 5 CDN + 15 poll is inside `LIVE_MAX_AGE` 45, which is unchanged; `refresh.live_stale_after_minutes` stays 45). No extra API calls. About 4 live commits an hour in play: the growth ledger now marks live-lane commits (`kind: live`), `feed.growth_report` gains `live_commits`, `live_per_day` and a separate `live_commits_per_day` budget of 60 (7-day average); `commits_per_day` (8) counts only the other commits, so the alert does not fire just because matches are on. Contract section 4.2, RUNBOOK section 3, OPERATIONS_HARDENING section 4.
