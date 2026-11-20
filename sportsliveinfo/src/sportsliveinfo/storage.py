@@ -84,7 +84,6 @@ class Store:
     def _put(self, name, obj):
         with self._lock, self._db() as db:
             db.execute("INSERT INTO kv(name,data) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET data=excluded.data", (name, json.dumps(obj, separators=(",", ":"))))
-            db.commit()
 
     def config(self):
         # Carry new source defaults into pre-existing v0.1 installations; do not

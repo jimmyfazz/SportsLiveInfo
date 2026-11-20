@@ -285,7 +285,8 @@ def merge_events(events):
     return merged
 
 
-LIVE_TRUST = timedelta(minutes=45)       # a "live" observation older than this is not trusted (contract sli/1.6 §1)
+LIVE_MAX_AGE = timedelta(minutes=45)     # a "live" observation older than this is not trusted (contract sli/1.6 §1)
+LIVE_TRUST = LIVE_MAX_AGE                # backward-compat alias
 LIVE_END_GRACE = timedelta(minutes=30)   # ... nor more than this after the expected end
 
 
@@ -507,7 +508,7 @@ def _programme_index(epg_guides, window_start, window_end, *, include_non_matche
                 coverage[source_id] = (min(first, start) if first else start, max(last, end) if last else end)
             if end <= window_start or start >= window_end or programme.get("is_repeat") or end - start > _MAX_PROGRAMME:
                 continue
-            if names_past_year(programme.get("title"), programme.get("subtitle"), window_start.year):
+            if names_past_year(programme.get("title"), programme.get("subtitle"), start.year):
                 continue                  # a re-run ("England v Samoa - Rugby World Cup 2023") is never live sport
             if canonical and ".news" in canonical:
                 continue

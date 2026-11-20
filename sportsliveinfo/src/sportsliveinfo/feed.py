@@ -74,8 +74,8 @@ def event_tier(event):
     return "extra"
 
 
-LIVE_MAX_AGE = timedelta(minutes=45)
-LIVE_END_GRACE = timedelta(minutes=30)
+LIVE_MAX_AGE = linking.LIVE_MAX_AGE
+LIVE_END_GRACE = linking.LIVE_END_GRACE
 
 
 def live_until(status, observed_at, start_utc, expected_end_utc):
@@ -308,7 +308,7 @@ def _event_public(event, private=False, observed_fallback=None):
     row.pop("expected_end_utc", None)
     if event.get("start_utc") and event.get("start_precision") != "date_only":
         try:
-            row["expected_end_utc"] = linking.expected_end(event).isoformat(timespec="seconds")
+            row["expected_end_utc"] = linking.expected_end(event).strftime("%Y-%m-%dT%H:%M:%SZ")
         except (TypeError, ValueError):
             pass
     until = live_until(row.get("status_normalized"), row["status_observed_at"], row.get("start_utc"),
@@ -469,7 +469,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                       if isinstance(src, str) and src not in approved})
     by_day, extra_by_day = {}, {}
     for event in events:
-        day = datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date().isoformat()
+        day = datetime.fromisoformat(event["start_utc"].replace("Z", "+00:00")).astimezone(LONDON).date().isoformat()
         (by_day if event["tier"] == "core" else extra_by_day).setdefault(day, []).append(event)
     today = now.astimezone(LONDON).date()
     window = [(today + timedelta(days=i)).isoformat() for i in range(8)]

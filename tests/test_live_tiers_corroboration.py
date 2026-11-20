@@ -119,7 +119,9 @@ class HonestLiveStateTests(unittest.TestCase):
                  (dict(sport="motorsport", session="race"), 150), (dict(sport="golf"), 360), (dict(sport="darts"), 240),
                  (dict(sport="snooker"), 240), (dict(sport="boxing"), 240), (dict(sport="basketball"), 150),
                  (dict(sport="ice_hockey"), 165), (dict(sport="american_football"), 210), (dict(sport="baseball"), 210),
-                 (dict(sport="handball"), 180), (dict(sport="motorsport", session="qualifying"), 180)]
+                 (dict(sport="handball"), 100), (dict(sport="motorsport", session="qualifying"), 180),
+                 (dict(sport="horse_racing"), 300), (dict(sport="cycling"), 300), (dict(sport="mma"), 240),
+                 (dict(sport="aussie_rules"), 150), (dict(sport="netball"), 90), (dict(sport="volleyball"), 120)]
         for event, minutes in cases:
             self.assertEqual(taxonomy.expected_minutes(event), minutes, event)
         self.assertEqual(linking.expected_end(ev()), datetime(2026, 11, 14, 17, 0, tzinfo=timezone.utc))
