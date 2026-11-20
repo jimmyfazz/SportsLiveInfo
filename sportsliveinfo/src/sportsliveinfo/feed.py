@@ -303,6 +303,7 @@ def dictionary_document(store, conf):
 
 def _event_public(event, private=False, observed_fallback=None):
     row = {k: event[k] for k in EVENT_FIELDS if k in event and event[k] not in (None, "", [])}
+    row.setdefault("status_normalized", "scheduled")
     # Contract sli/1.6 §1: when the status was last observed (always present) and the typical end.
     row["status_observed_at"] = _z(event.get("status_observed_at")) or _z(observed_fallback) or "1970-01-01T00:00:00Z"
     row.pop("expected_end_utc", None)

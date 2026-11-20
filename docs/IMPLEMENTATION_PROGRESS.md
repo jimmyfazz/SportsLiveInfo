@@ -7,6 +7,13 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## Unreleased — event titles, status defaults and expected durations (branch `chore/event-titles-and-durations`)
+
+- **Done:** F1 session titles (`<race> — <session>`), F1 status always published (OpenF1 "finished" only with a passed provider `date_end`), missing status defaults to "scheduled", CricketData both-TBC fixtures without participants, TheSportsDB `T00:00:00` day-only sports as `date_only`, expected durations for F1 practice and qualifying (90), handball (120), volleyball (150) and knockout football (150). See [`sportsliveinfo/CHANGELOG.md`](../sportsliveinfo/CHANGELOG.md) "Unreleased".
+- **Tests:** compileall clean; `unittest discover` 338 pass (329 baseline plus 9 new). Two old duration assertions updated deliberately.
+- **Fixtures:** `tools/generate_feed_fixtures.py` run; only `status_normalized` on one event asset changed.
+- **NOT RUN:** the B1 interop fixture copy (`platforms/android/app/src/test/resources/sli-v1-6/`) belongs to the B1 repository and was not touched in this task.
+
 ## 15 November 2026 — 0.3.21 to 0.3.23, audit, deployment and handover to Mac terminal agents
 
 - **Merged:** PR #32 (0.3.21: API-Sports plan window, TheSportsDB week-ahead per competition), #33 and #34 (documentation status, index, archive), #35 (0.3.22 audit fixes and 0.3.23 feed `sli/1.6`, `main` `f335c4e`).
