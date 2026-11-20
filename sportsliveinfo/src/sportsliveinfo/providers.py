@@ -747,6 +747,31 @@ def football_data_events(data):
     return events
 
 
+# Team crest REFERENCES (not images). API-Sports team ids are carried as {"src": "apisports", "ref": "<product>/teams/<id>"}
+# so a reader can build media.api-sports.io/<ref>.png itself; SLI never fetches, stores or mirrors an image, and the
+# logo URL in the payload is deliberately ignored. Index-aligned with ``participants``; absent when no side has an id.
+API_SPORTS_CREST_PRODUCT = {
+    "api_sports": "football", "api_sports_rugby": "rugby", "api_sports_basketball": "basketball",
+    "api_sports_hockey": "hockey", "api_sports_nfl": "american-football", "api_sports_baseball": "baseball",
+    "api_sports_handball": "handball", "api_sports_volleyball": "volleyball", "api_sports_afl": "afl",
+}
+
+
+def _api_sports_crests(source_id, teams):
+    product = API_SPORTS_CREST_PRODUCT.get(source_id)
+    if not product or not isinstance(teams, dict):
+        return None
+    refs = []
+    for side in ("home", "away"):
+        team = teams.get(side)
+        team_id = team.get("id") if isinstance(team, dict) else None
+        if isinstance(team_id, int) and not isinstance(team_id, bool) and team_id > 0:
+            refs.append({"src": "apisports", "ref": "%s/teams/%d" % (product, team_id)})
+        else:
+            refs.append(None)
+    return refs if any(refs) else None
+
+
 def api_sports_events(data):
     payload = json.loads(data)
     if payload.get("errors"):
@@ -780,6 +805,9 @@ def api_sports_events(data):
             score = _score_of(goals.get("home"), goals.get("away"), short, event["status_normalized"])
             if score:
                 event["score"] = score      # kept in the record's own order; the feed decides whether it is published
+            crests = _api_sports_crests("api_sports", teams)
+            if crests:
+                event["participant_crests"] = crests
             events.append(event)
         except (ValueError, KeyError, TypeError, AttributeError):
             continue
@@ -830,6 +858,9 @@ def api_sports_games_events(data, source_id, sport):
             score = _score_of(points.get("home"), points.get("away"), short, event["status_normalized"])
             if score and sport in SCORE_SPORTS:
                 event["score"] = score
+            crests = _api_sports_crests(source_id, teams)
+            if crests:
+                event["participant_crests"] = crests
             events.append(event)
         except (ValueError, KeyError, TypeError, OverflowError):
             continue

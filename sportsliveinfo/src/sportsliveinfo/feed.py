@@ -41,7 +41,7 @@ EVENT_FIELDS = (
     "competition_country", "event_type", "session", "match_type", "day_number", "weight_class", "title", "participants",
     "participants_short", "start_utc", "end_utc", "start_precision", "status_normalized", "round", "stage", "venue",
     "country", "tags", "sources", "fixture_confidence", "corroboration", "start_conflict", "broadcast_verified",
-    "status_observed_at", "expected_end_utc", "tier",
+    "status_observed_at", "expected_end_utc", "tier", "participant_crests",
 )
 LIVE_STATE_RULE = ("status_normalized == 'live' is trusted only when status_observed_at is at most 45 minutes old AND "
                    "start_utc <= now <= expected_end_utc + 30 minutes. Otherwise treat it as unknown and fall back to the "
@@ -359,8 +359,42 @@ def dictionary_document(store, conf):
     return document if isinstance(document, dict) and document.get("channels") else None
 
 
-def _event_public(event, private=False, observed_fallback=None, score_sources=frozenset()):
-    row = {k: event[k] for k in EVENT_FIELDS if k in event and event[k] not in (None, "", [])}
+CREST_REF = re.compile(r"^[a-z][a-z-]{1,30}/teams/[1-9][0-9]{0,11}$")
+CREST_URL_TEMPLATE = "https://media.api-sports.io/{ref}.png"
+CREST_CACHE_DAYS = 30
+
+
+def crest_settings(conf, approved):
+    """(apisports_on, device_lookup_on) for the manifest's ``rights.crests`` master switch.
+
+    API-Sports crest references are published only when an API-Sports source is in the publication approvals AND the
+    owner's explicit ``publish_crest_refs`` flag is true (default false). Nothing changes until both are set."""
+    flag = conf.get("publish_crest_refs") is True
+    apisports = flag and any(src in approved for src in providers.API_SPORTS_CREST_PRODUCT)
+    return apisports, conf.get("crest_device_lookup_thesportsdb") is True
+
+
+def _crests_public(event):
+    """Valid, index-aligned crest references for an event, or None. A malformed list is dropped whole."""
+    crests, names = event.get("participant_crests"), event.get("participants")
+    if not isinstance(crests, list) or not isinstance(names, list) or len(crests) != len(names):
+        return None
+    out = []
+    for crest in crests:
+        if (isinstance(crest, dict) and crest.get("src") == "apisports" and isinstance(crest.get("ref"), str)
+                and CREST_REF.match(crest["ref"])):
+            out.append({"src": "apisports", "ref": crest["ref"]})
+        else:
+            out.append(None)
+    return out if any(out) else None
+
+
+def _event_public(event, private=False, observed_fallback=None, score_sources=frozenset(), crests=False):
+    row = {k: event[k] for k in EVENT_FIELDS if k != "participant_crests" and k in event
+           and event[k] not in (None, "", [])}
+    refs = _crests_public(event) if crests else None
+    if refs:
+        row["participant_crests"] = refs
     row.setdefault("status_normalized", "scheduled")
     # Contract sli/1.6 §1: when the status was last observed (always present) and the typical end.
     row["status_observed_at"] = _z(event.get("status_observed_at")) or _z(observed_fallback) or "1970-01-01T00:00:00Z"
@@ -552,10 +586,11 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     selected = [e if "category_id" in e else taxonomy.classify(e) for e in selected if licensed(e)]
     # Legacy/unclassified snapshot rows still need category fields the schema requires.
     score_sources = score_approvals(conf)
-    events = [_event_public(e, private, observed_fallback, score_sources) for e in selected]
     if private:
         approved = {src for e in all_events for src in (e.get("sources") or [e.get("source_id")])
                     if isinstance(src, str) and src != "guide_listing"}
+    crests_apisports, crests_device = crest_settings(conf, approved)
+    events = [_event_public(e, private, observed_fallback, score_sources, crests_apisports) for e in selected]
     omitted = sorted({src for e in all_events if e.get("origin") != "guide_listing"
                       for src in (e.get("sources") or [e.get("source_id")])
                       if isinstance(src, str) and src not in approved})
@@ -679,7 +714,8 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                         + (["verified_broadcasts"] if any(e["broadcast_verified"] for e in events) else [])
                         + (["broadcast_links"] if any(e.get("broadcast_links") for e in events) else [])
                         + (["guide_corroborated_broadcasts"] if corroborated_links else [])
-                        + (["scores"] if score_sources else []),
+                        + (["scores"] if score_sources else [])
+                        + (["team_crests"] if crests_apisports else []),
         "assets": assets,
         "coverage": {"events": len(events), "today": len(todays), "by_sport": dict(sorted(by_sport.items())),
                      "tiers": {"core": core, "extra": len(events) - core},
@@ -692,6 +728,16 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                      "families_known": len(CHANNEL_FAMILIES)},
         "rights": {"events": {"approved_sources": sorted(approved), "omitted_unapproved_sources": omitted},
                    "epg_programmes": "not_published",
+                   # Master kill switch for team crests (additive). SLI publishes references only, never images.
+                   "crests": {"sources": {"apisports": {
+                                  "enabled": crests_apisports, "url_template": CREST_URL_TEMPLATE,
+                                  "attribution": "Team crests © their owners, via API-Sports (media.api-sports.io); "
+                                                 "identification only",
+                                  "cache_days": CREST_CACHE_DAYS}},
+                              "device_lookup": {"thesportsdb": {
+                                  "enabled": crests_device,
+                                  "attribution": "Team badges from TheSportsDB, looked up on the device"}},
+                              "monogram_only": not (crests_apisports or crests_device)},
                    "broadcast_candidates": "channel_links_published_unverified",
                    "attribution": [{"source": s, "text": ATTRIBUTION[s][0], "licence": ATTRIBUTION[s][1]}
                                    for s in sorted({providers.SPORT_FAMILY.get(a, a) for a in approved}) if s in ATTRIBUTION]

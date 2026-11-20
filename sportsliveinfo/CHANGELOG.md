@@ -42,6 +42,11 @@ Mechanical clean-up from the event-source review. No contract field is added and
 - **Expected durations.** F1 practice and qualifying 90 minutes; handball 120; volleyball 150; knockout football (round of N, quarter, semi, final, third place, play-off stages) 150. The defaults and all other sports are unchanged.
 - Tests: 338 pass (329 existing plus 9 in `tests/test_event_titles_and_durations.py`). Two existing duration assertions were changed deliberately (handball 180 to 120, F1 qualifying 180 to 90).
 - Golden feed fixtures regenerated: the only change is `status_normalized` on one event asset and the manifest hash.
+## Unreleased — Team crest references (capability `team_crests`, off by default)
+
+- **References, not images.** The API-Sports decoders carry each side's team id; the merge aligns them to the merged `participants` (home/away swaps handled with `same_team`; a side is `null` when contributors disagree or orientation is uncertain). The feed publishes `participant_crests` (index-aligned, `{"src":"apisports","ref":"football/teams/42"}` or null) only when `publish_crest_refs` is true AND an API-Sports source is in the publication approvals. Default false: no event field changes, so asset hashes and the revision are unchanged.
+- **Master kill switch in the manifest:** `rights.crests` (`sources.apisports.enabled`/`url_template`/`attribution`/`cache_days`, `device_lookup.thesportsdb`, `monogram_only`) is always present; the `team_crests` capability is listed only when enabled. SLI never fetches, stores or mirrors a crest image. Additive; `min_reader_minor` unchanged; no version bump.
+- Owner to verify the API-Sports terms for crest use before setting `publish_crest_refs`. Tests: 15 new in `tests/test_crest_refs.py`.
 
 ## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
 

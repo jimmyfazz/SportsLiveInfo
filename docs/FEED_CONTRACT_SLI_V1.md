@@ -178,6 +178,12 @@ The owner's aim is that corrections and improvements are made once, in SportsLiv
 - **LIVE window.** An event whose `status_normalized` is `live` has `live_until_utc` = min(`status_observed_at` + `compatibility.live_max_age_minutes` (45), `expected_end_utc` + `compatibility.live_end_grace_minutes` (30)). `live` asset rows carry it too. Readers show LIVE only while `start_utc <= now < live_until_utc`; otherwise the clock decides "should be on now" as in §4.2.
 - **Data, not code.** Channel identities (dictionary, `guide_map`, `service_aliases`), event selection and tiers, statuses and the fixtures themselves were already published data; a correction there reaches every TV on its next feed read (at most 30 minutes). Only a new kind of decision, or a change to the B1G matching algorithms themselves (dictionary resolver, event-slot parser), needs a B1G update.
 
+- **Team crests (capability `team_crests`, additive, `min_reader_minor` unchanged).** SportsLiveInfo publishes crest *references*, never images; the TV fetches and caches the image itself and draws an on-device monogram whenever there is no usable crest.
+  - Event field `participant_crests`: array index-aligned with `participants` (same length); each entry is `{"src":"apisports","ref":"<product>/teams/<id>"}` (for example `football/teams/42`, `rugby/teams/3`) or `null`. Absent when no side has a reference. A side is `null` when the merged sources disagree or the home/away orientation was uncertain: never a guessed crest.
+  - Manifest `rights.crests` (always present): `sources.apisports = {enabled, url_template: "https://media.api-sports.io/{ref}.png", attribution, cache_days: 30}`, `device_lookup.thesportsdb = {enabled, attribution}` and `monogram_only`. This is the master kill switch: readers show a crest only when its source has `enabled: true`, otherwise a monogram; `monogram_only: true` means no crest of any kind. Switching crests off therefore needs no TV update.
+  - The capability `team_crests` is listed only when `sources.apisports.enabled` is true. Default: disabled, with no `participant_crests` in the feed, until the owner sets `publish_crest_refs` (and an API-Sports source is in `publication_approvals`).
+  - Readers: use `url_template` with `{ref}` replaced; cache for `cache_days`; never mirror or re-host; show the attribution. football-data.org, Wikimedia and OpenLigaDB crests are not used.
+
 Also in 0.3.24 (producer only, no reader change):
 
 - listings that name a past year or season ("England v Samoa — Rugby World Cup 2023", "2023-24") are treated as repeats: never linked to a fixture and never guide-listed live events;
@@ -208,6 +214,7 @@ Until a source is approved for scores, the feed is byte-for-byte what it was bef
 - Scores (§4.4) are published only for sources listed in `score_approvals`, which is separate from `publication_approvals`, empty by default, and limited to the eligible sources and sports of §4.4. An event's score also needs the event itself to be publishable under the rules above.
 - Events use a **field whitelist** (`feed.EVENT_FIELDS`). EPG programme text, EPG-derived broadcast candidates, fetch scopes and live state never leave the HA box.
 - `broadcasts` appear only when `broadcast_verified` is true, `broadcast_verification_rule` is `approved_v1`, and evidence is present. A reviewed independent rule and real evidence remain acceptance gates; a boolean alone is insufficient.
+- Team crests are published as references only (§4.3, `rights.crests`), never as images, and only when the owner has set `publish_crest_refs` and approved an API-Sports source. API-Sports crest use is recorded as identification only, private household use, with the terms to be re-read and recorded by the owner (`SOURCE_REGISTRY.md`); until then the feed is monogram-only.
 - The feed never contains stream URLs, provider credentials, user lineups, hidden channels or IP addresses. The guide catalogue lists only public guide URLs.
 
 ## 6. Publishing

@@ -33,6 +33,7 @@
         "title": {"type": "string"},
         "participants": {"type": "array", "items": {"type": "string"}},
         "participants_short": {"type": "array", "items": {"type": "string"}},
+        "participant_crests": {"type": "array", "description": "Optional (capability team_crests, SportsLiveInfo 0.3.25+). Index-aligned with participants. Each entry is a crest REFERENCE {src, ref} or null; never an image. Build the URL from manifest rights.crests.sources[src].url_template; show a monogram when null, when the source is disabled or when monogram_only is true.", "items": {"type": ["object", "null"], "required": ["src", "ref"], "properties": {"src": {"const": "apisports"}, "ref": {"type": "string", "pattern": "^[a-z][a-z-]{1,30}/teams/[1-9][0-9]{0,11}$"}}}},
         "start_utc": {"type": "string"},
         "end_utc": {"type": "string"},
         "start_precision": {"type": "string", "description": "scheduled | provisional | not_before | estimated | time_tbc | date_only | (unknown: time_tbc)"},

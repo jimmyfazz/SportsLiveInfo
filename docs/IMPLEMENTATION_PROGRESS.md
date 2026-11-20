@@ -490,3 +490,6 @@ Root cause: events never left `scheduled`/`unknown` after ending (collection `da
 - Golden fixtures: not regenerated (wire output unchanged).
 - NOT RUN: real API-Sports date calls for finished fixtures, a Home Assistant deploy, a publish to the feed repo, B1G acceptance of `finished` rows. Version not bumped.
 
+## Team crest references (branch feat/crest-refs, off `main` 8da6e83)
+
+Decision (advisor): model (i), SportsLiveInfo publishes references, TVs hotlink, monogram fallback, no image mirroring. Implemented: API-Sports decoders carry team ids (`providers.API_SPORTS_CREST_PRODUCT`); `linking.merge_events` aligns `participant_crests` to the merged participants with `same_team` (swap-aware, null on conflict or ambiguity); `feed.py` adds the `participant_crests` event field, the always-present `rights.crests` block and the `team_crests` capability, gated by config `publish_crest_refs` (default false) plus an API-Sports source in `publication_approvals`; schemas updated; golden manifest regenerated (events and revision unchanged while off). Tests: 15 new in `tests/test_crest_refs.py`. **Owner to verify:** API-Sports terms for crest/logo use (identification only, private household use is the working assumption, unverified) before setting `publish_crest_refs`. B1G reader change (hotlink, cache, monogram) NOT DONE. Home Assistant acceptance NOT RUN.
