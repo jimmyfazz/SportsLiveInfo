@@ -39,6 +39,7 @@ Every page and `/healthz` answer only through Home Assistant Ingress. A direct r
 | `manifest_old` | No publication activity for 30 h (`MAX_MANIFEST_AGE`). | As above |
 | `collector_hung` | A collection started more than 90 minutes ago and has not finished. | Collector row, state `started` with no later `finished` |
 | `publish_blocked` | Two publisher rows in a row with state `failed`. | Publisher rows and the message |
+| `publish_gate_blocked` | The last publisher row is `blocked`: the pre-publish regression gate refused an automatic publish. Advisory (no 503). One notification (`sportsliveinfo_publish_gate_blocked`) naming events and guide-confirmed bindings before and after; dismissed when a later publisher row is not `blocked` (a manual override, or an automatic run that passes). Not the same as `publish_blocked` (two `failed` rows). | Section 4 |
 | `token_expiring` | The GitHub token expires in 7 days or less, or has expired. | Section 2 |
 | `source_failing:<name>` | A source failed three refreshes in a row. | That source's row |
 
@@ -125,9 +126,9 @@ There are three kinds of counter, all stored per UTC day in the `requests` table
 **Where it shows:**
 - Diagnostics: a `publisher` row with state `blocked` and the message `Automatic publish refused: events fell from N to M (more than 20%)…; Publish manually to override`.
 - Publishing page: the publish status is `failed`, with the same message.
-- The key `publish_gate` in the App database holds the last refusal. The UI does not show it.
+- The key `publish_gate` in the App database holds the last refusal (reason, events and bindings before and after). Diagnostics > Service health lists it as `publish_gate_blocked`, `/healthz` shows it under `advisories` (still HTTP 200), and one Home Assistant notification is sent per incident.
 
-**Caveat (verified in `health.py`):** a `blocked` row is not a failed publish. It does not count toward the "publishing is failing" notification (which needs two `failed` rows in a row), and it is not a stall code. The App will raise "feed not published" (`manifest_overdue`) only if no publication activity follows a scheduled refresh.
+**Caveat (verified in `health.py`):** a `blocked` row is not a failed publish. It does not count toward the "publishing is failing" notification (`publish_blocked`, which needs two `failed` rows in a row), and it is not a stall code. It raises its own advisory incident, `publish_gate_blocked` (since the follow-ups branch). The App will raise "feed not published" (`manifest_overdue`) only if no publication activity follows a scheduled refresh.
 
 **What to do:**
 1. Decide whether the drop is real. Check the failing sources (section 1, Step 2) and whether the Sports events page has lost a whole competition. A source outage causes a drop that is not real. Fix the source first.
@@ -162,8 +163,10 @@ All keys live in the App's `config` row in `/data/sportsliveinfo.sqlite3`. The d
 |---|---|---|---|
 | `live_status` | `True` | Stops the live-status lane and the settle pass. Scheduled refreshes continue. | Scheduler page: "Check live statuses during matches" (action `live_status`) |
 | `score_approvals` | `[]` | No scores are read, stored or published. The feed stays `sli/1.6`. Removing a source from the list is the kill switch for that source (the next feed says `enabled: false`). | Publishing page: Score approvals (action `score_approvals`). Only `SCORE_ELIGIBLE` sources are accepted |
-| `publish_crest_refs` | `False` | Team crest references (API-Sports) are not published; `rights.crests.monogram_only` stays true. Also needs the API-Sports source in `publication_approvals`. | **No UI.** Stored value only |
-| `crest_device_lookup_thesportsdb` | `False` | Only sets the manifest flag `rights.crests.sources.device.enabled`. No lookup code exists in `src/`. | **No UI.** Stored value only |
+| `publish_crest_refs` | `False` | Team crest references (API-Sports) are not published; `rights.crests.monogram_only` stays true. Also needs the API-Sports source in `publication_approvals`. | Publishing page: Team crests (action `crest_settings`); switching on needs the attestation tickbox, switching off does not |
+| `crest_device_lookup_thesportsdb` | `False` | Only sets the manifest flag `rights.crests.sources.device.enabled`. No lookup code exists in `src/`. | Publishing page: Team crests (same form) |
+| `binds_rule`, `rights_holder_prior` | `narrow`, `False` | `legacy` restores the 0.3.24 binding rule; `rights_holder_prior` false publishes no prior links. | Shown read-only on the Publishing page (Channel link policy); change in the stored config |
+| `broadcaster_rank_override`, `rights_holder_prior_override` | empty | Empty = the built-in seeded tables (byte-identical feed). JSON text corrects them; validated on save. See `docs/SEEDED_TABLES_REVIEW.md`. | Publishing page: Correct the seeded tables (action `hint_overrides`) |
 | `publication_approvals` | `[]` | Publishing is refused with "No sport source has an approved public redistribution licence". Removing a source stops its events in the next publish. It does not withdraw data already published. | Publishing page: approvals (action `approvals`) |
 | `github.enabled` | `False` | No publishing (manual or automatic). | Publishing page: Enable publishing |
 | `github.auto_publish` | `False` | No automatic publishing; manual publish still works. | Publishing page: Publish automatically after every scheduled refresh |
@@ -173,7 +176,7 @@ All keys live in the App's `config` row in `/data/sportsliveinfo.sqlite3`. The d
 | `schedule` | `04:00, 12:00, 17:00` (London) | Changes refresh times. | Scheduler page |
 | `setup_complete` | `False` | Nothing collects or publishes until the first-run setup is finished. | Sources page (finish) |
 
-Note on the crest keys: the only available way to change them is to edit the stored config, which is not a supported operation. Leave them `False` unless the owner has re-read the API-Sports terms (the comment in `storage.py`). **Standings:** no switch exists (see section 3).
+Note on the crest keys: both are now on the Publishing page. Crest references publish the provider media address (media.api-sports.io) for team crests, so switching either on requires the owner to tick that the crest and badge terms were read; untick both and save to switch both off. **Standings:** no switch exists (see section 3).
 
 ## 7. Backing up the App
 

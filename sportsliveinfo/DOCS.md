@@ -32,6 +32,11 @@ New guide sources and newly added sports adapters are opt-in. API-Sports product
 
 Sports source tests make one quota-accounted request. EPG tests download and parse a bounded guide. Tests may update diagnostics/quota usage but do not replace source snapshots or authorize publishing. A successful test is not a completeness or rights check.
 
+## Publishing page controls added after 0.3.25
+
+- **Team crests:** tickboxes for `publish_crest_refs` and `crest_device_lookup_thesportsdb`, with the current effect and the kill-switch wording; switching either on needs the attestation tickbox (same pattern as score approvals), switching both off does not.
+- **Channel link policy:** read-only `binds_rule` and `rights_holder_prior` state, and optional JSON corrections to the seeded broadcaster ranking and rights-holder prior tables (empty = built-in). Review checklist: [`docs/SEEDED_TABLES_REVIEW.md`](../docs/SEEDED_TABLES_REVIEW.md).
+
 ## Stall alerting and health (unreleased, after 0.3.24)
 
 SportsLiveInfo now tells you when the feed stops moving. On 20 Nov the published manifest stayed at 03:42Z for more than three hours and nothing said so.
@@ -47,6 +52,8 @@ SportsLiveInfo now tells you when the feed stops moving. On 20 Nov the published
 "Publication activity" is a commit, or a publish attempt that found the feed unchanged. Between a slot's grace period and the next slot there is nothing to alert on, so overnight (after the 17:00 run) and the gaps between runs are the quiet periods; nothing needs configuring. A stall latches and clears only after the condition has been false for 10 minutes (2 minutes for the scheduler), so it cannot flap.
 
 Also reported, each as one notification but **not** a 503: publishing failed twice in a row, the GitHub token expires within 7 days (read from GitHub's response header; fine-grained tokens with an expiry only), a source failed three refreshes in a row, a collection started more than 90 minutes ago and never finished.
+
+Also advisory: **`publish_gate_blocked`**, an automatic publish refused by the pre-publish regression gate (events or guide-confirmed bindings fell by more than 20 %). The notification names the before and after counts and says to press Publish feed now on the Publishing page if the drop is expected. It clears when a later publisher row is not `blocked`. `/healthz` lists advisories under `advisories` and stays 200.
 
 **`/healthz`:** `200` healthy, `503` with `{"ok": false, "reason": "...", "reasons": [codes]}` when stalled. `/healthz?scope=liveness` looks at the scheduler heartbeat only; the Supervisor watchdog uses that one, because restarting the App cannot fix a stale manifest caused by a revoked token or a failing source. Like every page it answers only to the Ingress/Supervisor address.
 

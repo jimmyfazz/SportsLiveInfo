@@ -7,6 +7,13 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (public; it was private when this section was written on 12 November 2026).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 20 November 2026 — follow-ups: blocked-publish alert, Publishing toggles, seeded-table review (branch `s3-followups`)
+
+- Root cause: the regression gate stored publisher state `blocked` but `health.py` only counted `failed` rows, so a refusal raised no notification or stall code (runbook finding). Fix: snapshot `publish_gate` (latest non-preview publisher row is `blocked`) and advisory code `publish_gate_blocked` (new name; `publish_blocked` already meant two failed publishes).
+- Publishing page: crest toggles with attestation, read-only link-policy line, override form for the seeded tables (`hints.tables_from_config`, validation in `hints.py` and `Store.configure`).
+- `docs/SEEDED_TABLES_REVIEW.md`: every seeded entry, its source (none in the repo for most), verified and unverified real-world facts, owner checklist.
+- Gate: compileall and `unittest discover` pass (see final run in the session report); golden fixtures regenerated with no diff. NOT RUN: Home Assistant deploy, a real notification, B1 copy of fixtures.
+
 ## 20 November 2026 — event metadata, feature ranking and F1 weekends (branch `s2-metadata` for `feat/event-metadata-ranking`)
 
 - **Decision (owner):** rights permitted; everything additive and tolerant so B1G never breaks. SLI decides, B1G follows the feed.

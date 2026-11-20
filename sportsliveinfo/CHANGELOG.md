@@ -4,6 +4,12 @@
 
 ## 0.3.25 — 20 Nov 2026 release: history, scores, crests, standings, channel hints, health alerts, ops hardening
 
+### Follow-ups: blocked-publish alert, crest toggles, seeded-table overrides (after 0.3.25 was cut; the lead bumps the version)
+
+- **Health:** new advisory incident `publish_gate_blocked` for an automatic publish refused by the regression gate (previously stored only as publisher state `blocked`, with no notification). One de-duplicated Home Assistant notification naming events and guide-confirmed bindings before and after and the override (Publish feed now), dismissed on recovery; shown in Service health and `/healthz` `advisories`; never a 503. `publish_gate` now also stores the before/after counts.
+- **Publishing page:** toggles for `publish_crest_refs` and `crest_device_lookup_thesportsdb` (attestation to switch on), read-only `binds_rule` / `rights_holder_prior` line.
+- **Seeded tables:** optional config overrides `broadcaster_rank_override` and `rights_holder_prior_override` (JSON, validated on save, empty = built-in, feed byte-identical when absent) with a form on the Publishing page; owner review checklist in `docs/SEEDED_TABLES_REVIEW.md`. No wire change, golden fixtures unchanged, version not bumped.
+
 ### Owner statement 20 Nov 2026: scores and crest references on for fresh installs
 
 - **Fresh installs:** `score_approvals` defaults to `["api_sports", "football_data"]` (the eligible football sources; other API-Sports products stay off) and `publish_crest_refs` defaults to `true`. This follows the owner's statement that rights are permitted for this application's use. Supplier terms were not independently read or verified. `docs/RIGHTS_RECORD.md` ("Owner statement 20 Nov 2026") records the statement and lists every kill switch.
