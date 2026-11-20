@@ -283,7 +283,18 @@ class GuideCorroborationTests(unittest.TestCase):
         self.assertFalse(self.check(channel_identity_method="dictionary"))                # dictionary-only id
         self.assertFalse(self.check(channel_identity_method="identity_dictionary"))
         self.assertFalse(self.check(epg_sources=["farleyflex"]))
-        self.assertFalse(self.check(epg_sources=["uk_freeview", "m3upt_sky"]))            # both from Sky's EPG
+        # S2: both from Sky's own EPG is ONE family, so it is not independent evidence (own_epg off) ...
+        self.assertFalse(linking.guide_corroborated(dict(self.EVENT), dict(self.CANDIDATE, epg_sources=["uk_freeview", "m3upt_sky"]),
+                                                    own_epg=False))
+        # ... but Sky's own EPG is first-hand for Sky's own channel (broadcaster_own_epg_v1), and only for it.
+        self.assertTrue(self.check(epg_sources=["uk_freeview", "m3upt_sky"]))
+        self.assertTrue(self.check(epg_sources=["uk_freeview"]))
+        self.assertFalse(self.check(epg_sources=["uk_freeview"], canonical_channel_id="gb.itv.one"))   # carriage listing
+        self.assertFalse(self.check(epg_sources=["uk_freeview"], canonical_channel_id="gb.tnt.sports.1"))
+        self.assertFalse(self.check(epg_sources=["uk_freeview"], channel_identity_method="dictionary"))
+        self.assertFalse(self.check(epg_sources=["uk_freeview"], programme_start_utc="2026-11-14T13:59:00+00:00"))
+        self.assertFalse(self.check(epg_sources=["epgshare_uk"]))                          # unverified lineage never counts
+        self.assertFalse(self.check(epg_sources=["m3upt_sky_it"], canonical_channel_id="it.sky.sport"))
         self.assertFalse(self.check(epg_sources=["epgtalk_uk", "epgtalk_sports"]))         # one publisher
         self.assertFalse(self.check(epg_sources=["farleyflex", "epgshare_uk"]))            # unverified lineage
         self.assertFalse(self.check(epg_sources=["farleyflex", "iptv_epg_gb", "fr_mena_grab"]))

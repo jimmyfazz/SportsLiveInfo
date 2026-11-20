@@ -24,6 +24,7 @@
         "tier_rule": {"type": "string", "description": "1.6+: which assets carry core and extra events"},
         "link_order": {"const": "best_first", "description": "0.3.24+: broadcast_links are published best first; readers keep the order"},
         "link_rule": {"type": "string", "description": "0.3.24+: how readers use link order and binds"},
+        "binds_rule": {"enum": ["narrow", "legacy"], "description": "S2, optional: the rule that produced each link's binds (narrow = default; legacy = the 0.3.24 kill switch). Informational: readers use binds as published"},
         "live_until_rule": {"type": "string", "description": "0.3.24+: readers show LIVE while start_utc <= now < live_until_utc"},
         "live_max_age_minutes": {"type": "integer", "minimum": 1, "description": "0.3.24+: observation age limit used by live_state_rule, for readers without live_until_utc"},
         "live_end_grace_minutes": {"type": "integer", "minimum": 0, "description": "0.3.24+: minutes after expected_end_utc that live_state_rule still trusts 'live'"},

@@ -4,10 +4,98 @@
   "title": "Source health and guide coverage measured on the SportsLiveInfo host",
   "description": "Optional asset for B1G Settings > Sources diagnostics. Contains counts and states only.",
   "type": "object",
-  "required": ["schema", "sources", "guides"],
+  "required": [
+    "schema",
+    "sources",
+    "guides"
+  ],
   "properties": {
-    "schema": {"const": "sli.health/1"},
-    "sources": {"type": "array", "items": {"type": "object", "required": ["id", "kind", "label", "state"]}},
-    "guides": {"type": "array", "items": {"type": "object", "required": ["id", "channels", "full_24h", "families"]}}
+    "schema": {
+      "const": "sli.health/1"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "state"
+        ]
+      }
+    },
+    "guides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "channels",
+          "full_24h",
+          "families"
+        ]
+      }
+    },
+    "link_coverage": {
+      "type": "object",
+      "description": "S2, optional: why events have no channel link. events/linked/corroborated and gaps (reason -> count; reasons are the broadcast_gap codes, 'unknown' = none recorded), overall and by_tier (core/extra). Counts only",
+      "properties": {
+        "events": {
+          "type": "integer"
+        },
+        "linked": {
+          "type": "integer"
+        },
+        "corroborated": {
+          "type": "integer"
+        },
+        "gaps": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "by_tier": {
+          "type": "object"
+        }
+      }
+    },
+    "binds_dry_run": {
+      "type": "object",
+      "description": "S2, optional: what the narrow binds rule changes against the legacy rule on this revision: binds_legacy, binds_narrow, true_to_false (demoted links), false_to_true (always 0), true_to_false_by_market, true_to_false_by_reason and a capped list of demoted links (event id, channel id, market, reason; no titles). active_rule is the rule in force",
+      "properties": {
+        "active_rule": {
+          "enum": [
+            "narrow",
+            "legacy"
+          ]
+        },
+        "binds_legacy": {
+          "type": "integer"
+        },
+        "binds_narrow": {
+          "type": "integer"
+        },
+        "true_to_false": {
+          "type": "integer"
+        },
+        "false_to_true": {
+          "type": "integer"
+        },
+        "true_to_false_by_market": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "demoted": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    }
   }
 }

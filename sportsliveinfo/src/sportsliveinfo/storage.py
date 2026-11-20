@@ -34,6 +34,13 @@ DEFAULT = {
     # 20 Nov 2026). Crest references still need an API-Sports source in publication_approvals, which stays empty by
     # default, so nothing is published until the owner approves a source. false = off (kill switch).
     "publish_crest_refs": True,
+    # Link policy (contract §4.3). binds_rule "narrow" (default; "legacy" is the kill switch: the 0.3.24 rule, a link
+    # binds when its identity confidence is high). own_epg_corroboration: a broadcaster's own EPG family corroborates
+    # its own channels. rights_holder_prior: publish competition->rights-holder links (status rights_holder_prior,
+    # never binding); off until the owner enables it.
+    "binds_rule": "narrow",
+    "own_epg_corroboration": True,
+    "rights_holder_prior": False,
     "crest_device_lookup_thesportsdb": False,
    # Light live-status lane (API-Sports live boards in match hours, within a daily budget). Runs only when an
     # API-Sports key is saved and an API-Sports product is enabled; switch off here or on the Scheduler page.
@@ -188,6 +195,8 @@ class Store:
                         raise ValueError("Source is not eligible for score publication")
                     config[key] = value
                 else:
+                    if key == "binds_rule" and value not in ("narrow", "legacy"):
+                        raise ValueError("binds_rule must be narrow or legacy")
                     config[key] = value
             self._put("config", config)
             return config

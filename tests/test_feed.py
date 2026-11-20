@@ -17,7 +17,7 @@ FIXTURES = ROOT / "schemas" / "fixtures" / "sli-v1"
 SCHEMAS = {"sli.manifest/1": "sli-manifest", "sli.taxonomy/1": "sli-taxonomy", "sli.channels/1": "sli-channels",
            "sli.events-day/1": "sli-events-day", "sli.today/1": "sli-today", "sli.health/1": "sli-health",
            "sli.identity/1": "sli-identity", "sli.dictionary/1": "sli-dictionary", "sli.guide-map/1": "sli-guide-map",
-           "sli.live/1": "sli-live", "sli.standings/1": "sli-standings"}
+           "sli.live/1": "sli-live", "sli.standings/1": "sli-standings", "sli.channel-hints/1": "sli-channel-hints"}
 NOW = datetime(2026, 11, 14, 14, 0, tzinfo=timezone.utc)
 _spec = importlib.util.spec_from_file_location("feed_fixtures", ROOT / "tools" / "generate_feed_fixtures.py")
 fixtures_tool = importlib.util.module_from_spec(_spec)
@@ -122,7 +122,7 @@ class GoldenFixtureContractTests(unittest.TestCase):
             validate(json.loads(data), schema, schema)
             kinds.add(asset["kind"].split(":")[0])
         self.assertEqual(kinds, {"taxonomy", "channels", "identity", "dictionary", "guide_map", "events", "events_extra",
-                                 "today", "live", "standings", "health"})
+                                 "today", "live", "standings", "health", "channel_hints"})
         guide_map = self.asset("guide_map")
         channels = {(g["source_id"], c["id"]): c for g in guide_map["guides"] for c in g["channels"]}
         self.assertEqual(channels[("epgtalk_uk", "SkySpMainEvHD.uk")]["service"], "gb.sky.sports.main_event")
@@ -159,13 +159,13 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertEqual(events["cricketdata:ash1:d1"]["category_id"], "cricket.intl.england")
         self.assertEqual(events["api-sports-rugby:301"]["b1g_priority_group"], "Rugby")
         allowed = set(feed.EVENT_FIELDS) | {"b1g_priority_group", "broadcasts", "broadcast_links", "live_until_utc",
-                                            "display_state", "state_until_utc", "finished_at_utc"}
+                                            "display_state", "state_until_utc", "finished_at_utc", "slot_hint"}
         # D8: guide-listed links are canonical ids and confidence only, never "verified". 1.6: the strict match is
         # listed at the same slot by two independent guide families (mytelly and Schedules Direct): corroborated.
         self.assertEqual(events["football-data:5001"]["broadcast_links"],
                          [{"canonical_channel_id": "gb.sky.sports.main_event", "confidence": "high", "coverage": "network",
                            "guides": 2, "status": "guide_corroborated", "verification": "independent_guides_v1",
-                           "binds": True, "rank": 1}])
+                           "binds": True, "rank": 1, "home_market": True}])
         self.assertEqual(self.manifest["coverage"]["guide_corroborated_broadcasts"], 1)
         self.assertEqual(self.manifest["coverage"]["verified_broadcasts"], 0)
         self.assertEqual(self.manifest["rights"]["broadcast_candidates"], "channel_links_published_unverified")
