@@ -9,6 +9,16 @@
 - **Guarantees.** Every event has `competition_id` (catch-all `<sport>.other` when the taxonomy does not know it; the tier is still decided from the taxonomy, so the catch-all does not make an event core), `status_normalized` (default `scheduled`) and `expected_end_utc` (sport default; now also for date-only events, as a placeholder). `date_only` and `time_tbc` events carry `start_utc` = 00:00 Europe/London of the date (was noon UTC) and no `end_utc`.
 - Schemas (events-day, live, manifest), golden fixtures (a finished match yesterday with its channel link, a date-only event) and `tests/test_history_display_state.py` updated; no version bump, `format` stays `sli/1.6`.
 
+
+## Unreleased — Event metadata, feature ranking and F1 weekends (all optional, `sli/1.6`, `min_reader_minor` unchanged)
+
+- **Taxonomy:** `icon_key` on every sport and on competitions that have an emblem; `default_sport_order` (all `b1g_priority_group` values, including Horse racing, Handball, Volleyball, Esports, Bowling, Netball, Australian rules football and Other sport), also `display_policy.sport_order`; `display_policy.featured_competition_ids`, `featured_event_count` and `ranking.rule`.
+- **Events:** `participants_short` for every event with participants (source's own kept, otherwise derived); `participant_ids` (`apisports:football:42` or `key:<name>`); `competition_logo` `{src, ref}` from the API-Sports league id, gated by the same crest switch (`publish_crest_refs`) and `url_template`, capability `competition_logos`; `feature_rank` 0-100 on every event; `ppv` and `ppv_label` for boxing and MMA PPV cards; F1 `session_label` and `weekend_id`.
+- **Today:** `featured_event_ids` is now the top 10 by `feature_rank` (was: every featured-tag event); new `ordered_event_ids`, `today_extra_ids` and `today_extra_summary`.
+- **Tags:** nation detection accepts "England Rugby", "England XV", "England Men", "England Under 21", "Scotland (W)"; the live "0 of 121 tagged" could not be reproduced offline.
+- **Extra tier:** policy reviewed and unchanged (youth and reserve football stays extra, nothing dropped, ids stable); extras are summarised in `today`.
+- **Capabilities:** `taxonomy_icons`, `participant_metadata`, `feature_rank`; `competition_logos`, `ppv_flag`, `f1_weekends` when present. Schemas updated; golden fixtures regenerated (an F1 weekend was added to the fixture day); contract section 4.3 documents the exact semantics. Tests: 27 new in `tests/test_event_metadata.py` (469 pass). No version bump.
+
 ## Unreleased — Scores per source behind a rights flag (feed `sli/1.7`, default off)
 
 - **Nothing is published until the owner approves a source.** New config `score_approvals` (list of source ids, default empty, separate from `publication_approvals`; Ingress → Publishing → Score approvals, with an attestation checkbox). Eligible: the API-Sports products except MMA (live and final) and football-data.org (final scores of regular-time results only). TheSportsDB, Jolpica, OpenF1 and every other source are rejected by validation. The owner must still read each source's terms and approve.

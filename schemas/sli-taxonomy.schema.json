@@ -8,9 +8,10 @@
   "properties": {
     "schema": {"const": "sli.taxonomy/1"},
     "sports": {"type": "array", "items": {"type": "object", "required": ["id", "label", "order", "typical_minutes", "b1g_priority_group"],
-      "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "order": {"type": "integer"}, "typical_minutes": {"type": "integer", "minimum": 1}, "b1g_priority_group": {"type": "string"}}}},
+      "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "order": {"type": "integer"}, "typical_minutes": {"type": "integer", "minimum": 1}, "b1g_priority_group": {"type": "string"}, "icon_key": {"type": "string", "description": "Optional (capability taxonomy_icons): stable key for the sport's icon; unknown keys use the generic icon."}}}},
+    "default_sport_order": {"type": "array", "items": {"type": "string"}, "description": "Optional (capability taxonomy_icons): every b1g_priority_group a sport or competition can publish, in the default display order, including groups B1G has no built-in entry for. Append unknown groups after the user's own order."},
     "competitions": {"type": "array", "items": {"type": "object", "required": ["id", "sport", "label", "priority", "b1g_priority_group"],
-      "properties": {"id": {"type": "string"}, "sport": {"type": "string"}, "label": {"type": "string"}, "priority": {"type": "integer"}, "countries": {"type": ["array", "null"]}, "b1g_priority_group": {"type": "string"}}}},
+      "properties": {"id": {"type": "string"}, "sport": {"type": "string"}, "label": {"type": "string"}, "priority": {"type": "integer"}, "countries": {"type": ["array", "null"]}, "b1g_priority_group": {"type": "string"}, "icon_key": {"type": "string", "description": "Optional (capability taxonomy_icons): stable key for the competition's emblem, where one is available."}}}},
     "national_categories": {"type": "array", "items": {"type": "object", "required": ["id", "sport", "label", "priority", "nations"]}},
     "other_category": {"type": "object", "required": ["id_pattern", "priority"]},
     "tags": {"type": "object"},

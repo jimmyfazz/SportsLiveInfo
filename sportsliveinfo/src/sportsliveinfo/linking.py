@@ -392,6 +392,14 @@ def merge_events(events):
             primary["participant_crests"] = crests
         else:
             primary.pop("participant_crests", None)
+        logos = {(r["competition_logo"]["src"], r["competition_logo"]["ref"]) for r in rows
+                 if r.get("competition_id") == primary.get("competition_id") and isinstance(r.get("competition_logo"), dict)
+                 and r["competition_logo"].get("src") and r["competition_logo"].get("ref")}
+        if primary.get("competition_id") and len(logos) == 1:
+            # The same named competition from any contributor: the fixture takes its logo reference (no guessing).
+            primary["competition_logo"] = {"src": next(iter(logos))[0], "ref": next(iter(logos))[1]}
+        elif len(logos) != 1:
+            primary.pop("competition_logo", None)
         primary.pop("_start", None)
         primary.pop("_teams", None)
         merged.append(primary)

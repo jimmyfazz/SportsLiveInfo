@@ -8,7 +8,10 @@
   "properties": {
     "schema": {"const": "sli.today/1"},
     "date": {"type": "string"},
-    "featured_event_ids": {"type": "array", "items": {"type": "string"}},
+    "featured_event_ids": {"type": "array", "items": {"type": "string"}, "description": "Metadata release: the top display_policy.featured_event_count (10) of today's core events by feature_rank, best first (previously every event carrying a featured tag)."},
+    "ordered_event_ids": {"type": "array", "items": {"type": "string"}, "description": "Optional. Every core event of today, best first: feature_rank descending, then start_utc, then id."},
+    "today_extra_ids": {"type": "array", "items": {"type": "string"}, "description": "Optional. Ids of today's tier 'extra' events (published in events_extra:<date>), best first. Never dropped; ids are the same as in events_extra."},
+    "today_extra_summary": {"type": "object", "required": ["count", "by_sport"], "description": "Optional. Count of today's extra events and the count per sport id.", "properties": {"count": {"type": "integer", "minimum": 0}, "by_sport": {"type": "object"}}},
     "groups": {"type": "array", "items": {"type": "object", "required": ["sport", "categories"],
       "properties": {"sport": {"type": "string"}, "categories": {"type": "array", "items": {"type": "object", "required": ["id", "event_ids"]}}}}}
   }
