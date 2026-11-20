@@ -133,7 +133,8 @@ class CollectionCase(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.store = Store(Path(self.tmp.name) / "s.sqlite3")
         self.store.configure({"setup_complete": True, "keys": {"football_data": "fdk"},
-                              "sports": {"jolpica": False, "football_data": True}})
+                              "sports": {"jolpica": False, "football_data": True},
+                              "score_approvals": [], "publish_crest_refs": False})  # pin legacy defaults (owner defaults, 20 Nov)
         self.engine = Engine(self.store)
         self.calls = []
         pace = patch.object(Engine, "_pace", lambda self, name: None)
@@ -325,6 +326,16 @@ class FeedTests(CollectionCase):
 
     def assets(self, manifest):
         return [a for a in manifest["assets"] if a["kind"].startswith("standings:")]
+
+    def test_standings_coexist_with_default_scores_and_crests(self):
+        # Owner defaults (scores + crest refs on) must not hide or break the standings assets.
+        self.stub_all()
+        self.collect()
+        self.store.configure({"score_approvals": ["api_sports", "football_data"], "publish_crest_refs": True})
+        manifest, files = self.build()
+        self.assertEqual(len(self.assets(manifest)), len(standings.COMPETITIONS))
+        self.assertIn("standings", manifest["capabilities"])
+        self.assertIn(manifest["format"], ("sli/1.6", "sli/1.7"))
 
     def test_published_with_capability_rights_and_attribution(self):
         self.stub_all()

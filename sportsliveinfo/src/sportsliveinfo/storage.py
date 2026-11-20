@@ -25,12 +25,15 @@ DEFAULT = {
     "github": {"owner": "jimmyfazz", "repository": "LiveSports-EPG", "branch": "main",
                "token": "", "enabled": False, "auto_publish": False},
     "publication_approvals": [],
-    # Scores (feed sli/1.7): sources whose live and final scores may be published, per source, DEFAULT EMPTY (off).
-    # Separate from publication_approvals: the owner approves each source's score terms on their own.
-    "score_approvals": [],
-    # Team crest references (contract sli/1.6 additive "team_crests"). Off until the owner has re-read the API-Sports
-    # terms: the public feed carries no participant_crests and rights.crests.monogram_only is true.
-    "publish_crest_refs": False,
+    # Scores (feed sli/1.7): sources whose live and final scores may be published. Fresh installs start with the
+    # eligible football sources ticked (owner statement 20 Nov 2026, docs/RIGHTS_RECORD.md). Empty list = off (kill switch).
+    # Separate from publication_approvals: a score is published only for an event that is itself publishable.
+    # Eligibility is validated in Store.configure (providers.SCORE_ELIGIBLE); other API-Sports products are not on by default.
+    "score_approvals": ["api_sports", "football_data"],
+    # Team crest references (contract sli/1.6 additive "team_crests"). Fresh installs have the flag on (owner statement
+    # 20 Nov 2026). Crest references still need an API-Sports source in publication_approvals, which stays empty by
+    # default, so nothing is published until the owner approves a source. false = off (kill switch).
+    "publish_crest_refs": True,
     "crest_device_lookup_thesportsdb": False,
    # Light live-status lane (API-Sports live boards in match hours, within a daily budget). Runs only when an
     # API-Sports key is saved and an API-Sports product is enabled; switch off here or on the Scheduler page.
@@ -49,6 +52,12 @@ DEFAULT = {
     "dictionary": {"iptvorg": False, "north_america": False, "latin_america_caribbean": False,
                    "middle_east_north_africa": False, "south_asia": False, "africa": False, "asia_pacific": False},
 }
+
+
+# Fresh installs get DEFAULT (written by Store.__init__). A stored configuration saved before one of these keys existed
+# keeps the legacy value below, so an upgrade never starts reading or publishing scores or crest references that the
+# owner has not chosen. The owner can save the keys to change them.
+LEGACY_ABSENT_DEFAULTS = {"score_approvals": [], "publish_crest_refs": False}
 
 
 def utcnow():
@@ -102,8 +111,13 @@ class Store:
     def config(self):
         # Carry new source defaults into pre-existing v0.1 installations; do not
         # re-enable or overwrite saved provider choices or credentials.
-        stored = self._get("config") or {}
+        stored_row = self._get("config")
+        stored = stored_row or {}
         config = json.loads(json.dumps(DEFAULT))
+        if stored_row is not None:
+            for key, legacy in LEGACY_ABSENT_DEFAULTS.items():
+                if key not in stored_row:
+                    config[key] = json.loads(json.dumps(legacy))
         for key, value in stored.items():
             if key in config:
                 if isinstance(config[key], dict) and isinstance(value, dict):

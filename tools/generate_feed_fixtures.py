@@ -234,7 +234,10 @@ def build(scores=False):
         store.configure({"setup_complete": True, "schedule": ["04:00", "12:00", "17:00"],
                          "sports": {name: True for name in SNAPSHOTS} | {"jolpica": True},
                          "epg": {"farleyflex": True, "epgtalk_uk": True}, "publication_approvals": sorted(SNAPSHOTS),
-                         "dictionary": {"iptvorg": True}, **({"score_approvals": SCORE_APPROVALS} if scores else {})})
+                         "dictionary": {"iptvorg": True},
+                         # Pinned to the legacy values (not the fresh-install defaults of 20 Nov 2026) so the committed
+                         # golden files stay the byte-identical sli/1.6 contract; the scores variant sets its own list.
+                         "score_approvals": SCORE_APPROVALS if scores else [], "publish_crest_refs": False})
         for name, events in snapshots.items():
             store.save_snapshot("sports:" + name, {"events": events, "source_id": name})
         store.save_snapshot("standings", standings_snapshot())

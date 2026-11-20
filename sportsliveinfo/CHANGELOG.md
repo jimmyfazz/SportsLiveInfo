@@ -2,6 +2,14 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## Unreleased — Owner statement 20 Nov 2026: scores and crest references on for fresh installs
+
+- **Fresh installs:** `score_approvals` defaults to `["api_sports", "football_data"]` (the eligible football sources; other API-Sports products stay off) and `publish_crest_refs` defaults to `true`. This follows the owner's statement that rights are permitted for this application's use. Supplier terms were not independently read or verified. `docs/RIGHTS_RECORD.md` ("Owner statement 20 Nov 2026") records the statement and lists every kill switch.
+- **Upgrades are unchanged:** a stored configuration that predates a key keeps the legacy value (`storage.LEGACY_ABSENT_DEFAULTS`: `[]` and `false`). A saved configuration keeps what was saved.
+- **Unchanged:** `publication_approvals` stays empty by default, so nothing reaches the public feed until the owner ticks a source and attests. Eligibility validation is unchanged: TheSportsDB, Jolpica, OpenF1, MMA and every other ineligible source are rejected.
+- **Kill switches:** an empty `score_approvals` or `publish_crest_refs: false` restores the legacy output byte for byte (tested). The golden fixtures are pinned to the legacy values in `tools/generate_feed_fixtures.py`, so `schemas/fixtures/` did not change.
+- **Tests:** 9 new in `tests/test_owner_defaults_20nov.py`; 451 pass (442 before). Existing score, crest and golden tests that assumed defaults off now set them explicitly. No version bump.
+
 ## Unreleased — Yesterday history, display state, competition id and status guarantees (additive, `min_reader_minor` unchanged)
 
 - **History (contract 4.5).** Manifest `window.history_from` (the London day before today) and the optional asset `events:<history_from>` (`required: false`, tier core, same `sli.events-day/1` schema, `history: true` on the manifest entry) carry yesterday's events with their last known status, including `finished` and, when scores are approved and known, the final score, and the guide-listed `broadcast_links`, so B1G can recognise a replay. Yesterday is never in `today` or in the required `events:<today>` asset. Collection: the first full discovery of each London day adds yesterday to the API-Sports plan (+1 request per enabled API-Sports product per day; more only if that day paginates; the learned free-plan window drops it when the plan does not cover it, and the product's quota reserve applies as for every other day) and football-data asks `dateFrom=yesterday` (same single request). Source snapshot retention is 3 days (was 2) so the day before yesterday is not lost at the boundary; the materialised window is yesterday..today+7 (dashboards list yesterday's events too).
@@ -29,7 +37,7 @@
 - No version bump. The football-data.org and API-Sports payload shapes follow the public documentation and are **not verified against a live response**; Home Assistant verification **NOT RUN**. The B1G reader change (drop Highlightly, ESPN and Pulselive standings clients, copy the regenerated fixtures to B1's `sli-v1-6` test resources) is NOT DONE.
 - Gate: `python3 -m compileall -q sportsliveinfo/src tests` and `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests` passed, 469 tests (27 new in `tests/test_standings.py`).
 
-## Unreleased — Scores per source behind a rights flag (feed `sli/1.7`, default off)
+## Unreleased — Scores per source behind a rights flag (feed `sli/1.7`, default off at the time; see the 20 Nov entry above)
 
 - **Nothing is published until the owner approves a source.** New config `score_approvals` (list of source ids, default empty, separate from `publication_approvals`; Ingress → Publishing → Score approvals, with an attestation checkbox). Eligible: the API-Sports products except MMA (live and final) and football-data.org (final scores of regular-time results only). TheSportsDB, Jolpica, OpenF1 and every other source are rejected by validation. The owner must still read each source's terms and approve.
 - **Disabled means byte-identical.** With no approved source the manifest is still `sli/1.6`, there is no `score` field, no `scores` capability and the revision hash is unchanged (the golden `schemas/fixtures/sli-v1` fixtures did not change). With approved sources the manifest is `sli/1.7` (`min_reader_minor` unchanged), capability `scores`, `compatibility.scores` and `rights.scores.approved_sources`; removing the approvals is the kill switch.

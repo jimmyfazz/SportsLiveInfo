@@ -58,7 +58,8 @@ class CombinedTests(StoreCase):
 
     def test_scores_only_and_crests_only_do_not_leak_into_each_other(self):
         primary, other = self.contributors()
-        seed(self.store, {"football_data": [primary], "api_sports": [other]}, score_approvals=["api_sports"])
+        seed(self.store, {"football_data": [primary], "api_sports": [other]}, score_approvals=["api_sports"],
+             publish_crest_refs=False)
         manifest, files = feed.build_feed(self.store, now=NOW)
         event, = day_events(files, manifest).values()
         self.assertIn("score", event)

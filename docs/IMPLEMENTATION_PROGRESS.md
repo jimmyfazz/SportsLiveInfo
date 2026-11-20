@@ -13,6 +13,14 @@
 - **Change:** new `metadata.py` (icons and sport order, short names, participant ids, competition logo gating, `feature_rank`, PPV, F1 `session_label` and `weekend_id`); taxonomy, event, today and manifest additions in `feed.py`; API-Sports league ids and OpenF1 meeting keys carried by the decoders; competition logo merge in `linking.merge_events`; nation-name tolerance in `taxonomy.py`. Schemas, golden fixtures, contract section 4.3 and CHANGELOG updated.
 - **Results:** compileall and `unittest discover` pass, 469 tests (442 baseline plus 27 new). One old assertion changed deliberately: `today.featured_event_ids` is now the top 10 by rank.
 - **NOT RUN:** a rerun against the live feed or Home Assistant (so the "0 of 121 events carry tags" cause is not proven; the pipeline tags fixtures correctly and only exact nation names matched), B1G reading the new fields, the B1 fixture copy, a deploy. No version bump.
+
+## 20 November 2026 — owner statement; fresh-install defaults for scores and crests (branch `chore/defaults-owner-assertion`)
+- **Owner statement:** the owner stated that all rights are permitted for this application's use. Recorded in `docs/RIGHTS_RECORD.md` as the owner's statement only. Supplier terms were NOT independently read or verified from the cloud session.
+- **Change:** fresh-install defaults `score_approvals` = `["api_sports", "football_data"]` and `publish_crest_refs` = `true`. `publication_approvals` unchanged (empty). A stored configuration without the keys keeps `[]` and `false`. Kill switches tested. Golden fixtures pinned to the legacy values in the generator, so the committed fixtures are unchanged.
+- **Results:** `compileall` clean; `unittest discover` 451 pass (442 before, 9 new). Regenerating the golden fixtures gives no diff.
+- **Owner to do:** tick sources in Publishing, Publication rights register (with attestation) before anything is public; confirm `approval_log`; decide whether existing installs should also take the new defaults (they do not at present).
+- **NOT RUN:** a live API-Sports or football-data.org call, Home Assistant, a deploy. No version bump, no PR, no merge.
+
 ## 20 November 2026 — scores per source behind a rights flag (branch `feat/scores-sli-1-7`)
 
 - **Decision (advisor):** ship scores per source behind `score_approvals`, default off; the owner must read the API-Sports and football-data.org terms and approve before anything is published. Design is additive (`sli/1.7`, capability `scores`, `min_reader_minor` unchanged).

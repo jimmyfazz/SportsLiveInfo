@@ -50,8 +50,9 @@ LIVE_STATE_RULE = ("status_normalized == 'live' is trusted only when status_obse
                    "clock (start..expected_end) shown as 'should be on now', never 'LIVE'.")
 FEATURED_TAGS = sorted(linking.FEATURED_TAGS)
 
-# 1.7 (optional, capability "scores"): event and live-row `score`. Published only when the owner lists a source in
-# config `score_approvals`; with none (the default) the feed is byte-identical to 1.6 and still says sli/1.6.
+# 1.7 (optional, capability "scores"): event and live-row `score`. Published only for the sources listed in config
+# `score_approvals` (fresh-install default: the football pair; an empty list is the kill switch). With none the feed is
+# byte-identical to 1.6 and still says sli/1.6.
 FORMAT_MINOR_SCORES = 7
 SCORE_RULE = ("score.home is the score of participants[0] and score.away the score of participants[1], whatever their "
               "home or away role; a reader that cannot pair a score with exactly two participants ignores it. period is one "
@@ -473,7 +474,8 @@ def crest_settings(conf, approved):
     """(apisports_on, device_lookup_on) for the manifest's ``rights.crests`` master switch.
 
     API-Sports crest references are published only when an API-Sports source is in the publication approvals AND the
-    owner's explicit ``publish_crest_refs`` flag is true (default false). Nothing changes until both are set."""
+    owner's ``publish_crest_refs`` flag is true (fresh-install default true; false is the kill switch). With no API-Sports
+    source in publication approvals (empty by default) nothing is published."""
     flag = conf.get("publish_crest_refs") is True
     apisports = flag and any(src in approved for src in providers.API_SPORTS_CREST_PRODUCT)
     return apisports, conf.get("crest_device_lookup_thesportsdb") is True
