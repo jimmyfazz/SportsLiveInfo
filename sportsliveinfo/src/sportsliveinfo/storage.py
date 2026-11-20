@@ -1,6 +1,5 @@
 """Small durable state store; every API secret remains inside HAOS /data."""
 import json
-import os
 import sqlite3
 import threading
 from contextlib import contextmanager

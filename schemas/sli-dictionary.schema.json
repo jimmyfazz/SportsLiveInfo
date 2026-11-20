@@ -9,6 +9,7 @@
     "schema": {"const": "sli.dictionary/1"},
     "source": {"type": "object", "required": ["name", "licence", "url"]},
     "market_countries": {"type": "object"},
+    "part": {"type": "object", "description": "Optional. Present when the dictionary is published as parts (dictionary:uk-eu, dictionary:world-<region>[-n]); every part is a complete document whose channels are one slice: concatenate the channels of all parts.", "required": ["id", "index", "of"]},
     "regions": {"type": "array", "items": {"type": "string"}, "description": "Optional (1.4+). Owner opt-in world regions included beyond UK/Europe."},
     "group_markets": {"type": "array", "items": {"type": "string"}, "description": "Optional (1.4+). Multi-country markets where a leading country tag narrows the lookup (rules.country_tag)."},
     "country_tags": {"type": "object", "description": "Optional (1.4+). Provider section tag -> ISO country."},

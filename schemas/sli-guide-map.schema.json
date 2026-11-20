@@ -22,6 +22,11 @@
     "rules": {
       "type": "object"
     },
+    "part": {
+      "type": "object",
+      "description": "Optional. Present when the guide map is published as parts (guide_map:<n>): union the guides and service_aliases of all parts.",
+      "required": ["id", "index", "of"]
+    },
     "guides": {
       "type": "array",
       "items": {

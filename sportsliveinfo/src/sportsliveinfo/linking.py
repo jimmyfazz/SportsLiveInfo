@@ -526,6 +526,61 @@ def guide_channel_map(guides, channel_identities, now, days=7):
     return out
 
 
+SLIM_FIELDS = ("channel_id", "start_utc", "end_utc", "title", "subtitle", "is_live", "is_repeat")
+SLIM_PAST, SLIM_FUTURE = timedelta(days=3), timedelta(days=10)
+
+
+def slim_guide(guide, now):
+    """A guide reduced to what linking reads (audit 15 Nov, C4): ids, titles, sub-titles and times for programmes
+    inside [now-3 d, now+10 d]. The full guide's overall coverage span is kept as ``_coverage`` so the "guide does not
+    cover this time" verdicts are exactly the same as with every programme loaded."""
+    keep_from, keep_to = now - SLIM_PAST, now + SLIM_FUTURE
+    first = last = None
+    rows = []
+    for programme in guide.get("programmes") or []:
+        try:
+            start, end = _dt(programme["start_utc"]), _dt(programme["end_utc"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if end <= start:
+            continue
+        first = start if first is None or start < first else first
+        last = end if last is None or end > last else last
+        if end > keep_from and start < keep_to:
+            rows.append({field: programme.get(field) for field in SLIM_FIELDS})
+    return {"channels": guide.get("channels") or {}, "programmes": rows, "_coverage": (first, last)}
+
+
+class GuideStream:
+    """Guides loaded one at a time and discarded, re-iterable (audit 15 Nov, C4).
+
+    ``loader(name)`` returns one stored guide. ``channel_views()`` is the small first pass (channel names only);
+    ``items()`` is the programme pass, yielding ``(name, slim_guide)`` with only one guide alive at a time. Passing
+    this instead of a dict keeps peak memory at one guide however many guides are enabled."""
+
+    def __init__(self, names, loader, now, slim=slim_guide):
+        self.names, self.loader, self.now, self.slim = list(names), loader, now, slim
+        self.loaded = 0                    # guides loaded so far (for tests and diagnostics)
+
+    def _load(self, name):
+        self.loaded += 1
+        return self.loader(name)
+
+    def channel_views(self):
+        out = []
+        for name in self.names:
+            guide = self._load(name)
+            out.append((name, {"channels": dict((guide or {}).get("channels") or {})}))
+            del guide
+        return out
+
+    def items(self):
+        for name in self.names:
+            guide = self._load(name)
+            yield name, self.slim(guide or {}, self.now)
+            del guide
+
+
 def _channel_identity_index(epg_guides, dictionary_document=None, identity_document=None, aliases_out=None):
     """Resolve guide channels through the curated registry, identity graph and dictionary.
 
@@ -537,7 +592,10 @@ def _channel_identity_index(epg_guides, dictionary_document=None, identity_docum
     except (KeyError, TypeError, ValueError):
         resolver = None
     member_cluster, clusters = _identity_members(identity_document)
-    guides = list(epg_guides.items()) if isinstance(epg_guides, dict) else list(epg_guides)
+    if isinstance(epg_guides, GuideStream):
+        guides = epg_guides.channel_views()
+    else:
+        guides = list(epg_guides.items()) if isinstance(epg_guides, dict) else list(epg_guides)
     names = {(source_id, str(channel_id)): str(name)
              for source_id, guide in guides
              for channel_id, name in (guide.get("channels") or {}).items()}
@@ -598,6 +656,10 @@ def _programme_index(epg_guides, window_start, window_end, *, include_non_matche
     for source_id, guide in guides:
         if coverage is not None:
             coverage.setdefault(source_id, (None, None))
+        span = guide.get("_coverage")          # slim guides carry the full guide's span
+        if coverage is not None and span and span[0] is not None:
+            first, last = coverage[source_id]
+            coverage[source_id] = (min(first, span[0]) if first else span[0], max(last, span[1]) if last else span[1])
         channels = guide.get("channels", {})
         identity = {}
         for programme in guide.get("programmes", []):
@@ -998,11 +1060,16 @@ def broadcast_candidates(events, epg_guides, now, *, gaps=None, dictionary_docum
     coverage = {} if gaps is not None else None
     channel_identities, guides = _channel_identity_index(epg_guides or {}, dictionary_document, identity_document,
                                                          aliases_out=service_aliases)
-    if guide_map is not None:
-        guide_map.update(guide_channel_map(guides, channel_identities, now))
-    rows = _programme_index(guides, window_start, window_end,
-                            include_non_matches=gaps is not None, coverage=coverage,
-                            channel_identities=channel_identities)
+    # One guide at a time (a GuideStream loads and drops each); a plain dict or list works the same way.
+    programme_guides = epg_guides.items() if isinstance(epg_guides, GuideStream) else guides
+    rows = []
+    for item in programme_guides:
+        if guide_map is not None:
+            guide_map.update(guide_channel_map([item], channel_identities, now))
+        rows.extend(_programme_index([item], window_start, window_end,
+                                     include_non_matches=gaps is not None, coverage=coverage,
+                                     channel_identities=channel_identities))
+        del item
     guide_periods = [(first, last) for first, last in (coverage or {}).values() if first is not None]
     by_start = sorted(enumerate(rows), key=lambda item: item[1][0])
     programme_starts = [row[0] for _, row in by_start]

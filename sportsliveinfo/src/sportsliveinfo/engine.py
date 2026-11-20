@@ -24,6 +24,9 @@ from .storage import utcnow
 from .guide import analyze_guide
 
 LOGGER = logging.getLogger(__name__)
+# Overall wall-clock limit of one collection (audit 15 Nov, O1). Each request and each source also has its own
+# deadline (providers.REQUEST_DEADLINE, providers.SOURCE_DEADLINE); this is the last resort that frees the busy lock.
+COLLECTION_DEADLINE = 2700.0
 COLLECTION_SCOPES = {"both": "Sports and EPG", "sports": "Sports", "epg": "EPG"}
 LONDON = ZoneInfo("Europe/London")
 # Minimum seconds between calls to one provider (published per-minute limits).
@@ -126,6 +129,8 @@ def _sports_failure(exc):
     match = re.fullmatch(r"HTTP ([1-5][0-9]{2}) from upstream", str(exc))
     if match:
         return f"Upstream HTTP {match[1]}"
+    if isinstance(exc, providers.DeadlineExceeded):
+        return "Upstream too slow (overall request deadline exceeded)"
     if str(exc) == "Upstream network request failed" or isinstance(exc, TimeoutError):
         return "Upstream connection failed or timed out"
     return "Invalid or unsupported provider response"
@@ -152,6 +157,8 @@ def _guide_failure(exc):
         return "Upstream returned HTTP " + http[1]
     if detail == "Configured daily call budget exhausted":
         return "Local daily request budget exhausted"
+    if isinstance(exc, providers.DeadlineExceeded):
+        return "Upstream too slow (overall request deadline exceeded)"
     if detail == "Upstream network request failed" or isinstance(exc, TimeoutError):
         return "Upstream connection failed or timed out"
     if detail in ("Provider response exceeded configured size limit", "XMLTV decompressed past safety limit",
@@ -264,25 +271,37 @@ class Engine:
         # lane so several large XMLTV parses never run at once on the mini PC.
         successes = 0
         deferrals = 0
-        with ThreadPoolExecutor(max_workers=max(1, min(6, len(sports) + 1)), thread_name_prefix="sli-lane") as pool:
+        pool = ThreadPoolExecutor(max_workers=max(1, min(6, len(sports) + 1)), thread_name_prefix="sli-lane")
+        stuck = 0
+        guides_refreshed = 0
+        try:
             futures = [pool.submit(self._collect_sport, name, conf) for name in sports]
             epg_future = None
             if guides:
                 collect_epg = partial(self._collect_epg, scheduled=True) if scheduled else self._collect_epg
                 epg_future = pool.submit(lambda: [collect_epg(name) for name in guides])
                 futures.append(epg_future)
-            guides_refreshed = 0
+            overall = providers.Deadline(COLLECTION_DEADLINE)
             for future in futures:
                 try:
-                    result = future.result()
+                    result = future.result(timeout=max(0.05, overall.remaining()))
                     if future is epg_future:
                         guides_refreshed = sum(item is True for item in result)
                     results = result if isinstance(result, list) else [result]
                     successes += sum(bool(item) for item in results)
                     deferrals += sum(item is None for item in results)
                 except Exception as exc:  # A crashed lane must not mask missing data.
+                    if not future.done():     # the wait timed out: the lane is still running
+                        stuck += 1
+                        continue
                     LOGGER.error("Collector lane failed (%s)", type(exc).__name__)
                     self.store.job("collector", "lane_error", type(exc).__name__)
+        finally:
+            # A lane past the overall deadline is abandoned (its own request deadlines end it shortly): the busy
+            # lock must be freed so the next scheduled run, the live lane and publication can proceed.
+            pool.shutdown(wait=not stuck, cancel_futures=True)
+        if stuck:
+            LOGGER.error("Collection abandoned %d lane(s) still running after %d s", stuck, int(COLLECTION_DEADLINE))
         if scope in ("both", "epg") and conf.get("dictionary", {}).get("iptvorg"):
             self._refresh_dictionary()
         if guides_refreshed:
@@ -293,9 +312,9 @@ class Engine:
             self.store.job("collector", "deferred", f"{label}: all {attempted} sources deferred; last-good retained")
             return False
         if not successes:
-            state = "failed" if attempted else "no_sources"
-            self.store.job("collector", state, "%s: %d of %d enabled sources refreshed; last-good retained" %
-                           (label, successes, attempted))
+            state = "stuck" if stuck else "failed" if attempted else "no_sources"
+            self.store.job("collector", state, "%s: %d of %d enabled sources refreshed; last-good retained%s" %
+                           (label, successes, attempted, "; %d lane(s) abandoned at the overall deadline" % stuck if stuck else ""))
             return False
         try:
             self._materialize()
@@ -304,8 +323,14 @@ class Engine:
             self.store.job("collector", "failed", "Combined snapshot update failed; previous dashboard retained")
             return False
         state = "finished" if successes == attempted else "degraded"
-        self.store.job("collector", state, "%s: %d of %d sources refreshed; older last-good retained as needed" %
-                       (label, successes, attempted))
+        if stuck:
+            state = "stuck"
+            self.store.job("collector", state, "%s: %d lane(s) still running after %d min were abandoned; %d of %d "
+                           "sources refreshed; last-good retained" % (label, stuck, int(COLLECTION_DEADLINE // 60),
+                                                                    successes, attempted))
+        else:
+            self.store.job("collector", state, "%s: %d of %d sources refreshed; older last-good retained as needed" %
+                           (label, successes, attempted))
         github = conf["github"]
         if (scope == "both" and github.get("enabled") and github.get("auto_publish")
                 and conf.get("publication_approvals")):
@@ -520,6 +545,10 @@ class Engine:
         return raw
 
     def _collect_sport(self, name, conf):
+        with providers.deadline_scope(providers.SOURCE_DEADLINE):
+            return self._collect_sport_run(name, conf)
+
+    def _collect_sport_run(self, name, conf):
         _, _, key_name, daily_limit = providers.SPORTS[name]
         if key_name and not conf["keys"].get(key_name):
             self.store.job(name, "needs_key", "Add a provider API key in Sources")
@@ -708,6 +737,10 @@ class Engine:
                            % type(exc).__name__)
 
     def _collect_epg(self, name, *, scheduled=False):
+        with providers.deadline_scope(providers.SOURCE_DEADLINE):
+            return self._collect_epg_run(name, scheduled=scheduled)
+
+    def _collect_epg_run(self, name, *, scheduled=False):
         _, url = providers.EPG[name]
         max_bytes, max_programmes = providers.EPG_LIMITS.get(name, providers.DEFAULT_EPG_LIMIT)
         try:
@@ -882,7 +915,7 @@ class Engine:
                 copies.append(dict(event, id="public:" + event["id"], _public_copy=True))
         guides = []
         # Guides are always read: besides matching events, live sport they list is kept (see below).
-        guide_sources = self._guide_sources(conf, guides, True)
+        guide_sources = self._guide_sources(conf, guides, True, now)
         gaps = {}
         dictionary_snapshot = self.store.snapshot("channel-dictionary") or {}
         identity_snapshot = self.store.snapshot("channel-identity") or {}
@@ -933,8 +966,11 @@ class Engine:
         # Observations folded into this snapshot are no longer "since the last full feed"; keep only newer ones.
         self._prune_live_observations(now)
 
-    def _guide_sources(self, conf, summaries, include_programmes):
-        """Load one saved guide at a time and retain only coverage summaries."""
+    def _guide_sources(self, conf, summaries, include_programmes, now=None):
+        """Coverage summaries for every enabled guide (appended to ``summaries``) and, when asked, a
+        ``linking.GuideStream`` that loads one saved guide at a time as slim records (audit 15 Nov, C4)."""
+        now = now or datetime.now(timezone.utc)
+        names = []
         for name, enabled in conf["epg"].items():
             if not enabled:
                 continue
@@ -950,8 +986,8 @@ class Engine:
                 entry = self.store.snapshot("epg:" + name)
                 payload = entry["data"]
                 channels, programmes = len(payload["channels"]), len(payload["programmes"])
+                del payload
             else:
-                payload = None
                 channels, programmes = summary["channels"], summary["valid_programmes"]
             summaries.append({"id": name, "channels": channels, "programmes": programmes,
                 "last_success": entry["updated_at"], "country": summary.get("country", "unknown"),
@@ -960,8 +996,10 @@ class Engine:
                 "unmatched": summary.get("unmatched_canonical_channels", 0),
                 "recognised_services": len(summary.get("matched_canonical_channels", [])),
                 "public_redistribution": False})
-            if include_programmes:
-                yield name, payload if payload is not None else self.store.snapshot("epg:" + name)["data"]
+            names.append(name)
+        if not include_programmes:
+            return None
+        return linking.GuideStream(names, lambda n: (self.store.snapshot("epg:" + n) or {}).get("data") or {}, now)
 
     def test_source(self, kind, name):
         """Probe the configured connection and reserve quota for each request.
@@ -1012,7 +1050,9 @@ class Engine:
             max_bytes, max_programmes = providers.EPG_LIMITS.get(name, providers.DEFAULT_EPG_LIMIT)
             try:
                 self._reserve_epg(name)
-                guide = providers.decode_xmltv(providers.fetch(url, max_bytes=max_bytes), name, max_programmes=max_programmes)
+                with providers.deadline_scope(providers.SOURCE_DEADLINE):
+                    guide = providers.decode_xmltv(providers.fetch(url, max_bytes=max_bytes), name,
+                                                   max_programmes=max_programmes)
                 if not guide["programmes"]:
                     raise ValueError("Empty EPG programme list")
                 now = datetime.now(timezone.utc)
@@ -1601,8 +1641,9 @@ class Engine:
             max_bytes, max_programmes = providers.EPG_LIMITS.get(name, providers.DEFAULT_EPG_LIMIT)
             try:
                 self._reserve_epg(name)
-                guide = providers.decode_xmltv(providers.fetch(url, max_bytes=max_bytes), name,
-                                               max_programmes=max_programmes)
+                with providers.deadline_scope(providers.SOURCE_DEADLINE):
+                    guide = providers.decode_xmltv(providers.fetch(url, max_bytes=max_bytes), name,
+                                                   max_programmes=max_programmes)
                 index = coverage.guide_index(name, guide)
                 index["status"] = "ok"
                 del guide
@@ -1874,6 +1915,14 @@ class Engine:
         self.store._put(state_key, {"last_revision": revision, "revisions": keep, "published_at": utcnow(),
                                     "stats": {"events": cover["events"],
                                               "corroborated_bindings": cover["guide_corroborated_broadcasts"]}})
+        if not private:
+            try:    # C10: one ledger entry per history commit; the health report alerts when the budget is exceeded
+                now = datetime.now(timezone.utc)
+                ledger = feed.growth_record((self.store._get("feed_growth") or {}).get("ledger"), utcnow(),
+                                            sum(len(d) for d in uploads.values()), len(uploads))
+                self.store._put("feed_growth", {"ledger": ledger, "report": feed.growth_report(ledger, now)})
+            except Exception:
+                LOGGER.warning("Feed growth ledger not updated")
         self.store.job(job, "submitted", "Feed %s committed atomically (%d new files, %d removed); verify the static endpoint" % (
             revision, len(uploads), len(deletions)))
         return "committed", revision
@@ -1918,7 +1967,7 @@ class Engine:
             base_tree = api("GET", "/git/commits/" + head, step="reading the latest commit")["tree"]["sha"]
             remote = api("GET", "/git/trees/%s?recursive=1" % base_tree, step="reading the repository files")
             existing = None if remote.get("truncated") else {e["path"] for e in remote.get("tree", []) if e.get("type") == "blob"}
-        except (KeyError, TypeError) as exc:
+        except (KeyError, TypeError):
             raise RuntimeError("GitHub returned an unexpected repository response") from None
         uploads = dict(uploads)
         if existing is not None:

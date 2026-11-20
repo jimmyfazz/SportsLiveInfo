@@ -15,11 +15,40 @@ jobs:
         with:
           python-version: '3.12'
       - name: Validate Python modules
-        run: python -m compileall -q sportsliveinfo/src
-      - name: Run offline tests
+        run: python -m compileall -q sportsliveinfo/src tests tools
+      - name: Lint (pyflakes)
+        run: |
+          python -m pip install --quiet pyflakes==3.2.0
+          python -m pyflakes sportsliveinfo/src tools
+      - name: Every schema file parses
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          bad = []
+          files = sorted(pathlib.Path("schemas").rglob("*.json"))
+          for path in files:
+              try:
+                  json.loads(path.read_text(encoding="utf-8"))
+              except ValueError as exc:
+                  bad.append("%s: %s" % (path, exc))
+          if bad or not files:
+              sys.exit("\n".join(bad) or "no schema files found")
+          print("%d JSON files under schemas/ parse" % len(files))
+          PY
+      - name: Version files agree (config.yaml, Dockerfile, __init__.py)
+        run: python tools/bump_version.py --check
+      - name: Run offline tests (the unit gate)
         env:
           PYTHONPATH: sportsliveinfo/src
         run: python -m unittest discover -s tests -v
+      - name: Golden fixtures are up to date
+        env:
+          PYTHONPATH: sportsliveinfo/src
+        run: |
+          python tools/generate_feed_fixtures.py
+          git status --short schemas/fixtures
+          git diff --exit-code -- schemas/fixtures || { echo "::error::tools/generate_feed_fixtures.py changed the committed fixtures; run it and commit the result"; exit 1; }
+          test -z "$(git ls-files --others --exclude-standard schemas/fixtures)" || { echo "::error::the generator produced untracked fixture files; commit them"; exit 1; }
       - name: Validate Home Assistant app file layout
         run: |
           test -f repository.yaml
