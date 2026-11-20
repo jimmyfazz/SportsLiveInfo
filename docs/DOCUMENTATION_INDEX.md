@@ -1,6 +1,6 @@
 # Documentation index and precedence
 
-**Reconciled 15 November 2026 for v0.3.23** (first reconciled 13 November for v0.3.4).
+**Reconciled 20 November 2026 for v0.3.24** (first reconciled 13 November for v0.3.4).
 
 SportsLiveInfo is the public App source repository. LiveSports-EPG is the separate public data destination. Installation and in-place update steps are in the [operator guide](../sportsliveinfo/DOCS.md).
 
@@ -19,7 +19,7 @@ SportsLiveInfo is the public App source repository. LiveSports-EPG is the separa
 | [AGENTS.md](../AGENTS.md) | Current specification / guide |
 | [CLAUDE.md](../CLAUDE.md) | Current specification / guide |
 | [README.md](../README.md) | Current specification / guide |
-| [Claude’s 13 November audit](CODE_AUDIT_AND_FIXES_2026-11-13.md) | Historical audit and integration input |
+| [Claude’s 13 November audit](archive/CODE_AUDIT_AND_FIXES_2026-11-13.md) | Historical audit and integration input (archived 20 Nov 2026) |
 | [docs/AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md](AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md) | Current audit: fixed and open findings |
 | [docs/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md](archive/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md) | Historical audit / receipt |
 | [docs/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md](archive/B1_FORENSIC_EPG_SPORTS_API_SCOPE_AUDIT_2026-11-12.md) | Historical audit / receipt |
@@ -52,6 +52,7 @@ SportsLiveInfo is the public App source repository. LiveSports-EPG is the separa
 | [docs/RESEARCH_FINDINGS_2026-11-12.md](archive/RESEARCH_FINDINGS_2026-11-12.md) | Historical audit / receipt |
 | [docs/RIGHTS_RECORD.md](RIGHTS_RECORD.md) | Current record: publication rights per source and data kind, kill-switches, owner checklist (20 Nov 2026) |
 | [docs/SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md](archive/SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md) | Historical audit / receipt |
+| [docs/RUNBOOK.md](RUNBOOK.md) | Current operations runbook: feed stalls, GitHub token, quotas, regression gate, rollback, kill switches, App backup, post-update checks, who to ask |
 | [docs/SOURCE_REGISTRY.md](SOURCE_REGISTRY.md) | Current specification / guide |
 | [docs/SOURCES_AND_IMPROVEMENTS_AUDIT_2026-11-12.md](archive/SOURCES_AND_IMPROVEMENTS_AUDIT_2026-11-12.md) | Historical audit / receipt |
 | [docs/SUBSCRIPTION_DRIVEN_MULTIREGION_EPG.md](SUBSCRIPTION_DRIVEN_MULTIREGION_EPG.md) | Current specification / guide |

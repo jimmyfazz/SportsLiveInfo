@@ -1,6 +1,6 @@
 # SportsLiveInfo — implementation progress and agent handover
 
-> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.1 source is present (13 Nov code audit fixes: see docs/CODE_AUDIT_AND_FIXES_2026-11-13.md). Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
+> **Current documentation context — reviewed 12 November 2026.** Experimental v0.3.1 source is present (13 Nov code audit fixes: see docs/archive/CODE_AUDIT_AND_FIXES_2026-11-13.md). Current source/test evidence and open deployment gates are centralized in CURRENT_STATUS; historical version receipts elsewhere are not current pass claims.
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Updated:** 12 November 2026  
@@ -20,6 +20,19 @@
 - **Results:** `compileall` clean; `unittest discover` 451 pass (442 before, 9 new). Regenerating the golden fixtures gives no diff.
 - **Owner to do:** tick sources in Publishing, Publication rights register (with attestation) before anything is public; confirm `approval_log`; decide whether existing installs should also take the new defaults (they do not at present).
 - **NOT RUN:** a live API-Sports or football-data.org call, Home Assistant, a deploy. No version bump, no PR, no merge.
+
+## 20 November 2026 — operations runbook and documentation consolidation (branch `s2-runbook`, docs only)
+
+- **Result:** `docs/RUNBOOK.md` added and listed in `DOCUMENTATION_INDEX.md`. `docs/CODE_AUDIT_AND_FIXES_2026-11-13.md` moved to `docs/archive/` with `git mv`; its two inbound links (index and this file) now point at the archive. No other file was moved: the 15 Nov audit, the handovers, the feed contract, the rights record and the B1G backlog are current or binding.
+- **Link check:** relative Markdown links in every tracked `.md` file, run before and after. Before: 248 links in 47 files, 1 broken. After: 261 links in 48 files, the same 1 broken. The broken one predates this change: `docs/archive/FORENSIC_SOURCE_AND_LOGIC_INVESTIGATION_2026-11-12.md` line 112 has a literal `...` target. Left alone (archived record).
+- **Found while checking the code (for the owner to decide, not changed here):**
+  1. `sportsliveinfo/DOCS.md` says the GitHub connection test is GET-only. The code (`engine.py`, connection test) also makes an unreferenced blob write probe. The UI copy says the same.
+  2. A regression-gate refusal is recorded as publisher state `blocked`. That state does not count toward the two-failure publish notification or any stall code.
+  3. `publish_crest_refs` and `crest_device_lookup_thesportsdb` have no UI. `crest_device_lookup_thesportsdb` only sets a manifest flag; no lookup code exists.
+  4. No code path republishes an earlier revision. The runbook gives a manual git procedure and says it is not supported by the App.
+  5. There is no standings source, quota or kill switch at `13a8994` (superseded: the standings asset, quota and `publish_standings` kill switch arrive with `feat/standings-asset`, merged in release/20nov).
+- **NOT RUN:** the Python suite (no code changed) and the stall checks on a device.
+- **Sources read:** `engine.py` (`_publish_job`, `_commit_feed`, `publish_regression`, `_live_tick`, `settle_pass`), `health.py` (`snapshot`, `raw_reasons`, `healthz`), `storage.py` (`DEFAULT`, `configure`), `feed.py` (`crest_settings`, `build_feed` manifest fields), `server.py` (`_action`, Publishing, Scheduler and Diagnostics pages).
 
 ## 20 November 2026 — scores per source behind a rights flag (branch `feat/scores-sli-1-7`)
 
@@ -189,7 +202,7 @@ Hong Kong channel identity: added 25 distinct Now Sports and beIN services from 
 
 ## Code audit and fixes — 13 November 2026 (v0.3.1)
 
-**Branch:** `claude/sportsliveinfo-b1g-android-syyo8j` (merged `main` `56ea1be`). **Status:** SOURCE IMPLEMENTED + LOCAL TESTED, **118/118** tests (Python 3.12.3 and 3.13). Report: [CODE_AUDIT_AND_FIXES_2026-11-13.md](CODE_AUDIT_AND_FIXES_2026-11-13.md).
+**Branch:** `claude/sportsliveinfo-b1g-android-syyo8j` (merged `main` `56ea1be`). **Status:** SOURCE IMPLEMENTED + LOCAL TESTED, **118/118** tests (Python 3.12.3 and 3.13). Report: [CODE_AUDIT_AND_FIXES_2026-11-13.md](archive/CODE_AUDIT_AND_FIXES_2026-11-13.md).
 
 **Fixed:**
 - server/GUI S1–S9 and GUI-1 to GUI-9;
