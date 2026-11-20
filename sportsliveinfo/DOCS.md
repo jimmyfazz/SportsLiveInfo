@@ -32,6 +32,30 @@ New guide sources and newly added sports adapters are opt-in. API-Sports product
 
 Sports source tests make one quota-accounted request. EPG tests download and parse a bounded guide. Tests may update diagnostics/quota usage but do not replace source snapshots or authorize publishing. A successful test is not a completeness or rights check.
 
+## Stall alerting and health (unreleased, after 0.3.24)
+
+SportsLiveInfo now tells you when the feed stops moving. On 20 Nov the published manifest stayed at 03:42Z for more than three hours and nothing said so.
+
+**What is checked** (Diagnostics > Service health shows all of it, with a red banner on every page while stalled):
+
+| Check | Counts as a stall (HTTP 503) | Notes |
+|---|---|---|
+| Scheduler heartbeat | older than 180 s | clears when under 60 s; a restart gets a 180 s grace |
+| Manifest overdue | a scheduled refresh slot (Europe/London) passed more than the threshold ago and nothing has been published since | threshold default 3 h; only when automatic publishing is on and approved |
+| Manifest too old | no publication activity for 30 h | the manifest expires at 48 h |
+
+"Publication activity" is a commit, or a publish attempt that found the feed unchanged. Between a slot's grace period and the next slot there is nothing to alert on, so overnight (after the 17:00 run) and the gaps between runs are the quiet periods; nothing needs configuring. A stall latches and clears only after the condition has been false for 10 minutes (2 minutes for the scheduler), so it cannot flap.
+
+Also reported, each as one notification but **not** a 503: publishing failed twice in a row, the GitHub token expires within 7 days (read from GitHub's response header; fine-grained tokens with an expiry only), a source failed three refreshes in a row, a collection started more than 90 minutes ago and never finished.
+
+**`/healthz`:** `200` healthy, `503` with `{"ok": false, "reason": "...", "reasons": [codes]}` when stalled. `/healthz?scope=liveness` looks at the scheduler heartbeat only; the Supervisor watchdog uses that one, because restarting the App cannot fix a stale manifest caused by a revoked token or a failing source. Like every page it answers only to the Ingress/Supervisor address.
+
+**Home Assistant notifications:** the App declares `homeassistant_api: true` and posts a persistent notification through the Supervisor (`persistent_notification.create`, id such as `sportsliveinfo_feed_stalled`) once per incident, and dismisses it when the incident has recovered. A failed notification is logged (error type only, never the token) and retried every 15 minutes; it never affects collection or publishing. Without a Supervisor token (development) nothing is sent. Installing this version asks you to approve the new Home Assistant API permission.
+
+**Option:** *stall_threshold_hours* (default 3, range 0.5 to 48) in the App Configuration tab: how long after a scheduled refresh the manifest may stay unpublished before it counts as overdue.
+
+Not done: Home Assistant sensor entities (for example `sensor.sli_manifest_age`). States posted through the REST API disappear on every Home Assistant restart and have no unique id, so they cannot be placed on dashboards reliably; the notification, `/healthz` and the status page cover the need. A proper integration would be a separate task.
+
 ## Channel coverage (your channel list, kept on Home Assistant)
 
 1. Open **Channel coverage**. Import your provider's M3U playlist or a text file with one channel per line.

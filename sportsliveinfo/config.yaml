@@ -11,10 +11,13 @@ boot: auto
 init: true
 ingress: true
 ingress_port: 8099
-watchdog: "tcp://[HOST]:[PORT:8099]"
+watchdog: "http://[HOST]:[PORT:8099]/healthz?scope=liveness"
+homeassistant_api: true
 stage: experimental
 panel_icon: mdi:television-guide
 panel_title: SportsLiveInfo
 panel_admin: true
-options: {}
-schema: {}
+options:
+  stall_threshold_hours: 3
+schema:
+  stall_threshold_hours: "float(0.5,48)?"

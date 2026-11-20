@@ -28,7 +28,8 @@ FORMAT_MAJOR, FORMAT_MINOR = 1, 6  # 1.1: optional `identity` asset; 1.2: option
 # `country_tags` and the 0.3.18 lookup rules (country tag, callsign, transliteration, successor, own-market suffix);
 # 1.5: optional `guide_map` asset (what each guide channel is);
 # 1.6: event `status_observed_at`, `expected_end_utc` and `tier`; optional `live` and `events_extra:<date>` assets;
-# broadcast link status `guide_corroborated` (contract agreed 15 Nov 2026)
+# broadcast link status `guide_corroborated` (contract agreed 15 Nov 2026);
+# 1.7 (published only while config `score_approvals` is non-empty): optional `score` on events and live rows
 ROOT = "v1"
 # B1G refuses any asset above this size (SliFeedContract.MAX_ASSET_BYTES, sized for 32-bit Fire TV sticks).
 # An optional asset over it is not published; a required one fails the build loudly.
@@ -40,12 +41,67 @@ EVENT_FIELDS = (
     "competition_country", "event_type", "session", "match_type", "day_number", "weight_class", "title", "participants",
     "participants_short", "start_utc", "end_utc", "start_precision", "status_normalized", "round", "stage", "venue",
     "country", "tags", "sources", "fixture_confidence", "corroboration", "start_conflict", "broadcast_verified",
-    "status_observed_at", "expected_end_utc", "tier",
+    "status_observed_at", "expected_end_utc", "tier", "participant_crests",
 )
 LIVE_STATE_RULE = ("status_normalized == 'live' is trusted only when status_observed_at is at most 45 minutes old AND "
                    "start_utc <= now <= expected_end_utc + 30 minutes. Otherwise treat it as unknown and fall back to the "
                    "clock (start..expected_end) shown as 'should be on now', never 'LIVE'.")
 FEATURED_TAGS = sorted(linking.FEATURED_TAGS)
+
+# 1.7 (optional, capability "scores"): event and live-row `score`. Published only when the owner lists a source in
+# config `score_approvals`; with none (the default) the feed is byte-identical to 1.6 and still says sli/1.6.
+FORMAT_MINOR_SCORES = 7
+SCORE_RULE = ("score.home is the score of participants[0] and score.away the score of participants[1], whatever their "
+              "home or away role; a reader that cannot pair a score with exactly two participants ignores it. period is one "
+              "of 1H HT 2H ET PEN FT AET Q1-Q4 P1-P3 OT or null; there is no minute. events:<date> rows carry the final "
+              "score of a finished event only; the live asset carries the live score (status live, show it only while "
+              "LIVE holds, never after live_until_utc) and a final score read after the event. score.source is the "
+              "SportsLiveInfo source id and score.observed_at when it was read. A score is absent when uncertain; "
+              "absent means unknown, never 0-0. Disabled by omitting compatibility.scores.")
+
+
+def score_approvals(conf):
+    """Source ids whose scores may be published: the owner's ``score_approvals`` limited to eligible sources.
+    Empty by default, which turns every score code path off."""
+    return frozenset(conf.get("score_approvals") or []) & frozenset(providers.SCORE_ELIGIBLE)
+
+
+def _source_of_event_id(event_id):
+    """API-Sports ids look like ``api-sports-rugby:123``: the source id is the prefix with underscores."""
+    return str(event_id).split(":", 1)[0].replace("-", "_")
+
+
+def published_score(event, candidates, approved, status, *, final_only, min_observed=None):
+    """The ``score`` object to publish for ``event`` (feed 1.7), or None.
+
+    ``candidates`` are scores already re-expressed in the event's participants order (``linking._group_scores``) with
+    ``source``, ``observed_at`` and the ``status`` they were read with. Only approved sources, only the sports in
+    ``providers.SCORE_SPORTS``, only events with exactly two participants, and only a candidate read with the same
+    status the event publishes (a live score never rides on a finished event, or the reverse). Final scores of
+    different sources that disagree publish nothing."""
+    if (not approved or event.get("sport") not in providers.SCORE_SPORTS or status not in ("live", "finished")
+            or (final_only and status != "finished") or len(event.get("participants") or []) != 2):
+        return None
+    pool = []
+    for c in candidates or ():
+        if (not isinstance(c, dict) or c.get("source") not in approved or c.get("status") != status
+                or not isinstance(c.get("home"), int) or not isinstance(c.get("away"), int)):
+            continue
+        observed = _z(c.get("observed_at"))
+        if not observed or (min_observed and observed < min_observed):
+            continue
+        if providers.SCORE_ELIGIBLE[c["source"]] == "final" and status != "finished":
+            continue
+        pool.append(dict(c, observed_at=observed))
+    if not pool:
+        return None
+    if len({(c["home"], c["away"]) for c in pool}) > 1 and status == "finished":
+        return None
+    best = max(pool, key=lambda c: (c["observed_at"], c["source"]))
+    periods = {c.get("period") for c in pool if (c["home"], c["away"]) == (best["home"], best["away"])}
+    period = best.get("period") if len(periods) == 1 and best.get("period") in providers.SCORE_PERIODS else None
+    return {"home": best["home"], "away": best["away"], "period": period, "observed_at": best["observed_at"],
+            "source": best["source"]}
 
 # Tiered public "today" (contract sli/1.6 §3). Core: named competitions, internationals, featured nations, PPV, the
 # main non-football sports, and football leagues and cups of the UK, Ireland and France. Everything else (mostly
@@ -75,6 +131,8 @@ def event_tier(event):
 
 
 LIVE_MAX_AGE = timedelta(minutes=45)
+LIVE_LANE_INTERVAL_MINUTES = 15       # published in refresh.live_lane; applies only while events are in play
+LIVE_QUIET_SLOT_GUARD_MINUTES = 3     # the lane stays quiet this long either side of a scheduled refresh
 LIVE_END_GRACE = timedelta(minutes=30)
 
 
@@ -301,8 +359,43 @@ def dictionary_document(store, conf):
     return document if isinstance(document, dict) and document.get("channels") else None
 
 
-def _event_public(event, private=False, observed_fallback=None):
-    row = {k: event[k] for k in EVENT_FIELDS if k in event and event[k] not in (None, "", [])}
+CREST_REF = re.compile(r"^[a-z][a-z-]{1,30}/teams/[1-9][0-9]{0,11}$")
+CREST_URL_TEMPLATE = "https://media.api-sports.io/{ref}.png"
+CREST_CACHE_DAYS = 30
+
+
+def crest_settings(conf, approved):
+    """(apisports_on, device_lookup_on) for the manifest's ``rights.crests`` master switch.
+
+    API-Sports crest references are published only when an API-Sports source is in the publication approvals AND the
+    owner's explicit ``publish_crest_refs`` flag is true (default false). Nothing changes until both are set."""
+    flag = conf.get("publish_crest_refs") is True
+    apisports = flag and any(src in approved for src in providers.API_SPORTS_CREST_PRODUCT)
+    return apisports, conf.get("crest_device_lookup_thesportsdb") is True
+
+
+def _crests_public(event):
+    """Valid, index-aligned crest references for an event, or None. A malformed list is dropped whole."""
+    crests, names = event.get("participant_crests"), event.get("participants")
+    if not isinstance(crests, list) or not isinstance(names, list) or len(crests) != len(names):
+        return None
+    out = []
+    for crest in crests:
+        if (isinstance(crest, dict) and crest.get("src") == "apisports" and isinstance(crest.get("ref"), str)
+                and CREST_REF.match(crest["ref"])):
+            out.append({"src": "apisports", "ref": crest["ref"]})
+        else:
+            out.append(None)
+    return out if any(out) else None
+
+
+def _event_public(event, private=False, observed_fallback=None, score_sources=frozenset(), crests=False):
+    row = {k: event[k] for k in EVENT_FIELDS if k != "participant_crests" and k in event
+           and event[k] not in (None, "", [])}
+    refs = _crests_public(event) if crests else None
+    if refs:
+        row["participant_crests"] = refs
+    row.setdefault("status_normalized", "scheduled")
     # Contract sli/1.6 §1: when the status was last observed (always present) and the typical end.
     row["status_observed_at"] = _z(event.get("status_observed_at")) or _z(observed_fallback) or "1970-01-01T00:00:00Z"
     row.pop("expected_end_utc", None)
@@ -333,6 +426,11 @@ def _event_public(event, private=False, observed_fallback=None):
     if private and event.get("origin") == "guide_listing":
         row["origin"] = "guide_listing"     # live sport listed in the guides, no event-source fixture
     row["b1g_priority_group"] = _priority_group(event.get("sport"), event.get("competition_id"))
+    if score_sources:
+        score = published_score(event, list((event.get("scores") or {}).values()), score_sources,
+                                row["status_normalized"], final_only=True)
+        if score:
+            row["score"] = score        # day assets: the final score of a finished event only
     return row
 
 
@@ -379,15 +477,17 @@ def _broadcast_links(event, private=False):
     return links
 
 
-def live_document(store, events):
+def live_document(store, events, now=None):
     """The optional ``live`` asset (contract sli/1.6 §2), or None.
 
     Built from the live-status lane's observations (``live_observations``, keyed by source event id). An event is
     listed when an observation newer than its published status either changes the status or confirms play in
-    progress (so a reader keeps trusting "live" for 45 minutes). Ids, statuses and times only: no scores."""
+    progress (so a reader keeps trusting "live" for 45 minutes). Rows whose ``live_until_utc`` is not after ``now``
+    are dropped: a build never lists an expired "live". Ids, statuses and times; since 1.7 also the score, only for sources in ``score_approvals``."""
     observations = ((store._get("live_observations") or {}).get("events") or {})
     if not observations:
         return None
+    score_sources = score_approvals(store.config())
     rows = []
     for event in events:
         seen = [observations[sid] for sid in event.get("source_events") or [event.get("id")]
@@ -399,8 +499,31 @@ def live_document(store, events):
         status = latest.get("status_normalized")
         if not observed or status not in linking.STATUS_PROGRESS or (published and observed <= published):
             continue
-        if status != event.get("status_normalized") or status == "live":
+        score = None
+        if score_sources:
+            ids = event.get("source_events") or [event.get("id")]
+            align = event.get("score_align") or {}
+            candidates = []
+            for sid in ids:
+                obs = observations.get(sid)
+                direction = 1 if len(ids) <= 1 else align.get(sid)
+                raw = obs.get("score") if isinstance(obs, dict) else None
+                if (direction is None or not isinstance(raw, dict) or not isinstance(raw.get("home"), int)
+                        or not isinstance(raw.get("away"), int)):
+                    continue
+                home, away = (raw["home"], raw["away"]) if direction == 1 else (raw["away"], raw["home"])
+                candidates.append({"home": home, "away": away, "period": raw.get("period"),
+                                   "source": _source_of_event_id(sid), "observed_at": obs.get("status_observed_at"),
+                                   "status": obs.get("status_normalized")})
+            # Only a score read with the newest status observation: an older score is not confirmed by it.
+            score = published_score(event, candidates, score_sources, status, final_only=False, min_observed=observed)
+        known = published_score(event, list((event.get("scores") or {}).values()), score_sources,
+                                event.get("status_normalized"), final_only=True) if score_sources else None
+        news = bool(score) and (score["home"], score["away"]) != ((known["home"], known["away"]) if known else None)
+        if status != event.get("status_normalized") or status == "live" or news:
             row = {"id": event["id"], "status_normalized": status, "status_observed_at": observed}
+            if score:
+                row["score"] = score
             try:
                 end = linking.expected_end(event).isoformat(timespec="seconds") \
                     if event.get("start_utc") and event.get("start_precision") != "date_only" else None
@@ -409,6 +532,8 @@ def live_document(store, events):
             until = live_until(status, observed, event.get("start_utc"), end)
             if until:
                 row["live_until_utc"] = until
+                if now is not None and datetime.fromisoformat(until.replace("Z", "+00:00")) <= now:
+                    continue
             rows.append(row)
     if not rows:
         return None
@@ -460,10 +585,12 @@ def build_feed(store, now=None, previous_revision=None, private=False):
         selected = all_events
     selected = [e if "category_id" in e else taxonomy.classify(e) for e in selected if licensed(e)]
     # Legacy/unclassified snapshot rows still need category fields the schema requires.
-    events = [_event_public(e, private, observed_fallback) for e in selected]
+    score_sources = score_approvals(conf)
     if private:
         approved = {src for e in all_events for src in (e.get("sources") or [e.get("source_id")])
                     if isinstance(src, str) and src != "guide_listing"}
+    crests_apisports, crests_device = crest_settings(conf, approved)
+    events = [_event_public(e, private, observed_fallback, score_sources, crests_apisports) for e in selected]
     omitted = sorted({src for e in all_events if e.get("origin") != "guide_listing"
                       for src in (e.get("sources") or [e.get("source_id")])
                       if isinstance(src, str) and src not in approved})
@@ -525,7 +652,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     add("today", today_doc, "sli.today/1", True, date=window[0], records=len(todays))
     published_ids = {e["id"] for e in events}
     live_doc = live_document(store, [dict(e, status_observed_at=e.get("status_observed_at") or observed_fallback)
-                                     for e in selected if e.get("id") in published_ids])
+                                     for e in selected if e.get("id") in published_ids], now=now)
     if live_doc:
         add("live", live_doc, "sli.live/1", False, records=len(live_doc["events"]))
     add("health", health_document(store, conf, snapshots), "sli.health/1", False)
@@ -534,8 +661,9 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     # Revision = data assets + meaningful manifest settings. The health asset is
     # excluded because its timestamps change on every collection and would force
     # a new GitHub commit each refresh with no data change.
+    minor = FORMAT_MINOR_SCORES if score_sources else FORMAT_MINOR
     stable = {"assets": [a["sha256"] for a in assets if a["kind"] != "health"], "approved": sorted(approved),
-              "schedule": schedule, "version": __version__, "format": [FORMAT_MAJOR, FORMAT_MINOR]}
+              "schedule": schedule, "version": __version__, "format": [FORMAT_MAJOR, minor]}
     revision = hashlib.sha256(_json(stable)).hexdigest()[:20]
     interval = _interval_minutes(schedule)
     by_sport = {}
@@ -548,8 +676,8 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     notices += ["Optional asset %s exceeded the %d MiB reader limit and was not published." % (kind, MAX_READER_ASSET_BYTES >> 20)
                 for kind in skipped]
     manifest = {
-        "feed": "sportsliveinfo", "format": "sli/%d.%d" % (FORMAT_MAJOR, FORMAT_MINOR),
-        "format_major": FORMAT_MAJOR, "format_minor": FORMAT_MINOR,
+        "feed": "sportsliveinfo", "format": "sli/%d.%d" % (FORMAT_MAJOR, minor),
+        "format_major": FORMAT_MAJOR, "format_minor": minor,
         "compatibility": {"reader_major": FORMAT_MAJOR, "min_reader_minor": 0, "unknown_fields": "ignore",
                           "unknown_assets": "ignore", "unknown_enum_fallback": FALLBACKS,
                           "on_major_mismatch": "keep last good feed; show 'update B1G to read the newer SportsLiveInfo feed'",
@@ -574,6 +702,8 @@ def build_feed(store, now=None, previous_revision=None, private=False):
         "timezone_reference": "Europe/London", "window": {"from": window[0], "to": window[-1]},
         "refresh": {"schedule_europe_london": schedule, "expected_interval_minutes": interval,
                     "reader_poll_minutes": 30, "stale_after_hours": 30,
+                    "live_stale_after_minutes": int(LIVE_MAX_AGE.total_seconds() // 60),
+                    "live_lane": live_lane_refresh(store, conf),
                     "expires_at": (now + timedelta(hours=48)).isoformat(timespec="seconds")},
         "capabilities": ["taxonomy", "channel_registry", "channel_families", "guide_catalogue", "events_by_day",
                          "today", "source_health", "fixture_corroboration", "status_observed_at", "event_tiers"]
@@ -583,7 +713,9 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                         + (["live_status"] if live_doc else [])
                         + (["verified_broadcasts"] if any(e["broadcast_verified"] for e in events) else [])
                         + (["broadcast_links"] if any(e.get("broadcast_links") for e in events) else [])
-                        + (["guide_corroborated_broadcasts"] if corroborated_links else []),
+                        + (["guide_corroborated_broadcasts"] if corroborated_links else [])
+                        + (["scores"] if score_sources else [])
+                        + (["team_crests"] if crests_apisports else []),
         "assets": assets,
         "coverage": {"events": len(events), "today": len(todays), "by_sport": dict(sorted(by_sport.items())),
                      "tiers": {"core": core, "extra": len(events) - core},
@@ -596,6 +728,16 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                      "families_known": len(CHANNEL_FAMILIES)},
         "rights": {"events": {"approved_sources": sorted(approved), "omitted_unapproved_sources": omitted},
                    "epg_programmes": "not_published",
+                   # Master kill switch for team crests (additive). SLI publishes references only, never images.
+                   "crests": {"sources": {"apisports": {
+                                  "enabled": crests_apisports, "url_template": CREST_URL_TEMPLATE,
+                                  "attribution": "Team crests © their owners, via API-Sports (media.api-sports.io); "
+                                                 "identification only",
+                                  "cache_days": CREST_CACHE_DAYS}},
+                              "device_lookup": {"thesportsdb": {
+                                  "enabled": crests_device,
+                                  "attribution": "Team badges from TheSportsDB, looked up on the device"}},
+                              "monogram_only": not (crests_apisports or crests_device)},
                    "broadcast_candidates": "channel_links_published_unverified",
                    "attribution": [{"source": s, "text": ATTRIBUTION[s][0], "licence": ATTRIBUTION[s][1]}
                                    for s in sorted({providers.SPORT_FAMILY.get(a, a) for a in approved}) if s in ATTRIBUTION]
@@ -605,6 +747,10 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                            "user_settings_override": True},
         "notices": notices,
     }
+    if score_sources:
+        # Kill switch: remove a source from score_approvals and the next feed says enabled=false by omission.
+        manifest["compatibility"]["scores"] = {"enabled": True, "rule": SCORE_RULE}
+        manifest["rights"]["scores"] = {"approved_sources": sorted(score_sources)}
     if private:
         manifest["visibility"] = "private"
         manifest["rights"]["events"]["scope"] = "personal_use_private_repository"
@@ -614,6 +760,23 @@ def build_feed(store, now=None, previous_revision=None, private=False):
             manifest["capabilities"].append("guide_listed_events")
         manifest["notices"] = ["Private personal-use feed: never copy it to a public location."] + manifest["notices"]
     return manifest, files
+
+
+def live_lane_refresh(store, conf):
+    """``refresh.live_lane`` (contract §4.2): the 15 minute cadence applies only while events are in play."""
+    products = [n for n in providers.SPORTS if n.startswith("api_sports") and n != "api_sports_mma"]
+    enabled = bool(conf.get("live_status", True) and conf["keys"].get("api_sports")
+                   and any(conf["sports"].get(n) for n in products))
+    row = {"enabled": enabled, "interval_minutes": LIVE_LANE_INTERVAL_MINUTES,
+           "active_only_while_events_in_play": True, "quiet_slots_guard_minutes": LIVE_QUIET_SLOT_GUARD_MINUTES}
+    try:
+        last = store._get("live_lane") or {}
+        stamp = _z(last.get("last_run"))
+    except Exception:
+        stamp = None
+    if stamp:
+        row["last_run_utc"] = stamp
+    return row
 
 
 def _interval_minutes(schedule):

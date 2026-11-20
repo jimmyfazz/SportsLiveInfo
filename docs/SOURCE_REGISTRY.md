@@ -13,6 +13,19 @@
 
 The tables below retain dated research claims. Endpoint operation, supplier quotas/free eligibility and legal terms were **not newly reverified** in this review and test correction. DOC-CONFIRMED refers to the original research, not current deployment approval. Even a working source is not automatically licensed for public redistribution.
 
+## Scores in the public feed (format `sli/1.7`, `score_approvals`, default off)
+
+Scores are a separate right from fixture facts. **No source is approved for scores until the owner records that they have read its terms** (Ingress → Publishing → Score approvals, which writes `score_approvals`); until then no score is read into the feed, and with none approved the feed is byte-identical to `sli/1.6`. Contract: [FEED_CONTRACT_SLI_V1.md](FEED_CONTRACT_SLI_V1.md) §4.4.
+
+| Source | Scores status | Notes |
+|---|---|---|
+| API-Sports (football, rugby, basketball, hockey, NFL, baseball, handball, volleyball, AFL) | Eligible, **not approved**: live and final | Read from the live boards and the settle pass that already run (no extra calls). Terms on publishing scores to third parties are **not yet read**; the owner must read and approve. |
+| API-Sports MMA | Never | No scores are decoded. |
+| football-data.org | Eligible, wired, **not approved**: final scores of regular-time results only | Free plan scores are delayed; extra-time and shootout results are not read. Terms not yet read. |
+| TheSportsDB | Never | Free key terms do not allow it; the setting is rejected. |
+| Jolpica-F1, OpenF1 | Never | F1 carries no scores. |
+| All other sources (OpenLigaDB, CricketData.org, PandaScore, racing, boxing) | Never in v1 | Tennis, cricket, golf, motorsport, boxing and MMA are outside the sport list. |
+
 ## Fixture / event data
 
 | Provider | Sports and role | Advertised free limit | Restrictions / caveats | Initial decision |
@@ -26,7 +39,9 @@ The tables below retain dated research claims. Endpoint operation, supplier quot
 | [BoxingAPI](https://boxingapi.net/documentation/plans-and-limits) | Boxing upcoming fights and ratings | 50/day, 10/min | Prices held back, cards/history may require paid tiers; licensing to assess | CANDIDATE |
 | [TheSportsDB](https://www.thesportsdb.com/docs/api) | Multiple sports and some TV data | Free key 123; per-endpoint response restrictions | [Terms](https://api.thesportsdb.com/docs_terms_of_use.php): free API cannot publish app-store apps; third-party rights apply. Some daily event / TV endpoint outputs heavily limited | RESTRICTED supplementary source, never sole source |
 | [OpenFootball JSON](https://github.com/openfootball/football.json) | Public-domain football fixture baseline | No service quota for files subject to GitHub fair use | CC0 data, but upstream changes not automatically supplied; may be stale | DOC-CONFIRMED fallback only |
-| [API-Sports](https://api-sports.io/) | Football, rugby and motorsport candidate | Free tier advertised in previous research, exact 2026 quotas **not reverified** here | Must confirm exact free plans per product, permissions, competition coverage | CANDIDATE, not approved |
+| [API-Sports](https://api-sports.io/) | Ten products: football, rugby, basketball, ice hockey, NFL, baseball, handball, volleyball, AFL, MMA (see inventory above) | Free tier advertised in previous research, exact 2026 quotas **not reverified** here | Must confirm exact free plans per product, permissions, competition coverage. Owner approval not recorded; per-source status in [RIGHTS_RECORD.md](RIGHTS_RECORD.md) | CANDIDATE — used by the running collector; owner approval not recorded |
+| API-Sports team crests (`media.api-sports.io/<product>/teams/<id>.png`) | Team crest **references** for the optional `team_crests` capability (SLI publishes the id path only, never an image; TVs hotlink, monogram fallback) | Same key; image CDN not metered by SLI | Identification only, private household use, terms to be re-read and recorded by owner; **unverified**. Off by default (`publish_crest_refs` false). football-data.org, Wikimedia and OpenLigaDB crests are excluded | UNVERIFIED, off until the owner approves |
+| API-Sports crest rows, per product (football, rugby, basketball, hockey, american-football, baseball, handball, volleyball, afl) | Same as above, one reference path per product | Same key | Identification only, private household use, terms to be re-read and recorded by owner; unverified | UNVERIFIED, off |
 | [OpenF1](https://openf1.org/) | F1 sessions/data and timing research | Historical accessibility varies; true real-time often gated | Not needed for calendar-first MVP; check current live-access terms | CANDIDATE for later |
 | Yahoo Sports / ESPN unofficial endpoints | Cross-check for schedules when lawful | No stable official, free, broadly licensed API established | Endpoint fragility, legal/ToS and redistribution risks. No unapproved scraping | NONE until permitted access confirmed |
 

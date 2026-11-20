@@ -2,6 +2,66 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## Unreleased — Scores per source behind a rights flag (feed `sli/1.7`, default off)
+
+- **Nothing is published until the owner approves a source.** New config `score_approvals` (list of source ids, default empty, separate from `publication_approvals`; Ingress → Publishing → Score approvals, with an attestation checkbox). Eligible: the API-Sports products except MMA (live and final) and football-data.org (final scores of regular-time results only). TheSportsDB, Jolpica, OpenF1 and every other source are rejected by validation. The owner must still read each source's terms and approve.
+- **Disabled means byte-identical.** With no approved source the manifest is still `sli/1.6`, there is no `score` field, no `scores` capability and the revision hash is unchanged (the golden `schemas/fixtures/sli-v1` fixtures did not change). With approved sources the manifest is `sli/1.7` (`min_reader_minor` unchanged), capability `scores`, `compatibility.scores` and `rights.scores.approved_sources`; removing the approvals is the kill switch.
+- **Wire (additive):** optional event and live-row `score` = `{home, away, period, observed_at, source}`; `home` is `participants[0]`'s score, `away` `participants[1]`'s, no minute; periods `1H HT 2H ET PEN FT AET Q1-Q4 P1-P3 OT` or null. Day assets carry a finished event's final score; the live asset carries live scores and a final score read after the event. Contract §4.2, §4.4 and §5, the sli-live, events-day and manifest schemas and the Ingress text were updated (the old "No scores are kept" wording is gone).
+- **Sports:** football, rugby, basketball, ice hockey, American football, baseball, handball, AFL, and volleyball as sets won. Tennis, cricket, golf, F1, boxing and MMA never carry scores.
+- **Plumbing, no extra API calls:** the decoders keep the goals and scores the boards already return; the live lane stores a score with its status observation and treats a changed score as a change (so it republishes the live asset, subject to the same quiet-slot guard and regression gate); the settle pass stores the final score with the final status; materialisation folds observations into the records. Commit volume: with scores on, at most one extra commit per 15 minute pass while play is in progress (a higher scoring sport can change every pass); with scores off, none.
+- **Alignment:** when sources merge, each contributor's score is re-expressed in the merged event's participants order (swapped, same, or dropped when the pairing is uncertain, for example two sides with identical keys). Disagreeing final scores from two approved sources publish nothing.
+- Fixtures: `tools/generate_feed_fixtures.py` also writes `schemas/fixtures/sli-v1-scores/` (a `sli/1.7` variant: a football match reported by two sources in opposite order, plus a live rugby score). Tests: 30 new in `tests/test_scores.py` (Ingress form, decoders, alignment and swap, disabled identical, kill switch, excluded sports, periods, live republish, settle final score).
+## Unreleased — Live status expires; manifest declares the live lane; publish regression gate
+
+- **Stale "live" no longer lingers.** `live_document` now takes the build time and drops rows whose `live_until_utc` has passed. The live lane downgrades any stored `live` observation older than 45 minutes to `unknown` with no API call, counts it as a change, and so republishes.
+- **Manifest (additive, `sli/1.6`, `min_reader_minor` unchanged at 0):** `refresh.live_stale_after_minutes` (45) and optional `refresh.live_lane` (`enabled`, `interval_minutes` 15, `active_only_while_events_in_play`, `quiet_slots_guard_minutes` 3, `last_run_utc`). Schema and contract §4.2 updated: the 15 minute cadence applies only while events are in play.
+- **Pre-publish regression gate.** Automatic publication (after a collection or a live change) is refused, with the previous feed left live, when events or guide-corroborated bindings fall by more than 20% against the last published feed (`PUBLISH_REGRESSION_THRESHOLD`; baselines under 5 are ignored). The refusal is logged, recorded as a `publisher` job in state `blocked`, stored in `publish_gate`, and shown as the last publication attempt. A manual publish overrides.
+- Golden manifest fixture regenerated. Tests: 335 pass (6 new; baseline 329).
+## Unreleased — Cross-source duplicate fixtures merge across club-name forms
+
+- **Before:** `same_team` only allowed generic words to differ, so real duplicates stayed as two rows: "Arminia Bielefeld"/"DSC Arminia Bielefeld", "Havelse"/"TSV Havelse", "Heidenheim"/"Heidenheim 1846", "Espanyol"/"RCD Espanyol de Barcelona", "Estac Troyes"/"ES Troyes AC", "Union Berlin W"/"Union Berlin Frauen".
+- **Now:** club-form prefixes (dsc, tsv, vfl, vfb, fsv, ssv, spvgg, rcd) are ignored; a four-digit founding year may be dropped (never the only difference between two different years); frauen/damen/feminin* mean women; Koeln/Cologne, Nuernberg/Nuremberg and Gladbach/Moenchengladbach are one team each; Troyes spellings are aliased (team spellings live in `linking`, the dictionary aliases only rewrite channel names).
+- **Anchored rule** in `_same_event`: kick-offs within 15 minutes, same sport, compatible competition, one side equal and the other a strictly contained shorter name. Women, youth, reserve and squad words (U21, II, Castilla, ...) and rugby-only words (RC) still block it.
+- Not changed: contract, versions. Tests: 343 pass (14 new in `tests/test_event_dedupe_names.py`).
+## Unreleased — Settle pass: events that ended are settled by the provider's final status
+
+- **Before:** collection fetched only `date>=today` at 12:00 and 17:00 and the live lane watched only start..expected end + 30 min, so an event that ended stayed `scheduled` (or fell to `unknown` when it left the live board) until it dropped out of the window; nothing ever said `finished`.
+- **Now:** for events past expected end + 30 min (and at most 12 h after that) whose status is not final, the engine makes at most one `date=<London start day>` call per API-Sports product per hour, only while unsettled events exist, decodes it with the existing decoders and stores an explicit `finished`, `postponed` or `cancelled` as a `live_observation`; the `live` asset then carries that row. Leaving the live board still never means finished: absence from the response, or any non-final status, writes nothing.
+- **Quota:** own counter `settle:<product>`, 4 calls a day per product (also counted in the product's quota), same reserve check as the live lane (`usage >= daily_limit - 20` skips), provider back-off and plan-window checks. Counters are shown on the Live status lane card and in the usage table. Estimate: at most 4 extra calls per product per day (a paged response costs one call per page).
+- No wire change: the `live` schema already allows `finished`, `postponed` and `cancelled`; no new fields, providers or secrets. MMA has no live board and is not settled.
+- Tests: 340 pass (11 new in `tests/test_settle_pass.py`).
+## Unreleased — event titles, status defaults and expected durations
+
+Mechanical clean-up from the event-source review. No contract field is added and no version is bumped; the wire changes are titles, a status default and the expected end.
+
+- **F1 sessions are titled by session.** Jolpica titles are now "<race name> — Race", "— Practice 1", "— Qualifying" and so on (were the race name for every session). The `session` field is unchanged and is what EPG matching uses.
+- **F1 status is always published.** Jolpica and OpenF1 sessions are "scheduled". OpenF1 is "finished" only when the provider's own `date_end` has passed.
+- **Missing status defaults to "scheduled".** Any event published without `status_normalized` now carries "scheduled" (it previously carried nothing).
+- **CricketData placeholders.** When both teams are "TBC", "TBA" or "to be confirmed", there are no participants and the title is the name's first part, not "Tbc v Tbc". A placeholder first part falls back to the competition.
+- **TheSportsDB day-only times.** A `strTimestamp` of `T00:00:00` for golf, snooker, darts or motorsport is `date_only` at noon UTC. Other sports keep the stated time.
+- **Expected durations.** F1 practice and qualifying 90 minutes; handball 120; volleyball 150; knockout football (round of N, quarter, semi, final, third place, play-off stages) 150. The defaults and all other sports are unchanged.
+- Tests: 338 pass (329 existing plus 9 in `tests/test_event_titles_and_durations.py`). Two existing duration assertions were changed deliberately (handball 180 to 120, F1 qualifying 180 to 90).
+- Golden feed fixtures regenerated: the only change is `status_normalized` on one event asset and the manifest hash.
+## Unreleased — Team crest references (capability `team_crests`, off by default)
+
+- **References, not images.** The API-Sports decoders carry each side's team id; the merge aligns them to the merged `participants` (home/away swaps handled with `same_team`; a side is `null` when contributors disagree or orientation is uncertain). The feed publishes `participant_crests` (index-aligned, `{"src":"apisports","ref":"football/teams/42"}` or null) only when `publish_crest_refs` is true AND an API-Sports source is in the publication approvals. Default false: no event field changes, so asset hashes and the revision are unchanged.
+- **Master kill switch in the manifest:** `rights.crests` (`sources.apisports.enabled`/`url_template`/`attribution`/`cache_days`, `device_lookup.thesportsdb`, `monogram_only`) is always present; the `team_crests` capability is listed only when enabled. SLI never fetches, stores or mirrors a crest image. Additive; `min_reader_minor` unchanged; no version bump.
+- Owner to verify the API-Sports terms for crest use before setting `publish_crest_refs`. Tests: 15 new in `tests/test_crest_refs.py`.
+## Unreleased — Stall alerting and a real `/healthz`
+
+Cause: on 20 Nov 2026 the manifest stayed at 03:42Z for 3.5+ hours (the 04:00 collection did not publish; cause unproven) and the owner was not told. `/healthz` always answered ok, the watchdog only checked the TCP port, and there was no Home Assistant notification code.
+
+- New `health` module: last successful collection, last publication, manifest age, failing sources, GitHub token expiry (from GitHub's response header), live-lane budget use and scheduler heartbeat age.
+- `/healthz` answers 503 with a JSON reason when the scheduler heartbeat is stale or a scheduled refresh slot passed more than the threshold (default 3 h) with nothing published; hysteresis stops flapping. `?scope=liveness` is the heartbeat-only check now used by the Supervisor watchdog (HTTP instead of TCP).
+- One Home Assistant persistent notification per incident (stalled, publishing failing, token expiring, source failing repeatedly, collection stuck), dismissed on recovery; notification errors are swallowed and logged without secrets. New permission `homeassistant_api: true`; new option `stall_threshold_hours`.
+- Diagnostics shows the same data; a banner appears on every page while stalled.
+- Not included: Home Assistant sensor entities (not restart-safe through the REST API).
+- Tests: 354 pass (25 new). No version bump.
+## Unreleased
+
+- **Documentation only.** New [`docs/RIGHTS_RECORD.md`](../docs/RIGHTS_RECORD.md): publication status per source and data kind, the kill-switch for each, and an owner checklist. The repository records no supplier permission; provider terms could not be read from the cloud session.
+- **Status corrections.** Test count on 0.3.24 is 329 (re-run on `origin/main` 8da6e83); the repository is public, not private; API-Sports is "used by the running collector; owner approval not recorded". No code, schema or version change.
+
 ## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
 
 Owner report 15 Nov 2026: Scotland v Australia and Spain v England showed an Irish or Asian channel before ITV1, and Pluto's re-run of "England v Samoa — Rugby World Cup 2023" was "probably live". ITV1 had been found (five guides; corroborated for Spain v England) but was listed last.

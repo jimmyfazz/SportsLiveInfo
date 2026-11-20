@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import __version__, coverage, dictionary, linking, providers, taxonomy
+from . import __version__, coverage, dictionary, health, linking, providers, taxonomy
 from .storage import utcnow
 
 LOGGER = logging.getLogger(__name__)
@@ -254,9 +254,11 @@ class UI(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
         if route.path == "/healthz":
-            beat = self.store._get("scheduler_heartbeat")
-            self._headers(200, "application/json")
-            self.wfile.write(json.dumps({"ok": True, "version": __version__, "scheduler_heartbeat": beat}).encode())
+            # 200 healthy, 503 stalled (scheduler heartbeat stale or manifest overdue). ?scope=liveness (used by the
+            # Supervisor watchdog) judges the scheduler heartbeat only: a restart cannot fix a stale manifest.
+            code, payload = health.healthz(self.store, __version__, urllib.parse.parse_qs(route.query).get("scope", [""])[0])
+            self._headers(code, "application/json")
+            self.wfile.write(json.dumps(payload).encode())
             return
         if route.path == "/coverage.csv":
             self._headers(200, "text/csv; charset=utf-8")
@@ -303,7 +305,7 @@ class UI(BaseHTTPRequestHandler):
         message = "Settings saved"
         page = {"sports": "sources", "bulk_sources": "sources", "options": "sources",
                 "epg": "sources", "test_source": "sources", "dictionary": "sources", "github": "publishing",
-                "test_github": "publishing", "approvals": "publishing", "publish": "publishing",
+                "test_github": "publishing", "approvals": "publishing", "score_approvals": "publishing", "publish": "publishing",
                 "private_feed": "publishing", "test_private_github": "publishing",
                 "preview_feed": "publishing", "schedule": "scheduler", "live_status": "scheduler", "lineup_upload": "coverage",
                 "lineup_delete": "coverage", "coverage_survey": "coverage", "coverage_rebuild": "coverage",
@@ -419,6 +421,16 @@ class UI(BaseHTTPRequestHandler):
             log.append({"at": utcnow(), "approved": chosen})
             self.store._put("approval_log", log)
             return "publishing", ("Publication approvals saved: %s" % ", ".join(chosen)) if chosen else "All publication approvals withdrawn"
+        if action == "score_approvals":
+            # Scores are a separate right from fixture facts: each source's score terms are approved on their own.
+            chosen = sorted({s for s in form.get("approve_score", []) if s in providers.SCORE_ELIGIBLE})
+            if chosen and value("attest_scores") != "on":
+                raise ValueError("Confirm you have read each selected source's terms for publishing scores")
+            self.store.configure({"score_approvals": chosen})
+            log = (self.store._get("approval_log") or [])[-49:]
+            log.append({"at": utcnow(), "scores_approved": chosen})
+            self.store._put("approval_log", log)
+            return "publishing", ("Score approvals saved: %s" % ", ".join(chosen)) if chosen else "All score approvals withdrawn"
         if action == "test_github":
             # Authenticate and inspect the SAVED destination; never commit. Runs in the background.
             started = self.engine.start_connection_test(private=False)
@@ -497,6 +509,12 @@ class UI(BaseHTTPRequestHandler):
             head += '<div class="alert">First-run setup: configure providers, review refresh times and optionally set a publishing destination. Credentials are stored privately in the Home Assistant App data volume.</div>'
         if notice:
             head += '<div class="alert">%s</div>' % e(notice)
+        try:
+            stalls = health.evaluate(self.store)["reasons"] if config["setup_complete"] else []
+        except Exception:
+            stalls = []
+        if stalls:
+            head += '<div class="alert error"><strong>Stalled:</strong> %s <a href="?page=health">Diagnostics</a></div>' % e("; ".join(r["message"] for r in stalls))
         def tab(key, label):
             current = ' class="active" aria-current="page"' if page == key else ""
             return '<a%s href="?page=%s">%s</a>' % (current, e(key), e(label))
@@ -1162,7 +1180,7 @@ class UI(BaseHTTPRequestHandler):
 
     def _live_card(self, config):
         """The live-status lane: switch, whether it can run, and its last pass (Scheduler page and Diagnostics)."""
-        from .engine import LIVE_DAILY_BUDGET, LIVE_PRODUCTS, Engine
+        from .engine import LIVE_DAILY_BUDGET, LIVE_PRODUCTS, SETTLE_DAILY_BUDGET, Engine
         on = bool(config.get("live_status", True))
         if not on:
             state = "Switched off."
@@ -1174,6 +1192,9 @@ class UI(BaseHTTPRequestHandler):
         usage = self.store.usage()
         calls = ", ".join("%s %d/%d" % (name, usage.get("live:" + name, 0), LIVE_DAILY_BUDGET)
                           for name in LIVE_PRODUCTS if config["sports"].get(name)) or "no API-Sports product enabled"
+        settle_last = self.store._get("settle_lane") or {}
+        settle = ", ".join("%s %d/%d" % (name, usage.get("settle:" + name, 0), SETTLE_DAILY_BUDGET)
+                           for name in LIVE_PRODUCTS if config["sports"].get(name)) or "none"
         form = ('<label><input type="checkbox" name="enabled" value="on" %s> Check live statuses during matches</label>'
                 '<button type="submit">Save</button>' % ("checked" if on else ""))
         return ('<section class="card" style="margin-top:16px"><h3>Live status lane</h3><p>While a collected event is '
@@ -1181,10 +1202,17 @@ class UI(BaseHTTPRequestHandler):
                 '15 minutes (football <code>fixtures?live=all</code>, other products <code>games?live=all</code>), '
                 'at most %d calls a day per product, counted in the product\'s own daily quota and always leaving '
                 'calls for the scheduled refreshes. Only status changes are published, as the small <code>live</code> '
-                'asset (when automatic publishing is on). No scores are kept.</p><p class="%s">%s</p>'
-                '<p class="sub">Last pass: %s · %s · Live calls today (UTC): %s</p>%s</section>') % (
+                'asset (when automatic publishing is on). Scores are kept and published only for sources you approve on '
+                'the Publishing page (Score approvals, off by default); with none approved no score is read, stored or '
+                'published. A changed score also republishes the live asset, so approved live scores can add up to '
+                'one commit per 15 minute pass during play.</p><p class="%s">%s</p>'
+                '<p class="sub">Last pass: %s · %s · Live calls today (UTC): %s</p>'
+                '<p class="sub">Settle pass (final results after the end, hourly, at most %d calls a day per product): '
+                '%s · %s · Settle calls today (UTC): %s</p>%s</section>') % (
             LIVE_DAILY_BUDGET, "ok" if on else "warn", e(state), e(when(last.get("last_run"))),
-            e(last.get("summary") or "not run yet"), e(calls), self._form("live_status", form))
+            e(last.get("summary") or "not run yet"), e(calls), SETTLE_DAILY_BUDGET,
+            e(when(settle_last.get("last_run"))), e(settle_last.get("summary") or "not run yet"), e(settle),
+            self._form("live_status", form))
 
     def _test_result(self, target):
         result = self.store._get("connection_test:" + target)
@@ -1287,6 +1315,22 @@ class UI(BaseHTTPRequestHandler):
         last = ("Last changed %s." % e(when(log[-1]["at"]))) if log else "Never changed."
         body += '<section class="card" style="margin-top:16px"><h2>Publication rights register</h2><p class="sub">Approved now: %s. %s</p>%s</section>' % (
             e(", ".join(approvals) or "none"), last, self._form("approvals", rights))
+        score_approved = list(config.get("score_approvals", []))
+        scores = ('<p>Scores (feed sli/1.7) are a separate right from fixture facts and are <strong>off by default</strong>. '
+                  'Tick a source only after reading its terms for publishing scores. Eligible: API-Sports products '
+                  '(live and final scores for football, rugby, basketball, ice hockey, American football, baseball, '
+                  'handball, volleyball and AFL) and football-data.org (final scores only). TheSportsDB, Jolpica and OpenF1 '
+                  'are never eligible; tennis, cricket, golf, motorsport, boxing and MMA never carry scores. A score is '
+                  'published only for an event that is also approved above. Untick everything to switch scores off.</p><div class="grid">')
+        for name in providers.SCORE_ELIGIBLE:
+            scores += ('<label class="card" style="margin:0"><input type="checkbox" name="approve_score" value="%s" %s> '
+                       '<strong>%s</strong><br><small>%s</small></label>') % (
+                e(name), "checked" if name in score_approved else "", e(providers.SPORTS[name][0]),
+                "final scores only" if providers.SCORE_ELIGIBLE[name] == "final" else "live and final scores")
+        scores += ('</div><label><input type="checkbox" name="attest_scores" value="on"> I have read the terms of every '
+                   'source ticked above and they allow publishing scores.</label><button type="submit">Save score approvals</button>')
+        body += '<section class="card" style="margin-top:16px"><h2>Score approvals</h2><p class="sub">Approved now: %s.</p>%s</section>' % (
+            e(", ".join(score_approved) or "none (no score is published)"), self._form("score_approvals", scores))
         blockers = []
         if not config.get("setup_complete"):
             blockers.append("first-run setup is not finished (Sources page)")
@@ -1319,12 +1363,44 @@ class UI(BaseHTTPRequestHandler):
             " disabled" if blockers or running else "", "Publishing…" if running else "Publish feed now")) + '</section>'
         return body
 
+    def _health_card(self):
+        """Service health: the same data /healthz and the Home Assistant notifications use."""
+        try:
+            report = health.evaluate(self.store)
+        except Exception:
+            return '<section class="card" style="margin-top:16px"><h3>Service health</h3><p class="warn">Health could not be computed.</p></section>'
+        snap, now = report["snapshot"], datetime.now(timezone.utc)
+        alerts = self.store._get("health_alerts") or {}
+        notify = "Home Assistant notifications: " + ("on" if os.environ.get("SUPERVISOR_TOKEN") else "off (no Supervisor token; development run)")
+        verdict = ('<p class="critical">Stalled: %s</p>' % e("; ".join(r["message"] for r in report["reasons"]))
+                   if report["reasons"] else '<p class="ok">Healthy (/healthz answers 200).</p>')
+        expiry = ("not reported by GitHub" if snap["token_expires_at"] is None else
+                  "%s (%s day(s) left)" % (snap["token_expires_at"], snap["token_days_left"]))
+        rows = [
+            ("Scheduler heartbeat", when(snap["scheduler_heartbeat"], now)),
+            ("Last successful collection", "%s (%s)" % (when(snap["last_collect_ok"], now), snap["last_collect_state"] or "none yet")),
+            ("Last publication (manifest)", when(snap["last_publish"], now)),
+            ("Last publication activity", when(snap["last_publish_activity"], now)),
+            ("Publishing expected automatically", "yes" if snap["publish_expected"] else "no"),
+            ("Publish status", "%s %s" % (snap["publish_status"]["state"] or "none", when(snap["publish_status"]["at"], now) if snap["publish_status"]["at"] else "")),
+            ("GitHub token expiry", expiry),
+            ("Failing sources", ", ".join("%s (%d)" % (s["name"], s["consecutive_failures"]) for s in snap["failing_sources"]) or "none"),
+            ("Live-lane calls today", ", ".join("%s %d/%d" % (k, v, snap["budgets"].get("live_daily_budget", 0))
+                                               for k, v in sorted((snap["budgets"].get("live_calls_today") or {}).items())) or "none"),
+            ("Stall threshold", "%g h after a scheduled refresh slot" % report["settings"]["stall_hours"]),
+            ("Open notifications", ", ".join(sorted(alerts)) or "none"),
+        ]
+        table = "".join("<tr><th>%s</th><td>%s</td></tr>" % (e(k), e(v)) for k, v in rows)
+        incidents = "".join("<li>%s</li>" % e("%s: %s" % (i["code"], i["message"])) for i in report["incidents"])
+        return ('<section class="card" style="margin-top:16px"><h3>Service health</h3>%s<table>%s</table>%s<p class="help">%s</p></section>'
+                % (verdict, table, "<ul>%s</ul>" % incidents if incidents else "", e(notify)))
+
     def health(self, config=None):
         config = config or self.store.config()
         rows = self.store.recent_jobs(300)
         usage = self.store.usage()
         now = datetime.now(timezone.utc)
-        body = '<h2>Provider health &amp; diagnostics</h2><p>Errors are recorded locally without API keys, programme titles or private account URLs. Home Assistant persistent notifications require a separately reviewed, least-privilege integration.</p>'
+        body = '<h2>Provider health &amp; diagnostics</h2><p>Errors are recorded locally without API keys, programme titles or private account URLs. Stalls, blocked publishing, an expiring GitHub token and repeatedly failing sources raise one Home Assistant notification per incident (dismissed on recovery).</p>'
         beat = self.store._get("scheduler_heartbeat")
         stale = True
         try:
@@ -1333,6 +1409,7 @@ class UI(BaseHTTPRequestHandler):
             pass
         body += '<section class="card"><h3>Scheduler</h3><p class="%s">Last heartbeat: %s%s</p></section>' % (
             "warn" if stale else "ok", e(when(beat, now)), " — not running or stalled" if stale else "")
+        body += self._health_card()
         by_source = OrderedDict()
         for row in rows:
             by_source.setdefault(row["provider"], []).append(row)

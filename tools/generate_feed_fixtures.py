@@ -131,6 +131,29 @@ LIVE_OBSERVATIONS = {"events": {"api-sports-rugby:301": {"status": "2H", "status
                                                          "status_observed_at": "2026-11-14T13:55:00+00:00"}}}
 
 
+# sli/1.7 scores variant (schemas/fixtures/sli-v1-scores): the same feed with score_approvals set. The football fixture
+# is reported by two sources that name the sides in opposite order (football-data first), so the golden file proves the
+# score stays attached to participants[0]/[1] of the merged event; the rugby is live with a live score.
+SCORE_APPROVALS = ["api_sports", "api_sports_rugby", "football_data"]
+SCORE_SNAPSHOTS = {
+    "football_data": [
+        _e(id="football-data:5008", source_id="football_data", sport="football", competition="Premier League",
+           competition_code="fd:PL", competition_country="England", title="Tottenham Hotspur FC v Chelsea FC",
+           participants=["Tottenham Hotspur FC", "Chelsea FC"], start_utc="2026-11-14T11:30:00+00:00",
+           status="FINISHED", status_normalized="finished", round="12", score={"home": 1, "away": 2, "period": "FT"}),
+    ],
+    "api_sports": [
+        _e(id="api-sports:9008", source_id="api_sports", sport="football", competition="Premier League",
+           competition_code="as:39", competition_country="England", title="Chelsea v Tottenham Hotspur",
+           participants=["Chelsea", "Tottenham Hotspur"], start_utc="2026-11-14T11:30:00+00:00", status="FT",
+           status_normalized="finished", score={"home": 2, "away": 1, "period": "FT"}),
+    ],
+}
+SCORE_LIVE_OBSERVATIONS = {"events": {"api-sports-rugby:301": {
+    "status": "2H", "status_normalized": "live", "status_observed_at": "2026-11-14T13:55:00+00:00",
+    "score": {"home": 17, "away": 10, "period": "2H"}}}}
+
+
 # Tiny public-domain dictionary sample (same shape as the iptv-org database files).
 DICT_CHANNELS = """id,name,alt_names,network,owners,country,categories,is_nsfw,launched,closed,replaced_by,website
 SkySportsMainEvent.uk,Sky Sports Main Event,,,Sky,UK,sports,FALSE,,,,
@@ -142,19 +165,21 @@ beINSports1.qa,France,France,,FALSE,c/FR,Europe/Paris,fra,1080i
 """
 
 
-def build():
-    """Return (manifest, files) for the fixed fixture day."""
+def build(scores=False):
+    """Return (manifest, files) for the fixed fixture day; ``scores=True`` builds the sli/1.7 scores variant."""
     from sportsliveinfo import dictionary, feed, identity
     from sportsliveinfo.engine import Engine
     from sportsliveinfo.guide import analyze_guide
     from sportsliveinfo.storage import Store
     with tempfile.TemporaryDirectory() as tmp, patch("sportsliveinfo.storage.utcnow", return_value=STAMP):
         store = Store(Path(tmp) / "fixture.sqlite3")
+        snapshots = {name: list(events) + (SCORE_SNAPSHOTS.get(name, []) if scores else [])
+                     for name, events in SNAPSHOTS.items()}
         store.configure({"setup_complete": True, "schedule": ["04:00", "12:00", "17:00"],
                          "sports": {name: True for name in SNAPSHOTS} | {"jolpica": True},
                          "epg": {"farleyflex": True, "epgtalk_uk": True}, "publication_approvals": sorted(SNAPSHOTS),
-                         "dictionary": {"iptvorg": True}})
-        for name, events in SNAPSHOTS.items():
+                         "dictionary": {"iptvorg": True}, **({"score_approvals": SCORE_APPROVALS} if scores else {})})
+        for name, events in snapshots.items():
             store.save_snapshot("sports:" + name, {"events": events, "source_id": name})
         store.save_snapshot("epg:farleyflex", GUIDE)
         store.save_snapshot("epg-quality:farleyflex", analyze_guide(GUIDE, now=NOW))
@@ -165,7 +190,7 @@ def build():
         store.save_snapshot("channel-dictionary", {"document": dictionary.build_document(DICT_CHANNELS, DICT_FEEDS),
                                                    "meta": {"channels": 3}})
         Engine(store)._materialize(now=NOW)
-        store._put("live_observations", LIVE_OBSERVATIONS)
+        store._put("live_observations", SCORE_LIVE_OBSERVATIONS if scores else LIVE_OBSERVATIONS)
         return feed.build_feed(store, now=NOW)
 
 
@@ -685,7 +710,23 @@ def write(out=OUT):
     return manifest
 
 
+SCORES_OUT = OUT.parent / "sli-v1-scores"
+
+
+def write_scores(out=SCORES_OUT):
+    """The sli/1.7 scores variant: feed files only (manifest and assets), no conformance side files."""
+    from sportsliveinfo import feed
+    manifest, files = build(scores=True)
+    shutil.rmtree(out, ignore_errors=True)
+    for path, data in list(files.items()) + [("v1/manifest.json", feed._json(manifest))]:
+        target = out / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    return manifest
+
+
 if __name__ == "__main__":
+    write_scores()
     m = write()
     json.dump({"revision": m["revision"], "assets": len(m["assets"]), "coverage": m["coverage"]}, sys.stdout, indent=1)
     print()

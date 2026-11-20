@@ -2,7 +2,7 @@
 
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](docs/CURRENT_STATUS.md).
 
-**Every agent: read [docs/AGENT_OPERATING_MANUAL.md](docs/AGENT_OPERATING_MANUAL.md) first** (how to work, the gate, release and deploy, the design rule). **Read this first.** This file is intentionally concise; the detailed and binding rules are in [AGENTS.md](AGENTS.md). Do not rely on older UK-only, "B1 optional", or sports-only architecture notes.
+**Every agent: read [docs/AGENT_OPERATING_MANUAL.md](docs/AGENT_OPERATING_MANUAL.md) first** (how to work, the gate, release and deploy, the design rule). This file is intentionally concise; the detailed and binding rules are in [AGENTS.md](AGENTS.md). Do not rely on older UK-only, "B1 optional", or sports-only architecture notes.
 
 ## Current state and binding rules (15 Nov 2026, v0.3.24)
 
@@ -21,7 +21,7 @@ Home Assistant OS App on owner's always-on **direct-installed home mini PC** doe
 
 1. [AGENTS.md](AGENTS.md)
 2. [Master implementation roadmap](docs/MASTER_IMPLEMENTATION_ROADMAP.md)
-3. [34-finding forensic audit](docs/archive/AUDIT_2026-11-12_FORENSIC_SPEC_AND_ARCHITECTURE.md)
+3. [15 November forensic audit](docs/AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md) (the 12 November 34-finding audit is archived in [docs/archive](docs/archive/))
 4. [Task backlog](docs/WORK_PACKAGE_BACKLOG.md)
 5. [Agent collaboration/branch ownership](docs/CODEX_CLAUDE_COLLABORATION.md)
 6. [International EPG and sports source strategy](docs/INTERNATIONAL_EPG_AND_SPORTS_SOURCE_EXPANSION.md)

@@ -26,7 +26,9 @@
         "link_rule": {"type": "string", "description": "0.3.24+: how readers use link order and binds"},
         "live_until_rule": {"type": "string", "description": "0.3.24+: readers show LIVE while start_utc <= now < live_until_utc"},
         "live_max_age_minutes": {"type": "integer", "minimum": 1, "description": "0.3.24+: observation age limit used by live_state_rule, for readers without live_until_utc"},
-        "live_end_grace_minutes": {"type": "integer", "minimum": 0, "description": "0.3.24+: minutes after expected_end_utc that live_state_rule still trusts 'live'"}
+        "live_end_grace_minutes": {"type": "integer", "minimum": 0, "description": "0.3.24+: minutes after expected_end_utc that live_state_rule still trusts 'live'"},
+        "scores": {"type": "object", "required": ["enabled"], "description": "1.7+, present only while at least one source is approved for scores (kill switch: absent means scores are off and readers must show none)",
+                   "properties": {"enabled": {"type": "boolean"}, "rule": {"type": "string", "description": "How readers pair and show scores"}}}
       }
     },
     "revision": {"type": "string", "pattern": "^[0-9a-f]{20}$"},
@@ -42,7 +44,20 @@
         "reader_poll_minutes": {"type": "integer", "minimum": 5},
         "stale_after_hours": {"type": "integer", "minimum": 1},
         "expires_at": {"type": "string"},
-        "expected_interval_minutes": {"type": "integer"}
+        "expected_interval_minutes": {"type": "integer"},
+        "live_stale_after_minutes": {"type": "integer", "minimum": 1, "description": "1.6, optional: a 'live' status older than this is never shown as LIVE"},
+        "live_lane": {
+          "type": "object",
+          "description": "1.6, optional: the live-status lane. interval_minutes applies only while events are in play.",
+          "required": ["enabled"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "interval_minutes": {"type": "integer", "minimum": 1},
+            "active_only_while_events_in_play": {"type": "boolean"},
+            "quiet_slots_guard_minutes": {"type": "integer", "minimum": 0},
+            "last_run_utc": {"type": "string"}
+          }
+        }
       }
     },
     "capabilities": {"type": "array", "items": {"type": "string"}},
@@ -74,6 +89,20 @@
       "required": ["events", "epg_programmes", "attribution"],
       "properties": {
         "epg_programmes": {"const": "not_published"},
+        "scores": {"type": "object", "required": ["approved_sources"], "description": "1.7+, present only while a source is approved for scores: the owner-approved score sources (config score_approvals)",
+                   "properties": {"approved_sources": {"type": "array", "items": {"type": "string"}}}},
+        "crests": {
+          "type": "object",
+          "description": "Optional (capability team_crests). Master kill switch: crests can be switched off centrally without a TV update. References only, never images.",
+          "required": ["sources", "device_lookup", "monogram_only"],
+          "properties": {
+            "sources": {"type": "object", "properties": {"apisports": {"type": "object", "required": ["enabled", "url_template", "attribution", "cache_days"],
+              "properties": {"enabled": {"type": "boolean"}, "url_template": {"type": "string"}, "attribution": {"type": "string"}, "cache_days": {"type": "integer", "minimum": 1}}}}},
+            "device_lookup": {"type": "object", "properties": {"thesportsdb": {"type": "object", "required": ["enabled", "attribution"],
+              "properties": {"enabled": {"type": "boolean"}, "attribution": {"type": "string"}}}}},
+            "monogram_only": {"type": "boolean"}
+          }
+        },
         "attribution": {"type": "array", "items": {"type": "object", "required": ["source", "text", "licence"]}}
       }
     },

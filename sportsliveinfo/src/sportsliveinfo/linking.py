@@ -18,7 +18,7 @@ from . import dictionary as channel_dictionary, taxonomy
 from .guide import (COUNTRY_BY_SOURCE, REGIONAL_PARENTS, canonical_channel, channel_families, foreign_guide_channel,
                     normalized_name)
 from .identity import name_signature
-from .providers import EPG_FAMILY, SPORT_FAMILY, UNVERIFIED_LINEAGE_FAMILIES
+from .providers import EPG_FAMILY, SCORE_ELIGIBLE, SCORE_SPORTS, SPORT_FAMILY, UNVERIFIED_LINEAGE_FAMILIES
 
 LONDON = ZoneInfo("Europe/London")
 UNCONFIRMED_START_PRECISIONS = frozenset({"date_only", "time_tbc"})
@@ -28,9 +28,16 @@ FEATURED_TAGS = {"team:england", "team:england_women", "team:scotland", "team:wa
                  "team:ireland", "team:lions", "team:great_britain", "ppv"}
 
 _STOP = {"fc", "afc", "cf", "sc", "ac", "club", "the", "de", "cd", "ud", "sv", "fk", "sk", "bk", "if", "and",
-         "v", "vs", "calcio", "1", "football", "rfc", "rlfc", "cc", "ccc"}
+         "v", "vs", "calcio", "1", "football", "rfc", "rlfc", "cc", "ccc",
+         # Club-form prefixes that sources add or drop ("DSC Arminia Bielefeld", "TSV Havelse", "RCD Espanyol").
+         "dsc", "tsv", "vfl", "vfb", "fsv", "ssv", "spvgg", "rcd"}
 _ABBR = {"man": "manchester", "utd": "united", "spurs": "tottenham", "wolves": "wolverhampton",
          "nottm": "nottingham", "munchen": "munich", "w": "women", "womens": "women", "ladies": "women", "st": "saint",
+         "frauen": "women", "damen": "women", "feminin": "women", "feminine": "women", "feminines": "women",
+         "femenino": "women",
+         # German exonyms ("1. FC Koeln" / "Cologne", "Nuernberg" / "Nuremberg", "Gladbach"). Dictionary aliases are
+         # channel-name rewrites, so team-name spellings belong here.
+         "cologne": "koln", "nuremberg": "nurnberg", "gladbach": "monchengladbach",
          "cymru": "wales", "lloegr": "england", "rep": "republic", "ny": "new york"}
 # Alias expansion is deliberately exact and small. Feed-provided short names are
 # also considered below; arbitrary fuzzy/substring team matching is not safe.
@@ -40,8 +47,14 @@ _TEAM_ALIASES = {
     "west brom": "west bromwich albion", "wba": "west bromwich albion",
     "qpr": "queens park rangers", "nz": "new zealand", "all blacks": "new zealand",
     "springboks": "south africa", "wallabies": "australia",
+    "estac troyes": "troyes", "es troyes ac": "troyes", "es troyes": "troyes", "troyes ac": "troyes",
     "yr alban": "scotland", "gogledd iwerddon": "northern ireland", "iwerddon": "ireland",
 }
+_CLUB_YEAR = re.compile(r"^(?:18|19|20)\d\d$")  # founding-year tokens ("Heidenheim 1846") are droppable, not identifying
+# Squad words that make a side a different team even though _VARIANT does not list them; the anchored event rule
+# below never lets a side's extra tokens contain these ("Real Madrid" != "Real Madrid Castilla").
+_SQUAD = {"castilla", "youth", "academy", "juvenil", "primavera", "amateure", "amateur", "reserve", "junior",
+          "juniors", "2", "3", "iii", "ladies", "feminin"}
 _VARIANT = {"women", "u17", "u18", "u19", "u20", "u21", "u23", "ii", "b", "reserves", "xi", "a", "jong"}
 # Suffix words that may be dropped without changing a club's identity
 # ("Leeds" == "Leeds United"). Anything else that differs (Miami, Northern,
@@ -163,7 +176,20 @@ def same_team(a, b, generic=None):
     if a == b:
         return True
     small, large = (a, b) if len(a) < len(b) else (b, a)
-    return small < large and bool(small - generic) and (large - small) <= generic
+    return (small < large and bool(small - generic)
+            and all(t in generic or _CLUB_YEAR.match(t) for t in large - small))
+
+
+def _anchored_side(small, large, blocked=frozenset()):
+    """`small` is a strictly shorter name wholly contained in `large` ("Espanyol" in "RCD Espanyol de Barcelona").
+    Only meaningful once the other side of the fixture is already equal and kick-offs agree."""
+    if not small or not large or not small < large or "tbc" in small or "tbc" in large:
+        return False
+    if (small & _VARIANT) != (large & _VARIANT) or (small & _SQUAD) != (large & _SQUAD):
+        return False
+    if not (small - _LOW_SIGNAL_TEAM_TOKENS - _GENERIC):
+        return False
+    return all((t.isalpha() and t not in blocked) or _CLUB_YEAR.match(t) for t in large - small)
 
 
 def _source_rank(source_id):
@@ -196,8 +222,18 @@ def _same_event(a, b):
     ta, tb = a["_teams"], b["_teams"]
     generic = _GENERIC | _RUGBY_GENERIC if _sport_family(a["sport"]) == "rugby" else _GENERIC
     if len(ta) == 2 and len(tb) == 2:
-        return ((same_team(ta[0], tb[0], generic) and same_team(ta[1], tb[1], generic)) or
-                (same_team(ta[0], tb[1], generic) and same_team(ta[1], tb[0], generic)))
+        if ((same_team(ta[0], tb[0], generic) and same_team(ta[1], tb[1], generic)) or
+                (same_team(ta[0], tb[1], generic) and same_team(ta[1], tb[0], generic))):
+            return True
+        # Anchored rule: one side agrees and the other is a contained short form, within 15 minutes.
+        # Rugby-only suffix words ("RC", "Rugby") never anchor a football side ("RC Lens" != "Lens" there).
+        blocked = frozenset() if _sport_family(a["sport"]) == "rugby" else _RUGBY_GENERIC
+        if gap <= 900:
+            for x, y in ((tb[0], tb[1]), (tb[1], tb[0])):
+                for (a0, a1) in ((ta[0], ta[1]), (ta[1], ta[0])):
+                    if same_team(a0, x, generic) and (_anchored_side(a1, y, blocked) or _anchored_side(y, a1, blocked)):
+                        return True
+        return False
     return gap <= 1800 and taxonomy.norm(a.get("title")) == taxonomy.norm(b.get("title"))
 
 
@@ -212,6 +248,73 @@ def status_choice(rows):
     A delayed free feed still showing "TIMED" must not hide another source's "1H" or "FT"."""
     return max(rows, key=lambda r: (STATUS_PROGRESS.get(r.get("status_normalized") or "unknown", 0),
                                     str(r.get("status_observed_at") or "")))
+
+
+def _orientation(own, other, generic, blocked):
+    """+1 when ``other``'s two sides line up with ``own``'s in the same order, -1 when swapped, None when the pairing is
+    not certain (a side missing, or both orders plausible). Used so a score stays attached to the right team."""
+    if len(own) != 2 or len(other) != 2:
+        return None
+
+    def side(x, y):
+        return same_team(x, y, generic) or _anchored_side(x, y, blocked) or _anchored_side(y, x, blocked)
+    straight = side(own[0], other[0]) and side(own[1], other[1])
+    swapped = side(own[0], other[1]) and side(own[1], other[0])
+    if straight == swapped:
+        return None
+    return 1 if straight else -1
+
+
+def _group_scores(rows, primary):
+    """(``scores``, ``score_align``) for a merged group (feed sli/1.7). Every contributor's own ``score`` (its home and
+    away follow its own participants order) is re-expressed in the merged event's participants order, which is the
+    primary record's: ``score_align[source event id]`` is +1 (same order) or -1 (swapped), absent when uncertain, in
+    which case that contributor's score is dropped. ``scores`` is {source event id: aligned score candidate}."""
+    family = _sport_family(primary["sport"])
+    generic = _GENERIC | _RUGBY_GENERIC if family == "rugby" else _GENERIC
+    blocked = frozenset() if family == "rugby" else _RUGBY_GENERIC
+    align, scores = {}, {}
+    for row in rows:
+        direction = 1 if row is primary or row["id"] == primary["id"] \
+            else _orientation(primary["_teams"], row["_teams"], generic, blocked)
+        if direction is None:
+            continue
+        align[row["id"]] = direction
+        score = row.get("score")
+        if isinstance(score, dict) and isinstance(score.get("home"), int) and isinstance(score.get("away"), int):
+            home, away = (score["home"], score["away"]) if direction == 1 else (score["away"], score["home"])
+            scores[row["id"]] = {"home": home, "away": away, "period": score.get("period"),
+                                 "source": row.get("source_id"), "observed_at": row.get("status_observed_at"),
+                                 "status": row.get("status_normalized")}
+    return scores, align
+
+
+def _merged_crests(rows, primary):
+    """``participant_crests`` for a merged fixture, index-aligned with the primary record's ``participants``.
+
+    Each contributor that carries crests is mapped onto the primary's sides with ``same_team`` (straight or home/away
+    swapped). A side keeps a crest only when every contributor naming it agrees; an uncertain orientation, a conflict
+    or a missing match gives None for that side, never a possibly wrong crest. Returns None when no side has one."""
+    teams = primary.get("_teams") or []
+    if len(teams) != 2 or len(primary.get("participants") or []) != 2:
+        return None
+    generic = _GENERIC | _RUGBY_GENERIC if _sport_family(primary["sport"]) == "rugby" else _GENERIC
+    seen = [set(), set()]
+    for row in rows:
+        crests = row.get("participant_crests")
+        row_teams = row.get("_teams") or []
+        if (not isinstance(crests, list) or len(crests) != 2 or len(row_teams) != 2
+                or len(row.get("participants") or []) != 2):
+            continue
+        straight = same_team(row_teams[0], teams[0], generic) and same_team(row_teams[1], teams[1], generic)
+        swapped = same_team(row_teams[0], teams[1], generic) and same_team(row_teams[1], teams[0], generic)
+        if straight == swapped:
+            continue                       # neither, or both: orientation is uncertain
+        for index, crest in enumerate(crests if straight else crests[::-1]):
+            if isinstance(crest, dict) and crest.get("src") and crest.get("ref"):
+                seen[index].add((crest["src"], crest["ref"]))
+    out = [{"src": next(iter(s))[0], "ref": next(iter(s))[1]} if len(s) == 1 else None for s in seen]
+    return out if any(out) else None
 
 
 def merge_events(events):
@@ -270,6 +373,12 @@ def merge_events(events):
                 primary[field] = status[field]
             else:
                 primary.pop(field, None)
+        scores, align = _group_scores(rows, rows[0])
+        primary.pop("score", None)
+        if scores:
+            primary["scores"] = scores
+        if len(rows) > 1 and primary.get("sport") in SCORE_SPORTS and any(r["source_id"] in SCORE_ELIGIBLE for r in rows):
+            primary["score_align"] = align
         primary.update({
             "sources": sources, "source_events": sorted(r["id"] for r in rows),
             "corroboration": len(families),
@@ -278,6 +387,11 @@ def merge_events(events):
         })
         if primary["start_conflict"]:
             primary["start_alternatives"] = starts
+        crests = _merged_crests(rows, primary)
+        if crests:
+            primary["participant_crests"] = crests
+        else:
+            primary.pop("participant_crests", None)
         primary.pop("_start", None)
         primary.pop("_teams", None)
         merged.append(primary)

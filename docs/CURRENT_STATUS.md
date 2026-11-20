@@ -23,6 +23,7 @@
   - **API-Sports free key:** yesterday, today and tomorrow only.
   - **TheSportsDB free key:** at most 3 events per request.
   - **Not checked from the cloud session:** French guide listing formats and Docker/Supervisor build internals.
+  - **Publication rights:** no supplier permission is recorded in the repository for any source. Per-source status and the owner checklist are in [RIGHTS_RECORD.md](RIGHTS_RECORD.md). Provider terms could not be read from the cloud session.
 
 ## Validation
 
@@ -31,4 +32,4 @@ python3 -m compileall -q sportsliveinfo/src tests
 PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests
 ```
 
-**Local result:** 315 tests passed (0.3.23, 15 Nov 2026). CI (`verify.yml`) passes on every merged PR. See [implementation progress](IMPLEMENTATION_PROGRESS.md) for measurements and the [document index](DOCUMENTATION_INDEX.md) for earlier records.
+**Local result:** 329 tests passed on 0.3.24 (`origin/main` 8da6e83, re-run 20 Nov 2026). The 315 figure belongs to the earlier 0.3.23 run (15 Nov 2026) and is kept only in [implementation progress](IMPLEMENTATION_PROGRESS.md). CI (`verify.yml`) passes on every merged PR. See [implementation progress](IMPLEMENTATION_PROGRESS.md) for measurements and the [document index](DOCUMENTATION_INDEX.md) for earlier records.

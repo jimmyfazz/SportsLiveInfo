@@ -19,7 +19,7 @@ from functools import partial
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import coverage, dictionary, feed, identity, linking, providers, taxonomy
+from . import coverage, dictionary, feed, health, identity, linking, providers, taxonomy
 from .storage import utcnow
 from .guide import analyze_guide
 
@@ -45,7 +45,42 @@ LIVE_RETAIN = timedelta(hours=36)
 LIVE_SLOT_GUARD = 3             # minutes either side of a scheduled refresh when the lane stays quiet
 LIVE_UNSUPPORTED_DAYS = 3       # a product that refuses live=all is not asked again for this long
 # Football uses fixtures?live=all; the v1 "games" products games?live=all. The MMA API has no live board.
+# Pre-publish regression gate: automatic publication is refused when the new feed has more than this share fewer
+# events, or fewer guide-corroborated bindings, than the one last published (manual publish overrides). Baselines
+# below the minimum are ignored so a tiny feed cannot trip it.
+PUBLISH_REGRESSION_THRESHOLD = 0.20
+PUBLISH_REGRESSION_MIN_BASELINE = 5
+
+
+class PublishRegression(RuntimeError):
+    """Automatic publication refused: the new feed lost too much against the published one."""
+
+
+def publish_regression(previous, manifest):
+    """Reason string when ``manifest`` regresses against ``previous`` (stored stats), else None."""
+    if not isinstance(previous, dict):
+        return None
+    cover = manifest.get("coverage") or {}
+    now = {"events": cover.get("events", 0), "corroborated_bindings": cover.get("guide_corroborated_broadcasts", 0)}
+    labels = {"events": "events", "corroborated_bindings": "guide-corroborated bindings"}
+    for key, label in labels.items():
+        before = previous.get(key)
+        if (isinstance(before, int) and before >= PUBLISH_REGRESSION_MIN_BASELINE
+                and now[key] < before * (1 - PUBLISH_REGRESSION_THRESHOLD)):
+            return "%s fell from %d to %d (more than %d%%)" % (label, before, now[key],
+                                                                round(PUBLISH_REGRESSION_THRESHOLD * 100))
+    return None
+
+
 LIVE_PRODUCTS = tuple(name for name in providers.SPORTS if name.startswith("api_sports") and name != "api_sports_mma")
+# Settle pass: an event that has left the live board is never "finished" by that alone. Once it is past its expected
+# end plus the live grace (and at most SETTLE_WINDOW after), one date=<London start day> call per product per hour reads
+# the provider's explicit final status (FT/AET/PEN, PST, CANC ...) while unsettled events exist. Its own daily counter
+# "settle:<product>" is also counted in the product's quota and obeys the same reserve as the live lane.
+SETTLE_DAILY_BUDGET = 4         # settle calls per product per UTC day
+SETTLE_INTERVAL = timedelta(hours=1)
+SETTLE_WINDOW = timedelta(hours=12)    # how long after the live grace an unsettled event is still looked up
+SETTLE_FINAL = ("finished", "postponed", "cancelled")
 
 
 class _NoGitHubRedirect(urllib.request.HTTPRedirectHandler):
@@ -56,7 +91,9 @@ class _NoGitHubRedirect(urllib.request.HTTPRedirectHandler):
 
 def _github_open(request, timeout=30):
     """Authenticated GitHub API request without following any redirects."""
-    return urllib.request.build_opener(_NoGitHubRedirect()).open(request, timeout=timeout)
+    response = urllib.request.build_opener(_NoGitHubRedirect()).open(request, timeout=timeout)
+    health.note_github_response(response)   # remembers the token expiry header; never raises
+    return response
 
 
 def _github_failure(step, exc):
@@ -791,6 +828,12 @@ class Engine:
                              status_normalized=seen.get("status_normalized"),
                              status_observed_at=seen["status_observed_at"])
                 event.pop("live_status_unconfirmed", None)
+                # A newer observation replaces the record's score (sli/1.7); one without a score clears it, so a
+                # score never outlives the status it was read with. Both stay internal unless scores are enabled.
+                if isinstance(seen.get("score"), dict):
+                    event["score"] = seen["score"]
+                else:
+                    event.pop("score", None)
             out.append(event)
         return out
 
@@ -1015,6 +1058,7 @@ class Engine:
             try:
                 self._scheduler_tick()
                 failures = 0
+                health.tick(self.store)   # stall alerting; swallows its own errors
             except Exception as exc:  # a locked/full database must not kill scheduling for good
                 failures += 1
                 LOGGER.exception("Scheduler tick failed")
@@ -1069,6 +1113,10 @@ class Engine:
                 LOGGER.exception("Live status lane failed")
                 self.store.job("live_status", "failed", "Unexpected error; previous statuses kept")
                 changed = 0
+            try:
+                changed += self.settle_pass()
+            except Exception:
+                LOGGER.exception("Settle pass failed")
             finally:
                 self._busy.release()
             if changed:
@@ -1128,6 +1176,7 @@ class Engine:
         observations = dict(stored.get("events") or {})
         candidates = self._live_candidates(conf, now, observations)
         calls, changed, notes = 0, 0, []
+        score_sources = feed.score_approvals(conf)      # empty (the default): scores are neither read nor stored
         for name, rows in sorted(candidates.items()):
             _, base, key_name, daily_limit = providers.SPORTS[name]
             unsupported = self.store._get("live_unsupported:" + name) or ""
@@ -1176,8 +1225,11 @@ class Engine:
             for event, ids in rows:
                 for sid in ids:
                     previous = observations.get(sid)
+                    score = None
                     if sid in board:
                         status, raw = board[sid]["status_normalized"], str(board[sid].get("status") or "")[:20]
+                        if name in score_sources:
+                            score = board[sid].get("score")
                     else:
                         before = (previous or event).get("status_normalized")
                         if before != "live":
@@ -1185,14 +1237,31 @@ class Engine:
                         status, raw = "unknown", "left the live board"   # finished? abandoned? not claimed
                     if previous and previous.get("status_normalized") == status:
                         try:
-                            if now - datetime.fromisoformat(previous["status_observed_at"]) < LIVE_REFRESH:
+                            # A changed score is news at once (it republishes the live asset); otherwise an unchanged
+                            # status is only re-confirmed every LIVE_REFRESH.
+                            if (previous.get("score") == score
+                                    and now - datetime.fromisoformat(previous["status_observed_at"]) < LIVE_REFRESH):
                                 continue       # unchanged and recently confirmed: no new asset
                         except (KeyError, TypeError, ValueError):
                             pass
                     elif not previous and status == event.get("status_normalized") and status != "live":
                         continue
                     observations[sid] = {"status": raw, "status_normalized": status, "status_observed_at": stamp}
+                    if score:
+                        observations[sid]["score"] = score
                     changed += 1
+        # A stored "live" nobody re-confirmed within LIVE_MAX_AGE becomes "unknown" (no API call), so the lane
+        # republishes and a published "live" cannot outlive its evidence (readers already ignore it after 45 min).
+        for sid, obs in observations.items():
+            try:
+                stale = (obs.get("status_normalized") == "live"
+                         and now - datetime.fromisoformat(obs["status_observed_at"]) > feed.LIVE_MAX_AGE)
+            except (KeyError, TypeError, ValueError, AttributeError):
+                stale = False
+            if stale:
+                observations[sid] = {"status": "stale live expired", "status_normalized": "unknown",
+                                     "status_observed_at": stamp}
+                changed += 1
         cutoff = (now - LIVE_RETAIN).isoformat()
         observations = {k: v for k, v in observations.items() if str(v.get("status_observed_at", "")) >= cutoff}
         if changed or observations != (stored.get("events") or {}):
@@ -1205,6 +1274,129 @@ class Engine:
                                       "summary": summary[:300]})
         if candidates or notes:
             self.store.job("live_status", "ok" if not notes else "partial", summary)
+        return changed
+
+    def _settle_candidates(self, conf, now, observations):
+        """{product: {london_day: [(event, [source event ids])]}} for events past expected end + grace (and within
+        SETTLE_WINDOW of that) whose latest known status is not final."""
+        snapshot = self.store.snapshot("sports")
+        events = ((snapshot or {}).get("data") or {}).get("events") or []
+        found = {}
+        products = [name for name in LIVE_PRODUCTS if conf["sports"].get(name)]
+        for event in events:
+            if (event.get("origin") == "guide_listing"
+                    or event.get("start_precision") in linking.UNCONFIRMED_START_PRECISIONS):
+                continue
+            try:
+                start = datetime.fromisoformat(event["start_utc"])
+                due = linking.expected_end(event) + linking.LIVE_END_GRACE
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not due < now <= due + SETTLE_WINDOW:
+                continue
+            ids = event.get("source_events") or [event.get("id")]
+            seen = [observations[sid] for sid in ids if isinstance(observations.get(sid), dict)] + [event]
+            latest = max(seen, key=lambda o: str(o.get("status_observed_at") or ""))
+            if latest.get("status_normalized") in SETTLE_FINAL:
+                continue
+            day = start.astimezone(LONDON).date()
+            for name in products:
+                prefix = name.replace("_", "-") + ":"
+                mine = [sid for sid in ids if isinstance(sid, str) and sid.startswith(prefix)]
+                if mine:
+                    found.setdefault(name, {}).setdefault(day, []).append((event, mine))
+        return found
+
+    def settle_pass(self, now=None):
+        """Read the provider's explicit final status for events that ended and are still not final; returns the number
+        of observations written.
+
+        At most one ``date=`` call per product per SETTLE_INTERVAL (oldest unsettled London day first), at most
+        SETTLE_DAILY_BUDGET a day (counter ``settle:<product>``), never into the product's reserve. Only an explicit
+        finished/postponed/cancelled status is stored: absence from the response, or any other status, says nothing."""
+        now = now or datetime.now(timezone.utc)
+        conf = self.store.config()
+        stamp = now.isoformat(timespec="seconds")
+        if not conf["setup_complete"] or not self.live_lane_enabled(conf):
+            return 0
+        stored = self.store._get("live_observations") or {}
+        observations = dict(stored.get("events") or {})
+        candidates = self._settle_candidates(conf, now, observations)
+        if not candidates:
+            return 0
+        today = now.astimezone(LONDON).date()
+        calls, changed, notes = 0, 0, []
+        score_sources = feed.score_approvals(conf)
+        for name, days in sorted(candidates.items()):
+            _, base, key_name, daily_limit = providers.SPORTS[name]
+            last = self.store._get("settle_last:" + name) or ""
+            try:
+                if now - datetime.fromisoformat(last) < SETTLE_INTERVAL:
+                    continue
+            except (TypeError, ValueError):
+                pass
+            day = min(days)
+            window = self._plan_window(name)
+            if window and not window[0] <= (day - today).days <= window[1]:
+                notes.append("%s: %s is outside the provider plan's dates" % (name, day))
+                continue
+            if self.store.usage().get(name, 0) >= daily_limit - LIVE_RESERVE:
+                notes.append("%s: remaining calls kept for scheduled refreshes" % name)
+                continue
+            if name == "api_sports":
+                decode = providers.api_sports_events
+            else:
+                decode = partial(providers.api_sports_games_events, source_id=name, sport=providers.API_SPORTS_SPORT[name])
+            query = urllib.parse.urlencode({"date": day.isoformat(), "timezone": "Europe/London"})
+            item = dict(url=base + "?" + query, headers={"x-apisports-key": conf["keys"].get(key_name, "")},
+                        scope="settle:" + day.isoformat(), decode=decode, max_bytes=7_000_000)
+            try:
+                self._check_sport_backoff(name)
+                try:
+                    self.store.increment("settle:" + name, SETTLE_DAILY_BUDGET)
+                except RuntimeError:
+                    notes.append("%s: daily settle budget (%d) used" % (name, SETTLE_DAILY_BUDGET))
+                    continue
+                self.store._put("settle_last:" + name, stamp)
+                board = {row["id"]: row for row in self._request(name, item, daily_limit)}
+                calls += 1
+            except QuotaExhausted as exc:
+                notes.append("%s: %s" % (name, str(exc)[:80]))
+                continue
+            except providers.PlanWindow as exc:
+                self._learn_plan_window(name, exc, today)
+                notes.append("%s: %s is outside the provider plan's dates" % (name, day))
+                continue
+            except SAFE_ERRORS as exc:
+                reason = _sports_failure(exc)
+                if getattr(exc, "status", None) == 429 or reason == "Provider quota or rate limit":
+                    self._defer_sport(name, exc)
+                notes.append("%s: %s" % (name, reason))
+                continue
+            for _, ids in days[day]:
+                for sid in ids:
+                    row = board.get(sid)
+                    status = (row or {}).get("status_normalized")
+                    if status not in SETTLE_FINAL:
+                        continue               # still in progress, or not listed: never claimed finished
+                    previous = observations.get(sid)
+                    score = row.get("score") if name in score_sources and status == "finished" else None
+                    if previous and previous.get("status_normalized") == status and (
+                            score is None or previous.get("score") == score):
+                        continue
+                    observations[sid] = {"status": str(row.get("status") or "")[:20], "status_normalized": status,
+                                         "status_observed_at": stamp}
+                    if score:
+                        observations[sid]["score"] = score     # the final score, read with the final status
+                    changed += 1
+        if changed:
+            self.store._put("live_observations", {"events": observations, "updated_at": stamp})
+        unsettled = sum(len(rows) for days in candidates.values() for rows in days.values())
+        summary = "%d unsettled events; %d settle calls; %d settled" % (unsettled, calls, changed)
+        if notes:
+            summary += "; " + "; ".join(notes[:3])
+        self.store._put("settle_lane", {"last_run": stamp, "unsettled": unsettled, "calls": calls, "changed": changed,
+                                        "summary": summary[:300]})
         return changed
 
     def _prune_live_observations(self, now):
@@ -1550,7 +1742,14 @@ class Engine:
                 self._set_publish_status(state, private_note.lstrip("; ").capitalize(), trigger)
                 return None
         try:
-            revision = self.publish()
+            revision = self.publish() if trigger == "manual" else self.publish(allow_regression=False)
+        except PublishRegression as exc:
+            message = "Automatic publish refused: %s; the previous feed stays live. Publish manually to override" % exc
+            LOGGER.warning("Feed publication refused (%s): %s", trigger, message)
+            self.store.job("publisher", "blocked", message)
+            self.store._put("publish_gate", {"blocked_at": utcnow(), "reason": str(exc)[:200], "trigger": trigger})
+            self._set_publish_status("failed", message + private_note, trigger)
+            return None
         except (ValueError, RuntimeError, OSError) as exc:
             message = str(exc)[:300]
             LOGGER.warning("Feed publication failed (%s): %s", trigger, message)
@@ -1571,8 +1770,11 @@ class Engine:
         self._set_publish_status("failed" if "failed" in private_note else "succeeded", message + private_note, trigger)
         return revision
 
-    def publish(self):
+    def publish(self, allow_regression=True):
         """Publish the sli/1 feed in ONE atomic commit; EPG programme text is never copied.
+
+        ``allow_regression=False`` (automatic publication) refuses a feed that lost more than
+        ``PUBLISH_REGRESSION_THRESHOLD`` of its events or corroborated bindings against the published one.
 
         Disabled by default. Events appear only for sources whose public
         redistribution licence has been explicitly approved.
@@ -1580,7 +1782,7 @@ class Engine:
         if not self._publish_lock.acquire(timeout=120):
             raise RuntimeError("Another feed publication is already running")
         try:
-            return self._publish()
+            return self._publish() if allow_regression else self._publish(False)
         finally:
             self._publish_lock.release()
 
@@ -1613,7 +1815,7 @@ class Engine:
         self._private_outcome = outcome
         return revision
 
-    def _publish(self):
+    def _publish(self, allow_regression=True):
         conf = self.store.config()
         target = conf["github"]
         self._publish_outcome = None
@@ -1632,6 +1834,10 @@ class Engine:
         validate_github_target(owner, repository, branch)
         state = self.store._get("feed_state") or {"revisions": []}
         manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"))
+        if not allow_regression and manifest["revision"] != state.get("last_revision"):
+            reason = publish_regression(state.get("stats"), manifest)
+            if reason:
+                raise PublishRegression(reason)
         outcome, revision = self._commit_feed(owner, repository, branch, token, manifest, files, state,
                                               "feed_state", "publisher", "SportsLiveInfo feed", private=False)
         self._publish_outcome = outcome
@@ -1664,7 +1870,10 @@ class Engine:
         self._github_commit(owner, repository, branch, token, uploads, deletions,
                             "%s %s (%d events)" % (label, revision, manifest["coverage"]["events"]),
                             required=files, private=private)
-        self.store._put(state_key, {"last_revision": revision, "revisions": keep, "published_at": utcnow()})
+        cover = manifest["coverage"]
+        self.store._put(state_key, {"last_revision": revision, "revisions": keep, "published_at": utcnow(),
+                                    "stats": {"events": cover["events"],
+                                              "corroborated_bindings": cover["guide_corroborated_broadcasts"]}})
         self.store.job(job, "submitted", "Feed %s committed atomically (%d new files, %d removed); verify the static endpoint" % (
             revision, len(uploads), len(deletions)))
         return "committed", revision

@@ -4,8 +4,34 @@
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Updated:** 12 November 2026  
-**Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
+**Repository:** `jimmyfazz/SportsLiveInfo` (public; it was private when this section was written on 12 November 2026).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
+
+## 20 November 2026 — scores per source behind a rights flag (branch `feat/scores-sli-1-7`)
+
+- **Decision (advisor):** ship scores per source behind `score_approvals`, default off; the owner must read the API-Sports and football-data.org terms and approve before anything is published. Design is additive (`sli/1.7`, capability `scores`, `min_reader_minor` unchanged).
+- **Change:** decoders keep goals and scores; live lane and settle pass store them with the status observation; a changed score republishes the live asset; merge re-aligns scores to the published participants order; feed publishes final scores in day assets and live scores in the live asset only for approved sources and sports; manifest `compatibility.scores` and `rights.scores`; Ingress approval form; contract §4.4, schemas, SOURCE_REGISTRY, CHANGELOG. See CHANGELOG, Unreleased.
+- **Results:** compileall and `unittest discover` pass (see the gate line in the hand-off); the existing golden fixtures are unchanged (disabled output is byte-identical); `schemas/fixtures/sli-v1-scores` is the new `sli/1.7` variant.
+- **NOT RUN:** a live API-Sports or football-data.org call, Home Assistant, a deploy; no version bump. The owner must still: read each source's score terms and approve in Ingress; confirm `PEN` semantics (score before the shootout) and API-Sports field shapes on a live match; and decide whether B1G shows scores (the B1 reader has not been changed).
+## 20 November 2026 — cross-source duplicate fixtures (branch `fix/event-dedupe-names`)
+
+- **Cause:** `linking.same_team` allowed only generic words to differ; real pairs (Bielefeld, Havelse, Heidenheim 1846, Espanyol, Troyes, Union Berlin Frauen) never merged.
+- **Change:** club-form stop tokens, droppable founding years, women spellings, German exonyms, and an anchored contained-name rule within 15 minutes (see CHANGELOG, Unreleased).
+- **Results:** compileall and `unittest discover` pass, 343 tests (329 before, 14 new). Negative tests cover Real Madrid/Betis, men v women, Castilla/II/U19/U21, other day, kick-offs 30 minutes apart, different competitions.
+- **NOT RUN:** a rerun against the live feed or Home Assistant; no deploy, no version bump. The `RC` prefix is deliberately not a football club form (existing test: RC Lens != Lens in football).
+## Unreleased — event titles, status defaults and expected durations (branch `chore/event-titles-and-durations`)
+
+- **Done:** F1 session titles (`<race> — <session>`), F1 status always published (OpenF1 "finished" only with a passed provider `date_end`), missing status defaults to "scheduled", CricketData both-TBC fixtures without participants, TheSportsDB `T00:00:00` day-only sports as `date_only`, expected durations for F1 practice and qualifying (90), handball (120), volleyball (150) and knockout football (150). See [`sportsliveinfo/CHANGELOG.md`](../sportsliveinfo/CHANGELOG.md) "Unreleased".
+- **Tests:** compileall clean; `unittest discover` 338 pass (329 baseline plus 9 new). Two old duration assertions updated deliberately.
+- **Fixtures:** `tools/generate_feed_fixtures.py` run; only `status_normalized` on one event asset changed.
+- **NOT RUN:** the B1 interop fixture copy (`platforms/android/app/src/test/resources/sli-v1-6/`) belongs to the B1 repository and was not touched in this task.
+## 20 November 2026 — rights record and status reconciliation (documentation only)
+
+- **Branch:** `docs/rights-record-and-status` from `origin/main` 8da6e83. No code, schema or version change.
+- **Added:** [RIGHTS_RECORD.md](RIGHTS_RECORD.md): publication status per source and data kind, kill-switch locations and an owner checklist. The repository records no supplier permission. Provider terms could not be read from the cloud session.
+- **Corrected:** [CURRENT_STATUS.md](CURRENT_STATUS.md) validation (329 tests on 0.3.24, not 315); [LICENSING_AND_HOSTING.md](LICENSING_AND_HOSTING.md) and the repository line here said the App repository is private (it is public); API-Sports status in [SOURCE_REGISTRY.md](SOURCE_REGISTRY.md); a stale pointer in CLAUDE.md.
+- **Verified:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` gave 329 tests, OK, on 8da6e83 before these edits.
+- **Open for the owner:** the RIGHTS_RECORD checklist; feed contract §3 against D8 for broadcast links; the "Codex owns" lines in CLAUDE.md (binding, left unchanged).
 
 ## 15 November 2026 — 0.3.21 to 0.3.23, audit, deployment and handover to Mac terminal agents
 
@@ -454,3 +480,31 @@ content-length: 729267
 App-parser checks used `providers.decode_xmltv(..., max_programmes=400000)` and confirmed the counts/horizons in the table. Three new synthetic tests cover direct source URLs, retirement/market retention, redirect rejection and diagnostic text. Golden fixtures were regenerated with `PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py` (14 assets). `PYTHONPATH=sportsliveinfo/src python3 -m compileall -q sportsliveinfo/src tests` and `git diff --check` passed. `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests -v` completed with **202 tests, OK**.
 
 **Home Assistant acceptance:** NOT RUN at this documentation point. Before merging, create the required Home Assistant backup. After merge, verify version 0.3.9 is offered/installed, run “Collect now,” then check the app Diagnostics/logs for nonzero NZ and Sydney imports and the retired UK source no longer being selected. Do not claim live HA verification until those steps complete.
+
+## 20 Nov 2026: live-lane expiry, manifest live_lane, publish regression gate (branch fix/live-lane-expiry)
+
+Diagnosed: the live asset kept rows after `live_until_utc`, and stored `live` observations were only downgraded when the event left a live-board response. Changes: expired rows dropped at build time; stale `live` (older than 45 min) downgraded to `unknown` without an API call and republished; manifest gains `refresh.live_stale_after_minutes` and `refresh.live_lane`; automatic publication refuses a more than 20% drop in events or guide-corroborated bindings (manual overrides).
+
+Results: `python3 -m compileall -q sportsliveinfo/src tests` and `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests` pass (335 tests; 6 new in `tests/test_live_tiers_corroboration.py`). Golden manifest fixture regenerated. Version files not bumped (owner releases).
+
+NOT RUN: Home Assistant deployment, a real GitHub commit, and any check against the live 20 Nov manifest. The cause of the 04:00 UK publication stall is not proven; see the hand-off report for the code paths that can skip publishing.
+## Settle pass (branch `feat/settle-pass`, from `origin/main` 8da6e83)
+
+Root cause: events never left `scheduled`/`unknown` after ending (collection `date>=today` at 12:00/17:00; live lane watches start..end+30 min only). Added `Engine.settle_pass` (engine.py, new functions and constants only; `live_lane` untouched) called after the live lane by its scheduler worker: one `date=` call per product per hour, `settle:<product>` counter capped at 4 a day, live reserve, back-off and plan-window checks, existing decoders, explicit final statuses only, stored as `live_observations`. Counters on the Live status lane card.
+
+- `python3 -m compileall -q sportsliveinfo/src tests`: passed.
+- `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests`: 340 tests pass (329 + 11 new; the MemoryError line is the expected mock output).
+- Golden fixtures: not regenerated (wire output unchanged).
+- NOT RUN: real API-Sports date calls for finished fixtures, a Home Assistant deploy, a publish to the feed repo, B1G acceptance of `finished` rows. Version not bumped.
+
+## Team crest references (branch feat/crest-refs, off `main` 8da6e83)
+
+Decision (advisor): model (i), SportsLiveInfo publishes references, TVs hotlink, monogram fallback, no image mirroring. Implemented: API-Sports decoders carry team ids (`providers.API_SPORTS_CREST_PRODUCT`); `linking.merge_events` aligns `participant_crests` to the merged participants with `same_team` (swap-aware, null on conflict or ambiguity); `feed.py` adds the `participant_crests` event field, the always-present `rights.crests` block and the `team_crests` capability, gated by config `publish_crest_refs` (default false) plus an API-Sports source in `publication_approvals`; schemas updated; golden manifest regenerated (events and revision unchanged while off). Tests: 15 new in `tests/test_crest_refs.py`. **Owner to verify:** API-Sports terms for crest/logo use (identification only, private household use is the working assumption, unverified) before setting `publish_crest_refs`. B1G reader change (hotlink, cache, monogram) NOT DONE. Home Assistant acceptance NOT RUN.
+## Stall alerting and `/healthz` (branch `feat/health-sensors-and-stall-alert`, 20 Nov 2026)
+
+Trigger: the manifest stayed at 03:42Z for 3.5+ hours on 20 Nov with no alert. Added `sportsliveinfo/src/sportsliveinfo/health.py` (report, hysteresis latch, de-duplicated Supervisor persistent notifications), hooks in `engine.py` (scheduler loop, GitHub token-expiry header) and `server.py` (`/healthz` 200/503, `?scope=liveness`, Diagnostics card, banner), and `config.yaml` (HTTP watchdog on `/healthz?scope=liveness`, `homeassistant_api: true`, option `stall_threshold_hours`). Sensors via the REST states API deliberately skipped (lost on HA restart, no unique id).
+
+Gate: `python3 -m compileall -q sportsliveinfo/src tests` and `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests` passed, 354 tests (25 new in `tests/test_health_alerts.py`: thresholds including the 20 Nov timeline, hysteresis, dedupe, recovery dismiss, notify failure swallowed without secrets, healthz codes).
+
+**Home Assistant verification: NOT RUN.** After the owner merges and updates: confirm the watchdog request from the Supervisor is accepted by the Ingress address check (`/healthz?scope=liveness` returns 200, no restart loop); approve the new Home Assistant API permission; check that `persistent_notification.create` through `http://supervisor/core/api` works (for example stop publishing by revoking the token, or set a tiny `stall_threshold_hours` and wait past a slot) and that the notification dismisses on recovery; confirm the token-expiry header appears for the fine-grained token.
+

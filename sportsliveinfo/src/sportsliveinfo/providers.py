@@ -439,6 +439,59 @@ def status_of(raw, sport=None):
     return "unknown"
 
 
+# ---- scores (feed sli/1.7, capability "scores"; default OFF, see docs/FEED_CONTRACT_SLI_V1.md section 4.4) ------------
+# Sources whose scores may ever be published, and only when the owner lists them in config ``score_approvals`` after
+# reading their terms. TheSportsDB, Jolpica, OpenF1 and every other source are never eligible. football-data.org is
+# wired for final scores only. The API-Sports MMA product has no scores here.
+SCORE_ELIGIBLE = {name: ("final" if name == "football_data" else "live_and_final")
+                  for name in ("api_sports", "api_sports_rugby", "api_sports_basketball", "api_sports_hockey",
+                               "api_sports_nfl", "api_sports_baseball", "api_sports_handball", "api_sports_volleyball",
+                               "api_sports_afl", "football_data")}
+# Sports whose scores v1 may carry. Tennis, cricket, golf, motorsport, boxing and MMA are excluded by design.
+SCORE_SPORTS = frozenset({"football", "rugby", "rugby_union", "rugby_league", "basketball", "ice_hockey",
+                          "american_football", "baseball", "handball", "volleyball", "aussie_rules"})
+# Closed period vocabulary: 1H HT 2H ET PEN FT AET (AET also covers "after overtime"), basketball/NFL/AFL Q1-Q4,
+# hockey P1-P3, OT. Anything else (break times, baseball innings, volleyball sets) is null: never invented.
+SCORE_PERIODS = frozenset({"1H", "HT", "2H", "ET", "PEN", "FT", "AET", "Q1", "Q2", "Q3", "Q4", "P1", "P2", "P3", "OT"})
+_PERIOD_OF_STATUS = {
+    "1h": "1H", "ht": "HT", "2h": "2H", "et": "ET", "p": "PEN", "pt": "PEN", "ap": "PEN", "pen": "PEN", "ft": "FT",
+    "aet": "AET", "aot": "AET", "q1": "Q1", "q2": "Q2", "q3": "Q3", "q4": "Q4", "p1": "P1", "p2": "P2", "p3": "P3",
+    "ot": "OT",
+}
+# Awarded or walkover results carry no played score.
+_NO_SCORE_STATUS = {"awd", "wo", "aw", "awarded"}
+
+
+def score_period(raw_status):
+    """Canonical period for a provider status code, or None (break times, innings, sets and unknown codes)."""
+    return _PERIOD_OF_STATUS.get(str(raw_status or "").strip().casefold())
+
+
+def _points(value):
+    """A non-negative whole number from an API-Sports score cell: an int, a digit string, or a dict holding its
+    ``total`` (basketball, NFL, baseball) or ``score`` (AFL). Anything else (null before the start) is None."""
+    if isinstance(value, dict):
+        value = value.get("total") if value.get("total") is not None else value.get("score")
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if 0 <= value < 1000 else None
+    if isinstance(value, str) and value.isdigit() and len(value) < 4:
+        return int(value)
+    return None
+
+
+def _score_of(home, away, raw_status, status_normalized):
+    """``{"home", "away", "period"}`` in the record's own participants order, or None when it is not certain:
+    both sides must be whole numbers and the status live or finished (never awarded, abandoned or postponed)."""
+    if status_normalized not in ("live", "finished") or str(raw_status or "").strip().casefold() in _NO_SCORE_STATUS:
+        return None
+    home, away = _points(home), _points(away)
+    if home is None or away is None:
+        return None
+    return {"home": home, "away": away, "period": score_period(raw_status)}
+
+
 def xmltv_time(value):
     value = (value or "").strip()
     if value.endswith("Z"):
@@ -574,6 +627,10 @@ def decode_xmltv(raw, source, max_expanded=None, max_programmes=100_000,
 _F1_SESSIONS = {"race": "race", "FirstPractice": "practice1", "SecondPractice": "practice2", "ThirdPractice": "practice3",
                 "Qualifying": "qualifying", "Sprint": "sprint", "SprintQualifying": "sprint_qualifying",
                 "SprintShootout": "sprint_qualifying"}
+# Session labels for event titles ("<raceName> — <label>"), so practice, qualifying and race are distinguishable.
+_F1_LABELS = {"race": "Race", "FirstPractice": "Practice 1", "SecondPractice": "Practice 2", "ThirdPractice": "Practice 3",
+              "Qualifying": "Qualifying", "Sprint": "Sprint", "SprintQualifying": "Sprint Qualifying",
+              "SprintShootout": "Sprint Shootout"}
 
 
 def f1_events(data):
@@ -604,7 +661,10 @@ def f1_events(data):
                     continue
                 events.append({"id": f"f1:{season}:{round_}:{kind}", "sport": "motorsport", "competition": "Formula 1", "event_type": kind,
                                "session": _F1_SESSIONS[kind],
-                               "title": race.get("raceName", "Formula 1"), "start_utc": utc.isoformat(timespec="seconds"), "start_precision": precision,
+                               "title": "%s — %s" % (race.get("raceName", "Formula 1"), _F1_LABELS[kind]),
+                               "start_utc": utc.isoformat(timespec="seconds"), "start_precision": precision,
+                               # The calendar gives no end time or result, so a session is only ever "scheduled" here.
+                               "status_normalized": "scheduled",
                                "venue": circuit.get("circuitName", ""), "circuit_id": circuit.get("circuitId", ""), "country": location.get("country", ""),
                                "source_id": "jolpica", "broadcasts": [], "broadcast_verified": False})
         except (KeyError, ValueError, TypeError):
@@ -616,7 +676,8 @@ _OPENF1_SESSIONS = {"practice 1": "practice1", "practice 2": "practice2", "pract
                     "sprint": "sprint", "sprint qualifying": "sprint_qualifying", "sprint shootout": "sprint_qualifying", "race": "race"}
 
 
-def openf1_events(data):
+def openf1_events(data, now=None):
+    now = now or datetime.now(timezone.utc)
     rows = json.loads(data)
     if not isinstance(rows, list):
         raise ValueError("OpenF1 sessions payload missing or invalid")
@@ -630,11 +691,14 @@ def openf1_events(data):
             place = row.get("country_name") or row.get("location") or ""
             event = {"id": "openf1:%s" % row["session_key"], "sport": "motorsport", "competition": "Formula 1",
                      "event_type": name, "session": session, "title": ("Formula 1 %s — %s" % (place, name)) if place else "Formula 1 — %s" % name,
-                     "start_utc": _utc(row["date_start"]), "start_precision": "scheduled",
+                     "start_utc": _utc(row["date_start"]), "start_precision": "scheduled", "status_normalized": "scheduled",
                      "venue": row.get("circuit_short_name") or row.get("location") or "", "country": row.get("country_name") or "",
                      "source_id": "openf1", "broadcasts": [], "broadcast_verified": False}
             if row.get("date_end"):
                 event["end_utc"] = _utc(row["date_end"])
+                # "finished" only when the provider itself gives an end time that has already passed.
+                if datetime.fromisoformat(event["end_utc"]) < now:
+                    event["status_normalized"] = "finished"
             events.append(event)
         except (KeyError, ValueError, TypeError):
             continue
@@ -658,7 +722,7 @@ def football_data_events(data):
             away = away_team.get("name") or "TBC"
             competition = m.get("competition") or {}
             raw_status = m.get("status", "SCHEDULED")
-            events.append({"id": "football-data:%s" % m["id"], "sport": "football", "competition": competition.get("name", ""),
+            event = ({"id": "football-data:%s" % m["id"], "sport": "football", "competition": competition.get("name", ""),
                            "competition_code": "fd:%s" % competition["code"] if competition.get("code") else None,
                            "competition_country": (m.get("area") or competition.get("area") or {}).get("name", ""),
                            "event_type": "match", "title": f"{home} v {away}", "participants": [home, away],
@@ -669,9 +733,43 @@ def football_data_events(data):
                            "status": raw_status, "status_normalized": status_of(raw_status),
                            "stage": m.get("stage") or "", "round": str(m.get("matchday") or ""), "venue": m.get("venue") or "",
                            "source_id": "football_data", "broadcasts": [], "broadcast_verified": False})
+            # Final scores only, and only a result decided in regular time: extra time and shootouts are not read
+            # (the full-time cell is not reliably "after 90 minutes" there), so nothing is carried when uncertain.
+            result = m.get("score") if isinstance(m.get("score"), dict) else {}
+            full = result.get("fullTime") if isinstance(result.get("fullTime"), dict) else {}
+            score = (_score_of(full.get("home"), full.get("away"), "FT", "finished")
+                     if raw_status == "FINISHED" and result.get("duration") == "REGULAR" else None)
+            if score:
+                event["score"] = score
+            events.append(event)
         except (ValueError, KeyError, TypeError):
             continue
     return events
+
+
+# Team crest REFERENCES (not images). API-Sports team ids are carried as {"src": "apisports", "ref": "<product>/teams/<id>"}
+# so a reader can build media.api-sports.io/<ref>.png itself; SLI never fetches, stores or mirrors an image, and the
+# logo URL in the payload is deliberately ignored. Index-aligned with ``participants``; absent when no side has an id.
+API_SPORTS_CREST_PRODUCT = {
+    "api_sports": "football", "api_sports_rugby": "rugby", "api_sports_basketball": "basketball",
+    "api_sports_hockey": "hockey", "api_sports_nfl": "american-football", "api_sports_baseball": "baseball",
+    "api_sports_handball": "handball", "api_sports_volleyball": "volleyball", "api_sports_afl": "afl",
+}
+
+
+def _api_sports_crests(source_id, teams):
+    product = API_SPORTS_CREST_PRODUCT.get(source_id)
+    if not product or not isinstance(teams, dict):
+        return None
+    refs = []
+    for side in ("home", "away"):
+        team = teams.get(side)
+        team_id = team.get("id") if isinstance(team, dict) else None
+        if isinstance(team_id, int) and not isinstance(team_id, bool) and team_id > 0:
+            refs.append({"src": "apisports", "ref": "%s/teams/%d" % (product, team_id)})
+        else:
+            refs.append(None)
+    return refs if any(refs) else None
 
 
 def api_sports_events(data):
@@ -694,7 +792,7 @@ def api_sports_events(data):
             away = (teams.get("away") or {}).get("name") or "TBC"
             league = row.get("league") or {}
             short = (fixture.get("status") or {}).get("short", "NS")
-            events.append({"id": f"api-sports:{fixture['id']}", "sport": "football", "competition": league.get("name", ""),
+            event = ({"id": f"api-sports:{fixture['id']}", "sport": "football", "competition": league.get("name", ""),
                            "competition_code": "as:%s" % league["id"] if league.get("id") else None,
                            "competition_country": league.get("country") or "",
                            "event_type": "match", "title": f"{home} v {away}", "participants": [home, away],
@@ -703,6 +801,14 @@ def api_sports_events(data):
                            "status": short, "status_normalized": status_of(short), "round": league.get("round") or "",
                            "venue": (fixture.get("venue") or {}).get("name") or "",
                            "source_id": "api_sports", "broadcasts": [], "broadcast_verified": False})
+            goals = row.get("goals") or {}
+            score = _score_of(goals.get("home"), goals.get("away"), short, event["status_normalized"])
+            if score:
+                event["score"] = score      # kept in the record's own order; the feed decides whether it is published
+            crests = _api_sports_crests("api_sports", teams)
+            if crests:
+                event["participant_crests"] = crests
+            events.append(event)
         except (ValueError, KeyError, TypeError, AttributeError):
             continue
     return events
@@ -738,7 +844,7 @@ def api_sports_games_events(data, source_id, sport):
             league = row.get("league") or {}
             country = row.get("country") or league.get("country") or {}
             short = (game.get("status") or {}).get("short", "NS")
-            events.append({"id": "%s:%s" % (source_id.replace("_", "-"), game["id"]), "sport": sport,
+            event = ({"id": "%s:%s" % (source_id.replace("_", "-"), game["id"]), "sport": sport,
                            "competition": league.get("name", ""),
                            "competition_code": "as-%s:%s" % (sport, league["id"]) if league.get("id") else None,
                            "competition_country": country.get("name", "") if isinstance(country, dict) else str(country),
@@ -748,6 +854,14 @@ def api_sports_games_events(data, source_id, sport):
                            "round": str(row.get("week") or game.get("week") or game.get("stage") or ""),
                            "venue": (game.get("venue") or {}).get("name", "") if isinstance(game.get("venue"), dict) else "",
                            "source_id": source_id, "broadcasts": [], "broadcast_verified": False})
+            points = row.get("scores") if isinstance(row.get("scores"), dict) else {}
+            score = _score_of(points.get("home"), points.get("away"), short, event["status_normalized"])
+            if score and sport in SCORE_SPORTS:
+                event["score"] = score
+            crests = _api_sports_crests(source_id, teams)
+            if crests:
+                event["participant_crests"] = crests
+            events.append(event)
         except (ValueError, KeyError, TypeError, OverflowError):
             continue
     return events
@@ -890,6 +1004,10 @@ def pandascore_events(data):
     return events
 
 
+_MIDNIGHT_STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T00:00:00(?:Z|\+00:00)?")
+_DAY_ONLY_SPORTS = {"golf", "snooker", "darts", "motorsport"}
+
+
 def thesportsdb_events(data):
     """TheSportsDB v1 eventsday. strTimestamp/strTime are UTC by provider convention."""
     payload = json.loads(data)
@@ -905,7 +1023,11 @@ def thesportsdb_events(data):
                 continue
             stamp = row.get("strTimestamp")
             precision = "scheduled"
-            if stamp:
+            if stamp and _MIDNIGHT_STAMP.fullmatch(str(stamp).strip()) and str(row.get("strSport") or "").casefold() in _DAY_ONLY_SPORTS:
+                # These feeds write T00:00:00 for "day only" (no kick-off or session time is known): date_only at noon, as elsewhere.
+                when = datetime.fromisoformat(str(stamp).strip()[:10] + "T12:00:00")
+                precision = "date_only"
+            elif stamp:
                 when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
             elif row.get("dateEvent") and re.fullmatch(r"\d{2}:\d{2}(?::\d{2})?.*", str(row.get("strTime") or "")):
                 when = datetime.fromisoformat("%sT%s" % (row["dateEvent"], row["strTime"][:8]))
@@ -938,6 +1060,18 @@ def thesportsdb_events(data):
     return events
 
 
+_TBC_NAMES = {"tbc", "tba", "to be confirmed"}
+
+
+def _tbc_name(name):
+    return str(name or "").strip().casefold() in _TBC_NAMES
+
+
+def _tbc_pair(text):
+    halves = re.split(r"\s+(?:v|vs\.?)\s+", str(text or ""), flags=re.IGNORECASE)
+    return len(halves) == 2 and all(_tbc_name(h) for h in halves)
+
+
 def cricketdata_events(data, horizon_days=8, now=None):
     """CricAPI /v1/matches. dateTimeGMT is GMT by field definition. Test matches expand to one record per playing day.
 
@@ -960,6 +1094,10 @@ def cricketdata_events(data, horizon_days=8, now=None):
             teams = [t for t in (row.get("teams") or []) if t][:2]
             parts = str(row.get("name") or "").split(", ")
             competition = ", ".join(parts[2:]) if len(parts) > 2 else (row.get("series") or "")
+            if len(teams) == 2 and all(_tbc_name(t) for t in teams):
+                teams = []      # both sides unknown: no participants, and no "Tbc v Tbc" title
+            # The first name part is the fixture when it is known; a placeholder pair falls back to the competition.
+            head = parts[0] if parts and not _tbc_pair(parts[0]) else (competition or "Cricket")
             match_type = str(row.get("matchType") or "").lower()
             if row.get("matchEnded"):
                 state = "finished"
@@ -971,7 +1109,7 @@ def cricketdata_events(data, horizon_days=8, now=None):
                     "event_type": match_type or "match", "participants": teams,
                     "status": str(row.get("status") or "")[:120], "status_normalized": state,
                     "venue": row.get("venue") or "", "source_id": "cricketdata", "broadcasts": [], "broadcast_verified": False}
-            title = " v ".join(teams) if len(teams) == 2 else (parts[0] if parts else "Cricket")
+            title = " v ".join(teams) if len(teams) == 2 else head
             days = 5 if match_type == "test" else 1
             ended = bool(row.get("matchEnded"))
             current = max(0, min(days - 1, (now - start) // timedelta(days=1))) if now >= start else 0

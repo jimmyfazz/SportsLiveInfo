@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "sli.live/1",
   "title": "Live status overlay (optional asset kind 'live', sli/1.6+)",
-  "description": "Status observations from the live-status lane since the last full feed, during match hours. Readers overlay each entry on the day assets by event id when its status_observed_at is newer than the event's, then apply the manifest's compatibility.live_state_rule. No scores and no programme data.",
+  "description": "Status observations from the live-status lane since the last full feed, during match hours. Readers overlay each entry on the day assets by event id when its status_observed_at is newer than the event's, then apply the manifest's compatibility.live_state_rule. Since 1.7, and only for sources the owner approved for scores, a row may carry the live or final score. No programme data.",
   "type": "object",
   "required": ["schema", "generated_at", "events"],
   "properties": {
@@ -12,6 +12,12 @@
       "properties": {"id": {"type": "string", "description": "Event id in the same feed revision's day assets"},
                      "status_normalized": {"type": "string", "description": "scheduled | live | finished | postponed | cancelled | unknown"},
                      "status_observed_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
-                     "live_until_utc": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "description": "0.3.24+: with status live, show LIVE only until this time"}}}}
+                     "live_until_utc": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "description": "0.3.24+: with status live, show LIVE only until this time"},
+                     "score": {"type": "object", "required": ["home", "away", "observed_at", "source"],
+                               "description": "1.7+, optional: the live score (status live: show it only while LIVE holds) or a final score read after the event; only while the manifest has compatibility.scores.enabled. home is the score of participants[0], away of participants[1] (positional, not the home/away role); ignore when the event does not have exactly two participants. No minute. Absent means unknown, never 0-0.",
+                               "properties": {"home": {"type": "integer", "minimum": 0}, "away": {"type": "integer", "minimum": 0},
+                                              "period": {"type": ["string", "null"], "description": "1H HT 2H ET PEN FT AET Q1-Q4 P1-P3 OT, or null; unknown values: treat as null"},
+                                              "observed_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+                                              "source": {"type": "string", "description": "SportsLiveInfo source id, one of rights.scores.approved_sources"}}}}}}
   }
 }
