@@ -533,7 +533,7 @@ class VersionToolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             self.copy_tree(temp)
             docker = Path(temp, "sportsliveinfo/Dockerfile")
-            docker.write_text(docker.read_text().replace("BUILD_VERSION=0.3.24", "BUILD_VERSION=0.3.1"))
+            docker.write_text(re.sub(r"BUILD_VERSION=\S+", "BUILD_VERSION=0.0.1", docker.read_text()))
             self.assertFalse(tool.versions_agree(tool.read_versions(temp)))
 
     def test_check_mode_exit_codes(self):
