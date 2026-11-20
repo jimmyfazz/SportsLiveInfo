@@ -2,6 +2,14 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## Unreleased — Settle pass: events that ended are settled by the provider's final status
+
+- **Before:** collection fetched only `date>=today` at 12:00 and 17:00 and the live lane watched only start..expected end + 30 min, so an event that ended stayed `scheduled` (or fell to `unknown` when it left the live board) until it dropped out of the window; nothing ever said `finished`.
+- **Now:** for events past expected end + 30 min (and at most 12 h after that) whose status is not final, the engine makes at most one `date=<London start day>` call per API-Sports product per hour, only while unsettled events exist, decodes it with the existing decoders and stores an explicit `finished`, `postponed` or `cancelled` as a `live_observation`; the `live` asset then carries that row. Leaving the live board still never means finished: absence from the response, or any non-final status, writes nothing.
+- **Quota:** own counter `settle:<product>`, 4 calls a day per product (also counted in the product's quota), same reserve check as the live lane (`usage >= daily_limit - 20` skips), provider back-off and plan-window checks. Counters are shown on the Live status lane card and in the usage table. Estimate: at most 4 extra calls per product per day (a paged response costs one call per page).
+- No wire change: the `live` schema already allows `finished`, `postponed` and `cancelled`; no new fields, providers or secrets. MMA has no live board and is not settled.
+- Tests: 340 pass (11 new in `tests/test_settle_pass.py`).
+
 ## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
 
 Owner report 15 Nov 2026: Scotland v Australia and Spain v England showed an Irish or Asian channel before ITV1, and Pluto's re-run of "England v Samoa — Rugby World Cup 2023" was "probably live". ITV1 had been found (five guides; corroborated for Spain v England) but was listed last.

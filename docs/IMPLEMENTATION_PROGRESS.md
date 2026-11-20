@@ -454,3 +454,13 @@ content-length: 729267
 App-parser checks used `providers.decode_xmltv(..., max_programmes=400000)` and confirmed the counts/horizons in the table. Three new synthetic tests cover direct source URLs, retirement/market retention, redirect rejection and diagnostic text. Golden fixtures were regenerated with `PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py` (14 assets). `PYTHONPATH=sportsliveinfo/src python3 -m compileall -q sportsliveinfo/src tests` and `git diff --check` passed. `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests -v` completed with **202 tests, OK**.
 
 **Home Assistant acceptance:** NOT RUN at this documentation point. Before merging, create the required Home Assistant backup. After merge, verify version 0.3.9 is offered/installed, run “Collect now,” then check the app Diagnostics/logs for nonzero NZ and Sydney imports and the retired UK source no longer being selected. Do not claim live HA verification until those steps complete.
+
+## Settle pass (branch `feat/settle-pass`, from `origin/main` 8da6e83)
+
+Root cause: events never left `scheduled`/`unknown` after ending (collection `date>=today` at 12:00/17:00; live lane watches start..end+30 min only). Added `Engine.settle_pass` (engine.py, new functions and constants only; `live_lane` untouched) called after the live lane by its scheduler worker: one `date=` call per product per hour, `settle:<product>` counter capped at 4 a day, live reserve, back-off and plan-window checks, existing decoders, explicit final statuses only, stored as `live_observations`. Counters on the Live status lane card.
+
+- `python3 -m compileall -q sportsliveinfo/src tests`: passed.
+- `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests`: 340 tests pass (329 + 11 new; the MemoryError line is the expected mock output).
+- Golden fixtures: not regenerated (wire output unchanged).
+- NOT RUN: real API-Sports date calls for finished fixtures, a Home Assistant deploy, a publish to the feed repo, B1G acceptance of `finished` rows. Version not bumped.
+

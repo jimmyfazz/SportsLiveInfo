@@ -1162,7 +1162,7 @@ class UI(BaseHTTPRequestHandler):
 
     def _live_card(self, config):
         """The live-status lane: switch, whether it can run, and its last pass (Scheduler page and Diagnostics)."""
-        from .engine import LIVE_DAILY_BUDGET, LIVE_PRODUCTS, Engine
+        from .engine import LIVE_DAILY_BUDGET, LIVE_PRODUCTS, SETTLE_DAILY_BUDGET, Engine
         on = bool(config.get("live_status", True))
         if not on:
             state = "Switched off."
@@ -1174,6 +1174,9 @@ class UI(BaseHTTPRequestHandler):
         usage = self.store.usage()
         calls = ", ".join("%s %d/%d" % (name, usage.get("live:" + name, 0), LIVE_DAILY_BUDGET)
                           for name in LIVE_PRODUCTS if config["sports"].get(name)) or "no API-Sports product enabled"
+        settle_last = self.store._get("settle_lane") or {}
+        settle = ", ".join("%s %d/%d" % (name, usage.get("settle:" + name, 0), SETTLE_DAILY_BUDGET)
+                           for name in LIVE_PRODUCTS if config["sports"].get(name)) or "none"
         form = ('<label><input type="checkbox" name="enabled" value="on" %s> Check live statuses during matches</label>'
                 '<button type="submit">Save</button>' % ("checked" if on else ""))
         return ('<section class="card" style="margin-top:16px"><h3>Live status lane</h3><p>While a collected event is '
@@ -1182,9 +1185,13 @@ class UI(BaseHTTPRequestHandler):
                 'at most %d calls a day per product, counted in the product\'s own daily quota and always leaving '
                 'calls for the scheduled refreshes. Only status changes are published, as the small <code>live</code> '
                 'asset (when automatic publishing is on). No scores are kept.</p><p class="%s">%s</p>'
-                '<p class="sub">Last pass: %s · %s · Live calls today (UTC): %s</p>%s</section>') % (
+                '<p class="sub">Last pass: %s · %s · Live calls today (UTC): %s</p>'
+                '<p class="sub">Settle pass (final results after the end, hourly, at most %d calls a day per product): '
+                '%s · %s · Settle calls today (UTC): %s</p>%s</section>') % (
             LIVE_DAILY_BUDGET, "ok" if on else "warn", e(state), e(when(last.get("last_run"))),
-            e(last.get("summary") or "not run yet"), e(calls), self._form("live_status", form))
+            e(last.get("summary") or "not run yet"), e(calls), SETTLE_DAILY_BUDGET,
+            e(when(settle_last.get("last_run"))), e(settle_last.get("summary") or "not run yet"), e(settle),
+            self._form("live_status", form))
 
     def _test_result(self, target):
         result = self.store._get("connection_test:" + target)
