@@ -129,7 +129,7 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertNotIn("service", channels[("epgtalk_uk", "SkySpMainEv1.uk")])     # +1 is never the base service
         self.assertNotIn("title", json.dumps(guide_map))                            # no programme text
         self.assertEqual(guide_map["service_aliases"], {"SkySportsMainEvent.uk": "gb.sky.sports.main_event"})
-        self.assertEqual(sum(a["kind"].startswith("events:") for a in self.manifest["assets"]), 8)
+        self.assertEqual(sum(a["kind"].startswith("events:") for a in self.manifest["assets"]), 9)   # 8 days + history
 
     def asset(self, kind):
         entry = next(a for a in self.manifest["assets"] if a["kind"] == kind)
@@ -144,7 +144,7 @@ class GoldenFixtureContractTests(unittest.TestCase):
 
     def test_events_are_fused_classified_and_whitelisted(self):
         events = self.events()
-        self.assertEqual(len(events), 14)
+        self.assertEqual(len(events), 16)      # 14 + yesterday's finished match + a date-only event
         pl = events["football-data:5001"]
         self.assertEqual((pl["category_id"], pl["fixture_confidence"], pl["sources"]),
                          ("football.premier_league", "corroborated", ["api_sports", "football_data"]))
@@ -158,7 +158,8 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertIn("ppv", events["api-sports-mma:77"]["tags"])
         self.assertEqual(events["cricketdata:ash1:d1"]["category_id"], "cricket.intl.england")
         self.assertEqual(events["api-sports-rugby:301"]["b1g_priority_group"], "Rugby")
-        allowed = set(feed.EVENT_FIELDS) | {"b1g_priority_group", "broadcasts", "broadcast_links"}
+        allowed = set(feed.EVENT_FIELDS) | {"b1g_priority_group", "broadcasts", "broadcast_links", "live_until_utc",
+                                            "display_state", "state_until_utc", "finished_at_utc"}
         # D8: guide-listed links are canonical ids and confidence only, never "verified". 1.6: the strict match is
         # listed at the same slot by two independent guide families (mytelly and Schedules Direct): corroborated.
         self.assertEqual(events["football-data:5001"]["broadcast_links"],
@@ -182,7 +183,7 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertEqual(core["api-sports:9006"]["tier"], "core")              # English league, not named
         self.assertTrue(all(e["tier"] == "core" for e in core.values()))
         self.assertTrue(all(e["tier"] == "extra" for e in extra.values()))
-        self.assertEqual(self.manifest["coverage"]["tiers"], {"core": 14, "extra": 1})
+        self.assertEqual(self.manifest["coverage"]["tiers"], {"core": 16, "extra": 1})
         today = self.asset("today")
         referenced = {i for g in today["groups"] for c in g["categories"] for i in c["event_ids"]}
         self.assertNotIn("api-sports:9007", referenced)
@@ -197,7 +198,8 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertEqual(live, {"schema": "sli.live/1", "generated_at": "2026-11-14T13:55:00Z",
                                 "events": [{"id": "api-sports-rugby:301", "status_normalized": "live",
                                             "status_observed_at": "2026-11-14T13:55:00Z",
-                                            "live_until_utc": "2026-11-14T14:40:00Z"}]})
+                                            "live_until_utc": "2026-11-14T14:40:00Z",
+                                            "display_state": "live", "state_until_utc": "2026-11-14T14:40:00Z"}]})
         self.assertEqual(self.manifest["compatibility"]["link_order"], "best_first")
         self.assertEqual(self.manifest["compatibility"]["live_max_age_minutes"], 45)
         self.assertEqual(core["api-sports-rugby:301"]["status_observed_at"], "2026-11-14T12:00:00Z")

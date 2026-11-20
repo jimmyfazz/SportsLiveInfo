@@ -347,11 +347,11 @@ class EngineExpansionTests(unittest.TestCase):
 
         with patch("sportsliveinfo.providers.fetch", side_effect=fake_fetch), patch("sportsliveinfo.engine.time.sleep"):
             Engine(self.store).collect()
-        self.assertEqual(len(calls), 7)
+        self.assertEqual(len(calls), 8)       # yesterday (history) + 7 days
         events = self.store.snapshot("sports:api_sports_rugby")["data"]["events"]
         ids = {e["id"] for e in events}
         self.assertIn("old", ids, "failed day keeps its previous fixtures")
-        self.assertEqual(len(ids), 7)
+        self.assertEqual(len(ids), 8)
         self.assertTrue(any(j["state"] == "partial" for j in self.store.recent_jobs()))
 
     def test_quota_exhaustion_mid_plan_saves_completed_scopes(self):

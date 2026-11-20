@@ -27,6 +27,10 @@
         "live_until_rule": {"type": "string", "description": "0.3.24+: readers show LIVE while start_utc <= now < live_until_utc"},
         "live_max_age_minutes": {"type": "integer", "minimum": 1, "description": "0.3.24+: observation age limit used by live_state_rule, for readers without live_until_utc"},
         "live_end_grace_minutes": {"type": "integer", "minimum": 0, "description": "0.3.24+: minutes after expected_end_utc that live_state_rule still trusts 'live'"},
+        "display_state_rule": {"type": "string", "description": "Contract 4.5: how display_state, state_until_utc and finished_at_utc are decided and how a reader past state_until_utc re-applies them"},
+        "history_rule": {"type": "string", "description": "Contract 4.5: window.history_from and the optional events:<history_from> asset"},
+        "time_precision_rule": {"type": "string", "description": "Contract 4.5: date_only and time_tbc starts are 00:00 Europe/London, never a clock time"},
+        "starting_soon_minutes": {"type": "integer", "minimum": 0, "description": "Contract 4.5: display_state starting_soon begins this many minutes before start_utc"},
         "scores": {"type": "object", "required": ["enabled"], "description": "1.7+, present only while at least one source is approved for scores (kill switch: absent means scores are off and readers must show none)",
                    "properties": {"enabled": {"type": "boolean"}, "rule": {"type": "string", "description": "How readers pair and show scores"}}}
       }
@@ -36,7 +40,7 @@
     "generated_at": {"type": "string"},
     "publisher": {"type": "object", "required": ["app", "version"]},
     "timezone_reference": {"const": "Europe/London"},
-    "window": {"type": "object", "required": ["from", "to"]},
+    "window": {"type": "object", "required": ["from", "to"], "properties": {"from": {"type": "string"}, "to": {"type": "string"}, "history_from": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "Contract 4.5, optional: the Europe/London day before window.from; the optional asset events:<history_from> carries that day. Absent: no history"}}},
     "refresh": {
       "type": "object",
       "required": ["reader_poll_minutes", "stale_after_hours", "expires_at", "expected_interval_minutes"],
@@ -67,7 +71,7 @@
         "type": "object",
         "required": ["kind", "path", "sha256", "bytes", "schema", "content_type", "required"],
         "properties": {
-          "kind": {"type": "string", "description": "taxonomy | channels | identity | dictionary | guide_map | events:YYYY-MM-DD | events_extra:YYYY-MM-DD (1.6, optional, tier extra) | today | live (1.6, optional, sli.live/1) | health | (future kinds: ignore)"},
+          "kind": {"type": "string", "description": "taxonomy | channels | identity | dictionary | guide_map | events:YYYY-MM-DD | events:<history_from> (optional, required false, previous London day, contract 4.5) | events_extra:YYYY-MM-DD (1.6, optional, tier extra) | today | live (1.6, optional, sli.live/1) | health | (future kinds: ignore)"},
           "path": {"type": "string", "pattern": "^v1/assets/[a-z_]+/[0-9a-f]{24}\\.json$"},
           "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "bytes": {"type": "integer", "minimum": 1},
@@ -75,7 +79,8 @@
           "content_type": {"const": "application/json"},
           "required": {"type": "boolean"},
           "date": {"type": "string"},
-          "records": {"type": "integer"}
+          "records": {"type": "integer"},
+          "history": {"type": "boolean", "description": "Contract 4.5, optional: true on the events:<history_from> asset"}
         }
       }
     },

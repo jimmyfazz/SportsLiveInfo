@@ -32,6 +32,7 @@ v1/assets/<kind>/<sha256[:24]>.json   immutable, content-addressed assets
 | `taxonomy` | `sli.taxonomy/1` | yes | Sports (label, order, typical minutes, B1G priority group), 127+ competitions, national rows (England, England Women, home nations, U21), tags, live states, precisions, live-state rule |
 | `channels` | `sli.channels/1` | yes | Canonical services per market with names, exact source tvg-id crosswalk (farleyflex), normalisation spec, 41+ lineup families, matching precedence and gates, guide catalogue (URLs, market, upstream family, verified flag) |
 | `events:YYYY-MM-DD` ×8 | `sli.events-day/1` | today yes, others no | De-duplicated, classified events for each Europe/London day (today + 7), field whitelist. Since 1.6 only tier `core` |
+| `events:<window.history_from>` (optional, since SportsLiveInfo 0.3.25, capability `event_history`) | `sli.events-day/1` | no | Yesterday (the London day before `window.from`): that day's core events with their last known status (finished, final score when approved and known) and channel links, for replay detection. Never part of `today`. Manifest entry carries `history: true` (§4.5) |
 | `events_extra:YYYY-MM-DD` (since 1.6, capability `event_tiers`) | `sli.events-day/1` | no | The long tail (tier `extra`, mostly low-tier football abroad) for days that have any. Readers that ignore unknown kinds simply do not show it |
 | `live` (since 1.6, capability `live_status`) | `sli.live/1` | no | Status observations from the live-status lane since the last full feed: `{id, status_normalized, status_observed_at}` per event. Present only when there are such observations |
 | `today` | `sli.today/1` | yes | Default grouping (sport → competition → event ids) and featured ids for today (since 1.6: core events only) |
@@ -50,6 +51,7 @@ JSON is UTF-8, compact, keys sorted. The SHA-256 in the manifest covers the exac
 - Since 1.6, `compatibility` also carries `live_state_rule`, `live_overlay_rule` and `tier_rule` (§4.2).
 - Since 1.7 (only while a source is approved for scores) the manifest also carries `capabilities: scores`, `compatibility.scores` and `rights.scores.approved_sources` (§4.4).
 - `rights`: approved and omitted sources, `epg_programmes: not_published`, `broadcast_candidates: not_published`, and the attribution lines the TV must display (ODbL, CC BY-NC-SA…).
+- Since 0.3.25 `window.history_from`, `compatibility.display_state_rule`, `history_rule`, `time_precision_rule`, `starting_soon_minutes`, and capabilities `event_history` and `display_state` (§4.5). All optional; `min_reader_minor` is unchanged.
 - `display_policy`: default 10 body cards plus a pinned PPV card, featured tags. User settings on the TV always override.
 
 ## 4. Compatibility rules (binding on both sides)
@@ -206,6 +208,41 @@ Until a source is approved for scores, the feed is byte-for-byte what it was bef
 - **Sports in v1:** football, rugby (union and league), basketball, ice hockey, American football, baseball, handball and AFL; volleyball as sets won. **Excluded:** tennis, cricket, golf, motorsport (F1), boxing, MMA and everything else.
 - **Sources:** only API-Sports (live and final) and football-data.org (final scores of regular-time results only; wired but never approved by default). TheSportsDB, Jolpica, OpenF1 and all other sources are never eligible; the API-Sports MMA product carries no scores.
 - **Cost and commits:** no extra provider calls (the live boards and the settle pass already return scores). With scores approved the live lane also republishes when a score changes, not only a status, subject to the same quiet-slot guard and the same regression gate. During play that is at most one commit per 15 minute pass (higher scoring sports can change every pass, roughly doubling live commits compared with the 30 minute status confirmation); each commit uploads only the small `live` asset and the manifests. When no source is approved nothing changes.
+
+### 4.5 History, display state and guarantees (since SportsLiveInfo 0.3.25; additive, `min_reader_minor` unchanged)
+
+Readers that ignore these fields keep §4.2 and §4.3. Nothing here removes or renames anything.
+
+**Yesterday (capability `event_history`).** `window.history_from` is the Europe/London day before `window.from`. The optional asset `events:<history_from>` (`required: false`, `history: true` on its manifest entry, schema `sli.events-day/1`, tier `core` only) carries that day's events as last known: `status_normalized` including `finished`, `finished_at_utc` and the final `score` when known (the score only under §4.4), and the original `broadcast_links` (channel ids and confidence, never guide text), so B1G can recognise a replay. Yesterday is never in `today` or in the required `events:<window.from>` asset, and the optional `events_extra:<date>` assets do not cover it. The day before yesterday is not published. A source that does not cover yesterday leaves the status at what was last read (often `scheduled`: then `display_state` is `finished` without `finished_at_utc`, "probably finished"). If the asset is absent, treat history as unavailable.
+
+**Display state (capability `display_state`).** Events (day assets and history) and `live` rows may carry `display_state`, one of `upcoming`, `starting_soon`, `live`, `should_be_on`, `finished`, `postponed`, `cancelled`, `tbc` (an unknown value: let the clock decide), plus:
+
+- `state_until_utc`: the instant the state expires; absent when it lasts until the status changes.
+- `finished_at_utc`: present only when `finished` is known from a source: the event had finished no later than this (the time the final status was read, which is not the end of play).
+
+The order below is the whole rule; the first line that fits wins. `now` is the build time for `live` rows and the collection time for day assets (so a live republish leaves the day assets byte-identical and uploads only the `live` asset), and a reader whose clock is past `state_until_utc` applies the same lines with its own clock.
+
+| # | Condition | `display_state` | `state_until_utc` |
+|---|---|---|---|
+| 1 | `status_normalized` is `postponed` or `cancelled` | that status | none |
+| 2 | `status_normalized` is `finished` | `finished` (with `finished_at_utc`) | none |
+| 3 | `status_normalized` is `live` and `start_utc <= now < live_until_utc` (§4.3) | `live` | `live_until_utc` |
+| 4 | `start_precision` is `date_only` or `time_tbc` | `tbc` | 00:00 London after that date, if still ahead |
+| 5 | `now < start_utc - 30 min` (`compatibility.starting_soon_minutes`) | `upcoming` | `start_utc - 30 min` |
+| 6 | `now < start_utc` | `starting_soon` | `start_utc` |
+| 7 | `now < expected_end_utc + 30 min` (`live_end_grace_minutes`) | `should_be_on` (a `live` status that is untrusted, expired or unobserved lands here, never `live`) | `expected_end_utc + 30 min` |
+| 8 | otherwise | `finished`, without `finished_at_utc` (probably finished) | none |
+
+A `live` row's `display_state` replaces the event's when the row's `status_observed_at` is newer (the overlay rule of §4.2); B1G may delete its own clock rules for the states above and keep only the row-8-style fallback when it is past `state_until_utc` and no newer feed has arrived.
+
+**Guarantees.** Every event in every day asset has:
+
+- `competition_id`: the taxonomy id, or the catch-all `<sport>.other` (for example `football.other`) when the competition is not in the taxonomy. It does not change `tier`, which is still decided from the taxonomy, and it can differ from `category_id` (national-team categories).
+- `status_normalized`: `scheduled` when the source gave none.
+- `expected_end_utc`: the source's own end or start plus the sport default (§4.2). For `date_only` and `time_tbc` events it is only that default after the placeholder start below; do not show it.
+- `status_observed_at` (as since 1.6).
+
+**Time precision.** An event whose `start_precision` is `date_only` or `time_tbc` never carries a clock-looking `start_utc`: it is 00:00 Europe/London on its date (`T00:00:00+00:00` in winter, `T23:00:00+00:00` of the evening before in summer), it has no `end_utc`, and its day in the day assets is that London date. Show the date or "time TBC", never the clock. Other precisions (`scheduled`, `provisional`, `not_before`, `estimated`) carry real times, unchanged.
 
 ## 5. Rights and privacy (unchanged laws)
 
