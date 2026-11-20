@@ -19,7 +19,7 @@ from functools import partial
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import coverage, dictionary, feed, identity, linking, providers, taxonomy
+from . import coverage, dictionary, feed, health, identity, linking, providers, taxonomy
 from .storage import utcnow
 from .guide import analyze_guide
 
@@ -56,7 +56,9 @@ class _NoGitHubRedirect(urllib.request.HTTPRedirectHandler):
 
 def _github_open(request, timeout=30):
     """Authenticated GitHub API request without following any redirects."""
-    return urllib.request.build_opener(_NoGitHubRedirect()).open(request, timeout=timeout)
+    response = urllib.request.build_opener(_NoGitHubRedirect()).open(request, timeout=timeout)
+    health.note_github_response(response)   # remembers the token expiry header; never raises
+    return response
 
 
 def _github_failure(step, exc):
@@ -1015,6 +1017,7 @@ class Engine:
             try:
                 self._scheduler_tick()
                 failures = 0
+                health.tick(self.store)   # stall alerting; swallows its own errors
             except Exception as exc:  # a locked/full database must not kill scheduling for good
                 failures += 1
                 LOGGER.exception("Scheduler tick failed")
