@@ -8,6 +8,12 @@
 - **Manifest (additive, `sli/1.6`, `min_reader_minor` unchanged at 0):** `refresh.live_stale_after_minutes` (45) and optional `refresh.live_lane` (`enabled`, `interval_minutes` 15, `active_only_while_events_in_play`, `quiet_slots_guard_minutes` 3, `last_run_utc`). Schema and contract §4.2 updated: the 15 minute cadence applies only while events are in play.
 - **Pre-publish regression gate.** Automatic publication (after a collection or a live change) is refused, with the previous feed left live, when events or guide-corroborated bindings fall by more than 20% against the last published feed (`PUBLISH_REGRESSION_THRESHOLD`; baselines under 5 are ignored). The refusal is logged, recorded as a `publisher` job in state `blocked`, stored in `publish_gate`, and shown as the last publication attempt. A manual publish overrides.
 - Golden manifest fixture regenerated. Tests: 335 pass (6 new; baseline 329).
+## Unreleased — Cross-source duplicate fixtures merge across club-name forms
+
+- **Before:** `same_team` only allowed generic words to differ, so real duplicates stayed as two rows: "Arminia Bielefeld"/"DSC Arminia Bielefeld", "Havelse"/"TSV Havelse", "Heidenheim"/"Heidenheim 1846", "Espanyol"/"RCD Espanyol de Barcelona", "Estac Troyes"/"ES Troyes AC", "Union Berlin W"/"Union Berlin Frauen".
+- **Now:** club-form prefixes (dsc, tsv, vfl, vfb, fsv, ssv, spvgg, rcd) are ignored; a four-digit founding year may be dropped (never the only difference between two different years); frauen/damen/feminin* mean women; Koeln/Cologne, Nuernberg/Nuremberg and Gladbach/Moenchengladbach are one team each; Troyes spellings are aliased (team spellings live in `linking`, the dictionary aliases only rewrite channel names).
+- **Anchored rule** in `_same_event`: kick-offs within 15 minutes, same sport, compatible competition, one side equal and the other a strictly contained shorter name. Women, youth, reserve and squad words (U21, II, Castilla, ...) and rugby-only words (RC) still block it.
+- Not changed: contract, versions. Tests: 343 pass (14 new in `tests/test_event_dedupe_names.py`).
 
 ## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
 
