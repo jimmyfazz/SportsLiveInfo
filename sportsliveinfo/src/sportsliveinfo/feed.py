@@ -20,7 +20,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from . import __version__, linking, providers, taxonomy
+from . import __version__, linking, metadata, providers, taxonomy
 from .guide import CHANNEL_FAMILIES, COUNTRY_BY_SOURCE, REGIONAL_PARENTS, REGIONAL_RULES, SERVICES, SOURCE_ID_CROSSWALK
 
 FORMAT_MAJOR, FORMAT_MINOR = 1, 6  # 1.1: optional `identity` asset; 1.2: optional `dictionary` asset;
@@ -43,6 +43,8 @@ EVENT_FIELDS = (
     "country", "tags", "sources", "fixture_confidence", "corroboration", "start_conflict", "broadcast_verified",
     "status_observed_at", "expected_end_utc", "tier", "participant_crests",
 )
+# Optional metadata computed centrally (metadata.py, contract 4.3); never copied from the internal record.
+EVENT_FIELDS = EVENT_FIELDS + metadata.EVENT_FIELDS
 LIVE_STATE_RULE = ("status_normalized == 'live' is trusted only when status_observed_at is at most 45 minutes old AND "
                    "start_utc <= now <= expected_end_utc + 30 minutes. Otherwise treat it as unknown and fall back to the "
                    "clock (start..expected_end) shown as 'should be on now', never 'LIVE'.")
@@ -206,13 +208,16 @@ def _priority_group(sport, competition_id=None):
 
 def taxonomy_document():
     sports = [{"id": sid, "label": label, "order": order, "typical_minutes": minutes,
-               "b1g_priority_group": _priority_group(sid)} for sid, (label, minutes, order) in taxonomy.SPORTS.items()]
+               "b1g_priority_group": _priority_group(sid), "icon_key": metadata.SPORT_ICON_KEYS.get(sid, "other")}
+              for sid, (label, minutes, order) in taxonomy.SPORTS.items()]
     competitions = []
     for sport, table in taxonomy.COMPETITIONS.items():
         for entry in table:
             competitions.append({"id": entry["id"], "sport": sport, "label": entry["label"], "priority": entry["priority"],
                                  "countries": [c for c in (entry["countries"] or ()) if c] or None,
                                  "b1g_priority_group": _priority_group(sport, entry["id"])})
+            if entry["id"] in metadata.COMPETITION_ICON_KEYS:
+                competitions[-1]["icon_key"] = metadata.COMPETITION_ICON_KEYS[entry["id"]]
     national = []
     for sport, table in taxonomy.NATIONAL_CATEGORIES.items():
         seen = set()
@@ -226,6 +231,7 @@ def taxonomy_document():
     return {
         "schema": "sli.taxonomy/1",
         "sports": sorted(sports, key=lambda s: s["order"]),
+        "default_sport_order": metadata.default_sport_order(_priority_group),
         "competitions": competitions,
         "national_categories": national,
         "other_category": {"id_pattern": "<sport>.other", "priority": 90, "label_from": "competition"},
@@ -390,8 +396,8 @@ def _crests_public(event):
 
 
 def _event_public(event, private=False, observed_fallback=None, score_sources=frozenset(), crests=False):
-    row = {k: event[k] for k in EVENT_FIELDS if k != "participant_crests" and k in event
-           and event[k] not in (None, "", [])}
+    row = {k: event[k] for k in EVENT_FIELDS if k != "participant_crests" and k not in metadata.EVENT_FIELDS
+           and k in event and event[k] not in (None, "", [])}
     refs = _crests_public(event) if crests else None
     if refs:
         row["participant_crests"] = refs
@@ -426,6 +432,8 @@ def _event_public(event, private=False, observed_fallback=None, score_sources=fr
     if private and event.get("origin") == "guide_listing":
         row["origin"] = "guide_listing"     # live sport listed in the guides, no event-source fixture
     row["b1g_priority_group"] = _priority_group(event.get("sport"), event.get("competition_id"))
+    row.update(metadata.event_metadata(event, row, crests))
+    row["feature_rank"] = metadata.feature_rank(row)
     if score_sources:
         score = published_score(event, list((event.get("scores") or {}).values()), score_sources,
                                 row["status_normalized"], final_only=True)
@@ -641,9 +649,17 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     for event in todays:
         groups.setdefault(event["sport"], {}).setdefault(event["category_id"], []).append(event)
     featured_tags = FEATURED_TAGS
+    # Contract 4.3 (metadata): SportsLiveInfo ranks, readers follow. Best first by feature_rank; the featured row is
+    # the top metadata.FEATURED_COUNT of today's core events.
+    ordered_today = metadata.rank_order(todays)
+    extra_today = metadata.rank_order(extra_by_day.get(window[0], []))
     today_doc = {
         "schema": "sli.today/1", "date": window[0],
-        "featured_event_ids": [e["id"] for e in sorted(todays, key=lambda e: e["start_utc"]) if set(e.get("tags", [])) & set(featured_tags)],
+        "featured_event_ids": [e["id"] for e in ordered_today[:metadata.FEATURED_COUNT]],
+        "ordered_event_ids": [e["id"] for e in ordered_today],
+        "today_extra_ids": [e["id"] for e in extra_today],
+        "today_extra_summary": {"count": len(extra_today), "by_sport": dict(sorted(
+            {sport: sum(e["sport"] == sport for e in extra_today) for sport in {e["sport"] for e in extra_today}}.items()))},
         "groups": [{"sport": sport, "categories": [
             {"id": cid, "event_ids": [e["id"] for e in sorted(rows, key=lambda e: e["start_utc"])]}
             for cid, rows in sorted(cats.items(), key=lambda kv: (kv[1][0].get("category_priority", 90), kv[0]))]}
@@ -715,7 +731,11 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                         + (["broadcast_links"] if any(e.get("broadcast_links") for e in events) else [])
                         + (["guide_corroborated_broadcasts"] if corroborated_links else [])
                         + (["scores"] if score_sources else [])
-                        + (["team_crests"] if crests_apisports else []),
+                        + (["team_crests"] if crests_apisports else [])
+                        + ["taxonomy_icons", "participant_metadata", "feature_rank"]
+                        + (["competition_logos"] if any(e.get("competition_logo") for e in events) else [])
+                        + (["ppv_flag"] if any(e.get("ppv") for e in events) else [])
+                        + (["f1_weekends"] if any(e.get("weekend_id") for e in events) else []),
         "assets": assets,
         "coverage": {"events": len(events), "today": len(todays), "by_sport": dict(sorted(by_sport.items())),
                      "tiers": {"core": core, "extra": len(events) - core},
@@ -744,7 +764,12 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                                   + ([{"source": "iptv_org_database", "text": "Channel dictionary from the iptv-org database",
                                        "licence": "Unlicense (public domain)"}] if dictionary_doc else [])},
         "display_policy": {"sports_today_body_cards": 10, "ppv_pinned_extra_card": True, "featured_tags": featured_tags,
-                           "user_settings_override": True},
+                           "user_settings_override": True,
+                           # Contract 4.3 (metadata), additive: what to feature and the default sport order.
+                           "featured_competition_ids": list(metadata.FEATURED_COMPETITION_IDS),
+                           "featured_event_count": metadata.FEATURED_COUNT,
+                           "sport_order": metadata.default_sport_order(_priority_group),
+                           "ranking": {"field": "feature_rank", "rule": metadata.RANK_RULE}},
         "notices": notices,
     }
     if score_sources:

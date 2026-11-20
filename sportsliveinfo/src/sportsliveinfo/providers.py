@@ -694,6 +694,8 @@ def openf1_events(data, now=None):
                      "start_utc": _utc(row["date_start"]), "start_precision": "scheduled", "status_normalized": "scheduled",
                      "venue": row.get("circuit_short_name") or row.get("location") or "", "country": row.get("country_name") or "",
                      "source_id": "openf1", "broadcasts": [], "broadcast_verified": False}
+            if row.get("meeting_key") not in (None, ""):
+                event["weekend_key"] = str(row["meeting_key"])    # internal: the feed's F1 weekend_id (metadata.f1_fields)
             if row.get("date_end"):
                 event["end_utc"] = _utc(row["date_end"])
                 # "finished" only when the provider itself gives an end time that has already passed.
@@ -772,6 +774,16 @@ def _api_sports_crests(source_id, teams):
     return refs if any(refs) else None
 
 
+def _api_sports_competition_logo(source_id, league):
+    """Competition logo REFERENCE ``{"src": "apisports", "ref": "<product>/leagues/<id>"}`` from the league id the payload
+    already carries (the logo URL is ignored, as for crests). None without a valid id."""
+    product = API_SPORTS_CREST_PRODUCT.get(source_id)
+    league_id = league.get("id") if isinstance(league, dict) else None
+    if product and isinstance(league_id, int) and not isinstance(league_id, bool) and league_id > 0:
+        return {"src": "apisports", "ref": "%s/leagues/%d" % (product, league_id)}
+    return None
+
+
 def api_sports_events(data):
     payload = json.loads(data)
     if payload.get("errors"):
@@ -808,6 +820,9 @@ def api_sports_events(data):
             crests = _api_sports_crests("api_sports", teams)
             if crests:
                 event["participant_crests"] = crests
+            logo = _api_sports_competition_logo("api_sports", league)
+            if logo:
+                event["competition_logo"] = logo
             events.append(event)
         except (ValueError, KeyError, TypeError, AttributeError):
             continue
@@ -861,6 +876,9 @@ def api_sports_games_events(data, source_id, sport):
             crests = _api_sports_crests(source_id, teams)
             if crests:
                 event["participant_crests"] = crests
+            logo = _api_sports_competition_logo(source_id, league)
+            if logo:
+                event["competition_logo"] = logo
             events.append(event)
         except (ValueError, KeyError, TypeError, OverflowError):
             continue

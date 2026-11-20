@@ -7,6 +7,12 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (public; it was private when this section was written on 12 November 2026).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 20 November 2026 — event metadata, feature ranking and F1 weekends (branch `s2-metadata` for `feat/event-metadata-ranking`)
+
+- **Decision (owner):** rights permitted; everything additive and tolerant so B1G never breaks. SLI decides, B1G follows the feed.
+- **Change:** new `metadata.py` (icons and sport order, short names, participant ids, competition logo gating, `feature_rank`, PPV, F1 `session_label` and `weekend_id`); taxonomy, event, today and manifest additions in `feed.py`; API-Sports league ids and OpenF1 meeting keys carried by the decoders; competition logo merge in `linking.merge_events`; nation-name tolerance in `taxonomy.py`. Schemas, golden fixtures, contract section 4.3 and CHANGELOG updated.
+- **Results:** compileall and `unittest discover` pass, 469 tests (442 baseline plus 27 new). One old assertion changed deliberately: `today.featured_event_ids` is now the top 10 by rank.
+- **NOT RUN:** a rerun against the live feed or Home Assistant (so the "0 of 121 events carry tags" cause is not proven; the pipeline tags fixtures correctly and only exact nation names matched), B1G reading the new fields, the B1 fixture copy, a deploy. No version bump.
 ## 20 November 2026 — scores per source behind a rights flag (branch `feat/scores-sli-1-7`)
 
 - **Decision (advisor):** ship scores per source behind `score_approvals`, default off; the owner must read the API-Sports and football-data.org terms and approve before anything is published. Design is additive (`sli/1.7`, capability `scores`, `min_reader_minor` unchanged).

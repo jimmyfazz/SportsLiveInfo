@@ -374,12 +374,35 @@ def _match(table, name, country, codes):
     return None
 
 
+# Words sources add around a national side's name ("England Rugby", "England XV", "England Men", "England Under 21",
+# "Scotland (W)"). They are removed only to look the side up in NATIONS; a club called "Wales Bonner FC" still never
+# matches because anything else left over keeps the lookup from finding a nation.
+_NATION_NOISE = {"rugby", "xv", "football", "cricket", "men", "mens", "national", "team", "senior", "seniors", "union"}
+_NATION_WOMEN = {"w", "women", "womens", "ladies", "feminine"}
+_NATION_YOUTH = re.compile(r"\bunder (\d{2})\b|\bu (\d{2})\b")
+
+
+def nation_key(participant):
+    """The NATIONS key for a participant name, or None. Exact name first, then the name with noise words removed and
+    women's and under-N spellings normalised (so a nation published as 'England Rugby' still gets its team tag)."""
+    value = norm(participant)
+    if value in NATIONS:
+        return value
+    value = _NATION_YOUTH.sub(lambda m: "u" + (m.group(1) or m.group(2)), value)
+    words = [w for w in value.split() if w not in _NATION_NOISE]
+    womens = bool(words) and words[-1] in _NATION_WOMEN
+    if womens:
+        words = words[:-1] + ["women"]
+    candidate = " ".join(words)
+    return candidate if candidate in NATIONS else None
+
+
 def nation_tags(participants):
     tags = []
     for participant in participants or []:
-        found = NATIONS.get(norm(participant))
-        if found:
-            tags.append(found[0])
+        key = nation_key(participant)
+        if key:
+            tags.append(NATIONS[key][0])
     return tags
 
 

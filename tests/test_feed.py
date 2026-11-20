@@ -228,7 +228,10 @@ class GoldenFixtureContractTests(unittest.TestCase):
         ids = {e["id"] for e in day_events}
         referenced = {i for g in today["groups"] for c in g["categories"] for i in c["event_ids"]}
         self.assertEqual(referenced, ids)
-        self.assertEqual(today["featured_event_ids"], ["api-sports-rugby:301", "api-sports:9002"])
+        # Contract 4.3 (metadata): the featured row is the best events by feature_rank, not "every featured tag".
+        self.assertEqual(today["featured_event_ids"], today["ordered_event_ids"][:10])
+        self.assertEqual(set(today["ordered_event_ids"]), ids)
+        self.assertEqual(today["featured_event_ids"][:2], ["api-sports:9002", "api-sports-rugby:301"])
         self.assertEqual(today["groups"][0]["categories"][0]["id"], "football.intl.england")
 
     def test_manifest_compatibility_and_rights_blocks(self):

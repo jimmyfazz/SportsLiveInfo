@@ -106,7 +106,7 @@
         "attribution": {"type": "array", "items": {"type": "object", "required": ["source", "text", "licence"]}}
       }
     },
-    "display_policy": {"type": "object", "required": ["sports_today_body_cards", "ppv_pinned_extra_card", "featured_tags", "user_settings_override"]},
+    "display_policy": {"type": "object", "required": ["sports_today_body_cards", "ppv_pinned_extra_card", "featured_tags", "user_settings_override"], "properties": {"featured_competition_ids": {"type": "array", "items": {"type": "string"}, "description": "Optional (metadata release): taxonomy competition ids SportsLiveInfo asks readers to feature."}, "featured_event_count": {"type": "integer", "minimum": 1, "description": "Optional: how many ids today.featured_event_ids holds at most."}, "sport_order": {"type": "array", "items": {"type": "string"}, "description": "Optional: default order of b1g_priority_group values; the same list as taxonomy default_sport_order. The user's own order overrides it."}, "ranking": {"type": "object", "description": "Optional: {field: 'feature_rank', rule: the exact scoring rule}."}}},
     "notices": {"type": "array", "items": {"type": "string"}}
   }
 }
