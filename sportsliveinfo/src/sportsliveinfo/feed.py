@@ -506,6 +506,12 @@ def _crests_public(event):
     return out if any(out) else None
 
 
+def crest_preview(events):
+    """How many collected events carry valid API-Sports crest references: the number a feed would publish once
+    ``publish_crest_refs`` and an API-Sports publication approval are both on (Publishing page preview)."""
+    return sum(1 for event in events or [] if isinstance(event, dict) and _crests_public(event))
+
+
 # Link policy (S2). `binds_rule`: "narrow" (default) or "legacy" (kill switch); `own_epg`: a broadcaster's own EPG family
 # corroborates its own channels; `rights_prior`: publish rights-holder prior links (off until the owner enables it).
 LinkPolicy = namedtuple("LinkPolicy", "binds_rule own_epg rights_prior hint_tables", defaults=("narrow", True, False, None))
@@ -1089,6 +1095,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                     "reader_poll_minutes": 30, "stale_after_hours": 30,
                     "live_stale_after_minutes": int(LIVE_MAX_AGE.total_seconds() // 60),
                     "live_lane": live_lane_refresh(store, conf),
+                    **collected_at_refresh(snap),
                     "expires_at": (now + timedelta(hours=48)).isoformat(timespec="seconds")},
         "capabilities": ["taxonomy", "channel_registry", "channel_families", "guide_catalogue", "events_by_day",
                          "today", "source_health", "fixture_corroboration", "status_observed_at", "event_tiers",
@@ -1169,6 +1176,21 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     return manifest, files
 
 
+COLLECTED_AT_EXPECTED = ("collected_at is when the sports collection behind the day assets last completed; generated_at "
+                         "is only when this manifest was built (a live-lane publish renews it). A collected_at older "
+                         "than the expected_interval_minutes plus a grace means the collection has stalled even though "
+                         "the feed looks fresh: show 'collection stale'. Absent: unknown, fall back to generated_at.")
+
+
+def collected_at_refresh(snap):
+    """Optional ``refresh.collected_at`` / ``collected_at_expected``: the last full collection, which only
+    ``Engine._materialize`` sets (``sports`` snapshot ``generated_at``); the live lane never touches it."""
+    stamp = _z(((snap or {}).get("data") or {}).get("generated_at"))
+    if not stamp:
+        return {}
+    return {"collected_at": stamp, "collected_at_expected": COLLECTED_AT_EXPECTED}
+
+
 def live_lane_refresh(store, conf):
     """``refresh.live_lane`` (contract §4.2): the 15 minute cadence applies only while events are in play."""
     products = [n for n in providers.SPORTS if n.startswith("api_sports") and n != "api_sports_mma"]
@@ -1222,6 +1244,9 @@ def health_document(store, conf, snapshots, events=None, private=False, budget=N
                            "analysed_at": q.get("analysed_at")})
     document = {"schema": "sli.health/1", "sources": rows, "guides": guides,
                 "note": "Measured on the SportsLiveInfo host; no programme text, URLs with credentials or error payloads."}
+    collected = collected_at_refresh(snapshots.get("sports")).get("collected_at")
+    if collected:
+        document["collected_at"] = collected       # same value as the manifest's refresh.collected_at
     if events is not None:
         # S2 (optional): why events have no channel link, and what the narrow binds rule changes. Counts and ids only.
         policy = link_policy(conf)

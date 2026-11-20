@@ -52,6 +52,8 @@
         "stale_after_hours": {"type": "integer", "minimum": 1},
         "expires_at": {"type": "string"},
         "expected_interval_minutes": {"type": "integer"},
+        "collected_at": {"type": "string", "description": "Optional (0.3.26): when the sports collection behind the day assets last completed. Unlike generated_at it is not renewed by a live-lane publish, so a stalled collection looks stale. Absent: unknown"},
+        "collected_at_expected": {"type": "string", "description": "Optional: reader guidance text for collected_at"},
         "live_stale_after_minutes": {"type": "integer", "minimum": 1, "description": "1.6, optional: a 'live' status older than this is never shown as LIVE"},
         "live_lane": {
           "type": "object",
