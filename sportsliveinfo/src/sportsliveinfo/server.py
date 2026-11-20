@@ -1384,7 +1384,10 @@ class UI(BaseHTTPRequestHandler):
                    'source ticked above and they allow publishing scores.</label><button type="submit">Save score approvals</button>')
         body += '<section class="card" style="margin-top:16px"><h2>Score approvals</h2><p class="sub">Approved now: %s.</p>%s</section>' % (
             e(", ".join(score_approved) or "none (no score is published)"), self._form("score_approvals", scores))
-        body += self._crest_card(config, approvals)
+        snapshot = self.store.snapshot("sports")
+        body += self._crest_card(config, approvals,
+                                 feed.crest_preview(((snapshot or {}).get("data") or {}).get("events")),
+                                 len(((snapshot or {}).get("data") or {}).get("events") or []))
         body += self._link_policy_card(config)
         blockers = []
         if not config.get("setup_complete"):
@@ -1418,7 +1421,7 @@ class UI(BaseHTTPRequestHandler):
             " disabled" if blockers or running else "", "Publishing…" if running else "Publish feed now")) + '</section>'
         return body
 
-    def _crest_card(self, config, approvals):
+    def _crest_card(self, config, approvals, would_carry=0, collected=0):
         """Crest toggles: same config-save path and attestation pattern as score approvals."""
         refs = config.get("publish_crest_refs") is True
         device = config.get("crest_device_lookup_thesportsdb") is True
@@ -1426,7 +1429,14 @@ class UI(BaseHTTPRequestHandler):
         effective = ("published for events from an approved API-Sports source" if refs and has_source else
                      "switched on but nothing is published until an API-Sports source is approved in the rights register"
                      if refs else "off: the feed carries no crest references")
-        form = ('<label><input type="checkbox" name="publish_crest_refs" value="on" %s> Publish team crest references '
+        published = refs and has_source
+        preview = ("Crest references: %s \u2014 %d of %d collected events %s crests." % (
+            "ON" if published else "OFF", would_carry, collected,
+            "carry" if published else "would carry")
+                   + ("" if published else " Switch on and approve an API-Sports source to publish them."
+                      if refs else " Tick the box below, attest, and approve an API-Sports source above to publish them."))
+        form = ('<p class="%s help"><strong>%s</strong></p>' % ("" if published else "warn", e(preview))
+                + '<label><input type="checkbox" name="publish_crest_refs" value="on" %s> Publish team crest references '
                 '(API-Sports)</label><p class="help">Effect: events carry the provider\'s media address (media.api-sports.io) '
                 'for each team crest so TVs can fetch and cache it; the image itself is never copied into the feed. '
                 'Needs an API-Sports source in the rights register above. Kill switch: untick and save; the next feed '
