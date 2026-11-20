@@ -41,6 +41,9 @@ DEFAULT = {
     "own_epg_corroboration": True,
     "rights_holder_prior": False,
     "crest_device_lookup_thesportsdb": False,
+    # Optional owner corrections to the seeded hint tables (JSON text, schema in hints.py; "" = built-in tables).
+    "broadcaster_rank_override": "",
+    "rights_holder_prior_override": "",
    # Light live-status lane (API-Sports live boards in match hours, within a daily budget). Runs only when an
     # API-Sports key is saved and an API-Sports product is enabled; switch off here or on the Scheduler page.
     "live_status": True,
@@ -196,6 +199,10 @@ class Store:
                 else:
                     if key == "binds_rule" and value not in ("narrow", "legacy"):
                         raise ValueError("binds_rule must be narrow or legacy")
+                    if key in ("broadcaster_rank_override", "rights_holder_prior_override") and value != "":
+                        from . import hints
+                        (hints.validate_rank_override if key == "broadcaster_rank_override"
+                         else hints.validate_prior_override)(value)
                     config[key] = value
             self._put("config", config)
             return config

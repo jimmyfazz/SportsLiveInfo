@@ -508,7 +508,12 @@ def _crests_public(event):
 
 # Link policy (S2). `binds_rule`: "narrow" (default) or "legacy" (kill switch); `own_epg`: a broadcaster's own EPG family
 # corroborates its own channels; `rights_prior`: publish rights-holder prior links (off until the owner enables it).
-LinkPolicy = namedtuple("LinkPolicy", "binds_rule own_epg rights_prior", defaults=("narrow", True, False))
+LinkPolicy = namedtuple("LinkPolicy", "binds_rule own_epg rights_prior hint_tables", defaults=("narrow", True, False, None))
+
+
+def _override_tables(conf):
+    tables = hints.tables_from_config(conf)
+    return None if tables is hints.BUILTIN_TABLES else tables      # None = built-in (keeps the policy comparable)
 
 
 def link_policy(conf):
@@ -516,7 +521,7 @@ def link_policy(conf):
     conf = conf or {}
     rule = conf.get("binds_rule")
     return LinkPolicy(rule if rule in linking.BINDS_RULES else "narrow", conf.get("own_epg_corroboration") is not False,
-                      conf.get("rights_holder_prior") is True)
+                      conf.get("rights_holder_prior") is True, _override_tables(conf))
 
 
 def _event_public(event, private=False, observed_fallback=None, score_sources=frozenset(), crests=False, at=None,
@@ -630,7 +635,7 @@ def _broadcast_links(event, private=False, policy=None):
     if policy.rights_prior and not any(link["binds"] for link in links):
         # A prior, never evidence: suggested only when nothing binds, never binds, ranked after every real link.
         home = linking.event_home_markets(event)
-        for channel in hints.rights_holder_prior(event):
+        for channel in hints.rights_holder_prior(event, policy.hint_tables):
             if any(link["canonical_channel_id"] == channel for link in links):
                 continue
             links.append({"canonical_channel_id": channel, "status": "rights_holder_prior", "coverage": "network",
@@ -935,7 +940,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
 
     add("taxonomy", taxonomy_document(), "sli.taxonomy/1", True)
     add("channels", channels_document(), "sli.channels/1", True)
-    add("channel_hints", hints.channel_hints_document(), hints.SCHEMA, False)
+    add("channel_hints", hints.channel_hints_document(policy.hint_tables), hints.SCHEMA, False)
     identity_doc = identity_document(store)
     if identity_doc:
         add("identity", identity_doc, "sli.identity/1", False)

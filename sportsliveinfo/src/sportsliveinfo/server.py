@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import __version__, coverage, dictionary, health, linking, providers, taxonomy
+from . import __version__, coverage, dictionary, feed, health, linking, providers, taxonomy
 from .storage import utcnow
 
 LOGGER = logging.getLogger(__name__)
@@ -305,7 +305,7 @@ class UI(BaseHTTPRequestHandler):
         message = "Settings saved"
         page = {"sports": "sources", "bulk_sources": "sources", "options": "sources",
                 "epg": "sources", "test_source": "sources", "dictionary": "sources", "github": "publishing",
-                "test_github": "publishing", "approvals": "publishing", "score_approvals": "publishing", "publish": "publishing",
+                "test_github": "publishing", "approvals": "publishing", "score_approvals": "publishing", "crest_settings": "publishing", "hint_overrides": "publishing", "publish": "publishing",
                 "private_feed": "publishing", "test_private_github": "publishing",
                 "preview_feed": "publishing", "schedule": "scheduler", "live_status": "scheduler", "standings": "scheduler", "lineup_upload": "coverage",
                 "lineup_delete": "coverage", "coverage_survey": "coverage", "coverage_rebuild": "coverage",
@@ -431,6 +431,30 @@ class UI(BaseHTTPRequestHandler):
             log.append({"at": utcnow(), "scores_approved": chosen})
             self.store._put("approval_log", log)
             return "publishing", ("Score approvals saved: %s" % ", ".join(chosen)) if chosen else "All score approvals withdrawn"
+        if action == "crest_settings":
+            # Crest references publish provider media URLs (API-Sports); the device lookup only tells TVs they may fetch
+            # TheSportsDB badges. Both are rights decisions, so turning either on needs the same attestation as scores.
+            crest_refs, device = value("publish_crest_refs") == "on", value("crest_device_lookup_thesportsdb") == "on"
+            if (crest_refs or device) and value("attest_crests") != "on":
+                raise ValueError("Confirm you have read the crest and badge terms of each source you are switching on")
+            self.store.configure({"publish_crest_refs": crest_refs, "crest_device_lookup_thesportsdb": device})
+            log = (self.store._get("approval_log") or [])[-49:]
+            log.append({"at": utcnow(), "crest_refs": crest_refs, "crest_device_lookup": device})
+            self.store._put("approval_log", log)
+            return "publishing", "Crest settings saved: references %s, device lookup %s" % (
+                "on" if crest_refs else "off", "on" if device else "off")
+        if action == "hint_overrides":
+            # Owner corrections to the seeded tables (hints.py). Empty = built-in; invalid JSON or ids are refused whole.
+            from . import hints
+            updates = {}
+            for field, key in (("rank_override", hints.RANK_KEY), ("prior_override", hints.PRIOR_KEY)):
+                text = value(field)
+                updates[key] = text
+            self.store.configure(updates)
+            log = (self.store._get("approval_log") or [])[-49:]
+            log.append({"at": utcnow(), "hint_overrides": sorted(k for k, v in updates.items() if v)})
+            self.store._put("approval_log", log)
+            return "publishing", "Table overrides saved (the next feed uses them; empty fields use the built-in tables)"
         if action == "test_github":
             # Authenticate and inspect the SAVED destination; never commit. Runs in the background.
             started = self.engine.start_connection_test(private=False)
@@ -1360,6 +1384,8 @@ class UI(BaseHTTPRequestHandler):
                    'source ticked above and they allow publishing scores.</label><button type="submit">Save score approvals</button>')
         body += '<section class="card" style="margin-top:16px"><h2>Score approvals</h2><p class="sub">Approved now: %s.</p>%s</section>' % (
             e(", ".join(score_approved) or "none (no score is published)"), self._form("score_approvals", scores))
+        body += self._crest_card(config, approvals)
+        body += self._link_policy_card(config)
         blockers = []
         if not config.get("setup_complete"):
             blockers.append("first-run setup is not finished (Sources page)")
@@ -1391,6 +1417,54 @@ class UI(BaseHTTPRequestHandler):
         body += self._form("publish", '<button type="submit"%s>%s</button>' % (
             " disabled" if blockers or running else "", "Publishing…" if running else "Publish feed now")) + '</section>'
         return body
+
+    def _crest_card(self, config, approvals):
+        """Crest toggles: same config-save path and attestation pattern as score approvals."""
+        refs = config.get("publish_crest_refs") is True
+        device = config.get("crest_device_lookup_thesportsdb") is True
+        has_source = any(src in approvals for src in providers.API_SPORTS_CREST_PRODUCT)
+        effective = ("published for events from an approved API-Sports source" if refs and has_source else
+                     "switched on but nothing is published until an API-Sports source is approved in the rights register"
+                     if refs else "off: the feed carries no crest references")
+        form = ('<label><input type="checkbox" name="publish_crest_refs" value="on" %s> Publish team crest references '
+                '(API-Sports)</label><p class="help">Effect: events carry the provider\'s media address (media.api-sports.io) '
+                'for each team crest so TVs can fetch and cache it; the image itself is never copied into the feed. '
+                'Needs an API-Sports source in the rights register above. Kill switch: untick and save; the next feed '
+                'drops every crest reference and says <code>monogram_only</code>.</p>'
+                '<label><input type="checkbox" name="crest_device_lookup_thesportsdb" value="on" %s> Allow TVs to look up '
+                'badges on TheSportsDB</label><p class="help">Effect: only sets the manifest flag '
+                '<code>rights.crests.device_lookup.thesportsdb.enabled</code>; the App itself fetches nothing and TheSportsDB '
+                'artwork is not redistributed. Kill switch: untick and save.</p>'
+                '<label><input type="checkbox" name="attest_crests" value="on"> I have read the crest and badge terms of '
+                'every source ticked above and they allow this use. (Required to switch anything on; untick both and save to '
+                'switch both off.)</label><button type="submit">Save crest settings</button>') % (
+            "checked" if refs else "", "checked" if device else "")
+        return ('<section class="card" style="margin-top:16px"><h2>Team crests</h2><p class="sub">Crest references: %s. '
+                'TheSportsDB device lookup: %s.</p>%s</section>' % (e(effective), "on" if device else "off",
+                                                                     self._form("crest_settings", form)))
+
+    def _link_policy_card(self, config):
+        """Read-only state of the link policy and rights-holder prior (changed in the stored config, not here)."""
+        from . import hints
+        policy = feed.link_policy(config)
+        overrides = hints.override_status(config)
+        return ('<section class="card" style="margin-top:16px"><h2>Channel link policy</h2>'
+                '<p>Binding rule: <strong>%s</strong> (<code>binds_rule</code>; <code>legacy</code> is the kill switch). '
+                'Rights-holder prior links: <strong>%s</strong> (<code>rights_holder_prior</code>; they never bind). '
+                'Broadcaster ranking table: %s. Rights-holder prior table: %s.</p></section>' % (
+                    e(policy.binds_rule), "published" if policy.rights_prior else "off", e(overrides["broadcaster_rank"]),
+                    e(overrides["rights_holder_prior"]))
+                + self._form("hint_overrides",
+                             '<h3>Correct the seeded tables (optional)</h3><p class="help">JSON, validated before saving; empty means the '
+                             'built-in table. Formats and the current tables are in docs/SEEDED_TABLES_REVIEW.md. Rank: '
+                             '<code>{"football": ["sky_sports", "tnt_sports"]}</code> (replaces that sport\'s order). Prior: '
+                             '<code>{"football.premier_league": {"channels": ["gb.sky.sports.premier_league"], "blackout": true}}</code> '
+                             '(an empty channel list removes the prior).</p>'
+                             '<label for="ho-rank">broadcaster_rank_override</label><textarea id="ho-rank" name="rank_override" rows="4" '
+                             'style="width:100%%">%s</textarea>'
+                             '<label for="ho-prior">rights_holder_prior_override</label><textarea id="ho-prior" name="prior_override" rows="4" '
+                             'style="width:100%%">%s</textarea><button type="submit">Save table overrides</button>' % (
+                                 e(config.get(hints.RANK_KEY) or ""), e(config.get(hints.PRIOR_KEY) or ""))))
 
     def _health_card(self):
         """Service health: the same data /healthz and the Home Assistant notifications use."""

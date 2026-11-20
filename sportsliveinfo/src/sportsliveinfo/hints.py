@@ -9,6 +9,9 @@ readers that do not know the asset keep their own tiers.
 Nothing here is programme data or evidence that an event is on a channel. ``competition_rights`` is a *prior*: who
 usually holds the rights, used only to suggest ``rights_holder_prior`` links that never bind.
 """
+import json
+import re
+from collections import namedtuple
 from zoneinfo import ZoneInfo
 
 from . import linking
@@ -167,8 +170,11 @@ def channel_entries():
     return entries
 
 
-def channel_hints_document():
-    """The optional ``channel_hints`` asset: compact, deterministic, registry-derived."""
+def channel_hints_document(tables=None):
+    """The optional ``channel_hints`` asset: compact, deterministic, registry-derived.
+
+    ``tables`` (from ``tables_from_config``) carries the owner's validated overrides; ``None`` is the built-in tables."""
+    tables = tables or BUILTIN_TABLES
     used = {row["broadcaster"] for row in channel_entries().values() if row.get("broadcaster")}
     return {
         "schema": SCHEMA, "as_of": AS_OF,
@@ -177,8 +183,8 @@ def channel_hints_document():
         "broadcasters": [{"id": bid, "label": label, "market": market}
                          for bid, label, market, _ in BROADCASTERS if bid in used],
         "channels": channel_entries(),
-        "broadcaster_rank": dict(BROADCASTER_RANK, default=_DEFAULT_RANK),
-        "competition_rights": COMPETITION_RIGHTS,
+        "broadcaster_rank": dict(tables.rank, default=tables.default_rank),
+        "competition_rights": tables.rights,
         "rules": {
             "scope": "curated registry channel ids only (gb.sky.sports.f1); a dictionary-only id has no entry: fall back "
                      "to your own keyword tiers or treat it as sports_class 'other'",
@@ -227,7 +233,7 @@ def slot_hint(event):
 
 
 # ---- rights-holder prior ----------------------------------------------------------------------------------------
-def _blackout(event):
+def _blackout(event):   # Saturday BLACKOUT_FROM..BLACKOUT_TO, London time
     try:
         local = linking._dt(event["start_utc"]).astimezone(LONDON)
     except (KeyError, TypeError, ValueError):
@@ -235,17 +241,140 @@ def _blackout(event):
     return local.weekday() == 5 and BLACKOUT_FROM <= (local.hour, local.minute) <= BLACKOUT_TO
 
 
-def rights_holder_prior(event):
+def rights_holder_prior(event, tables=None):
     """Candidate channel ids that usually hold the rights for ``event``'s competition in the owner's market.
 
     Empty unless the competition is in ``COMPETITION_RIGHTS``, the start is confirmed and the event is not a
     blackout slot. The caller publishes them as ``rights_holder_prior`` links that never bind."""
     competition = event.get("competition_id") or event.get("category_id") or ""
-    channels = COMPETITION_RIGHTS.get(competition)
+    tables = tables or BUILTIN_TABLES
+    channels = tables.rights.get(competition)
     if not channels or event.get("start_precision") in linking.UNCONFIRMED_START_PRECISIONS:
         return []
     if event.get("status_normalized") in ("postponed", "cancelled", "finished"):
         return []
-    if competition in BLACKOUT_COMPETITIONS and _blackout(event):
+    if competition in tables.blackout and _blackout(event):
         return []
     return list(channels)
+
+
+# ---- owner override (config keys ``broadcaster_rank_override`` / ``rights_holder_prior_override``) ------------------
+# The seeded tables above need owner review (docs/SEEDED_TABLES_REVIEW.md). The owner can correct them without a code
+# release: each config key holds a JSON text. Absent or empty = the built-in tables, byte-identical output.
+#   broadcaster_rank_override   {"<sport or 'default'>": ["<broadcaster id>", ...], ...}   replaces that sport's order
+#   rights_holder_prior_override {"<competition id>": {"channels": ["<channel id>", ...], "blackout": true|false}, ...}
+#                                replaces that competition's prior; an empty channel list removes it. ``blackout`` true
+#                                = no prior in the Saturday 14:30-15:30 London window (the UK 3 pm blackout).
+Tables = namedtuple("Tables", "rank default_rank rights blackout")
+BUILTIN_TABLES = Tables(BROADCASTER_RANK, _DEFAULT_RANK, COMPETITION_RIGHTS, BLACKOUT_COMPETITIONS)
+RANK_KEY, PRIOR_KEY = "broadcaster_rank_override", "rights_holder_prior_override"
+_ID = re.compile(r"^[a-z0-9_]{1,40}$")
+_COMPETITION = re.compile(r"^[a-z0-9_]{1,40}(\.[a-z0-9_]{1,60}){1,2}$")
+_CHANNEL = re.compile(r"^[a-z0-9_.]{2,80}$")
+MAX_OVERRIDE_BYTES = 20000
+
+
+def _load(text, label):
+    if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_OVERRIDE_BYTES:
+        raise ValueError("%s must be JSON text of at most %d bytes" % (label, MAX_OVERRIDE_BYTES))
+    try:
+        data = json.loads(text)
+    except ValueError:
+        raise ValueError("%s is not valid JSON" % label) from None
+    if not isinstance(data, dict) or not data:
+        raise ValueError("%s must be a non-empty JSON object (clear the field to use the built-in table)" % label)
+    return data
+
+
+def validate_rank_override(text):
+    """The parsed per-sport override, or ``ValueError`` naming the first problem."""
+    data = _load(text, RANK_KEY)
+    known = {row[0] for row in BROADCASTERS}
+    for sport, order in data.items():
+        if not isinstance(sport, str) or not _ID.match(sport):
+            raise ValueError("%s: bad sport key %r" % (RANK_KEY, str(sport)[:40]))
+        if not isinstance(order, list) or not 1 <= len(order) <= 40 or any(not isinstance(x, str) for x in order):
+            raise ValueError("%s: %s must be a list of 1-40 broadcaster ids" % (RANK_KEY, sport))
+        if len(set(order)) != len(order):
+            raise ValueError("%s: %s lists a broadcaster twice" % (RANK_KEY, sport))
+        unknown = [x for x in order if x not in known]
+        if unknown:
+            raise ValueError("%s: %s has unknown broadcaster id %s" % (RANK_KEY, sport, unknown[0][:40]))
+    return data
+
+
+def _known_channels():
+    ids = {cid for table in SERVICES.values() for cid in table.values()} | set(REGIONAL_PARENTS)
+    ids |= {c for chans in COMPETITION_RIGHTS.values() for c in chans}
+    return ids
+
+
+def validate_prior_override(text):
+    """The parsed per-competition override, or ``ValueError`` naming the first problem."""
+    data = _load(text, PRIOR_KEY)
+    known = _known_channels()
+    for competition, entry in data.items():
+        if not isinstance(competition, str) or not _COMPETITION.match(competition):
+            raise ValueError("%s: bad competition id %r" % (PRIOR_KEY, str(competition)[:60]))
+        if not isinstance(entry, dict) or set(entry) - {"channels", "blackout"} or "channels" not in entry:
+            raise ValueError("%s: %s must be an object with channels (and optional blackout)" % (PRIOR_KEY, competition))
+        channels = entry["channels"]
+        if not isinstance(channels, list) or len(channels) > 10 or any(not isinstance(c, str) for c in channels):
+            raise ValueError("%s: %s channels must be a list of at most 10 channel ids" % (PRIOR_KEY, competition))
+        if len(set(channels)) != len(channels):
+            raise ValueError("%s: %s lists a channel twice" % (PRIOR_KEY, competition))
+        for channel in channels:
+            if not _CHANNEL.match(channel) or channel not in known:
+                raise ValueError("%s: %s has unknown channel id %s" % (PRIOR_KEY, competition, channel[:60]))
+        if "blackout" in entry and type(entry["blackout"]) is not bool:
+            raise ValueError("%s: %s blackout must be true or false" % (PRIOR_KEY, competition))
+    return data
+
+
+def tables_from_config(conf):
+    """The effective tables. An absent, empty or (defensively) invalid override falls back to the built-in tables."""
+    conf = conf or {}
+    rank, rights, blackout = BROADCASTER_RANK, COMPETITION_RIGHTS, BLACKOUT_COMPETITIONS
+    default_rank = _DEFAULT_RANK
+    try:
+        if conf.get(RANK_KEY):
+            over = validate_rank_override(conf[RANK_KEY])
+            rank = dict(BROADCASTER_RANK, **{k: v for k, v in over.items() if k != "default"})
+            default_rank = over.get("default", _DEFAULT_RANK)
+    except ValueError:
+        rank, default_rank = BROADCASTER_RANK, _DEFAULT_RANK
+    try:
+        if conf.get(PRIOR_KEY):
+            over = validate_prior_override(conf[PRIOR_KEY])
+            rights, black = dict(COMPETITION_RIGHTS), set(BLACKOUT_COMPETITIONS)
+            for competition, entry in over.items():
+                if entry["channels"]:
+                    rights[competition] = list(entry["channels"])
+                else:
+                    rights.pop(competition, None)
+                if entry.get("blackout") is True:
+                    black.add(competition)
+                elif entry.get("blackout") is False:
+                    black.discard(competition)
+            blackout = frozenset(black)
+    except ValueError:
+        rights, blackout = COMPETITION_RIGHTS, BLACKOUT_COMPETITIONS
+    if (rank, default_rank, rights, blackout) == (BROADCASTER_RANK, _DEFAULT_RANK, COMPETITION_RIGHTS, BLACKOUT_COMPETITIONS):
+        return BUILTIN_TABLES
+    return Tables(rank, default_rank, rights, blackout)
+
+
+def override_status(conf):
+    """Short text per table for the Publishing page: built-in, or the overridden keys."""
+    conf = conf or {}
+    out = {}
+    for name, key, validator in (("broadcaster_rank", RANK_KEY, validate_rank_override),
+                                 ("rights_holder_prior", PRIOR_KEY, validate_prior_override)):
+        if not conf.get(key):
+            out[name] = "built-in seed (not yet owner-reviewed)"
+            continue
+        try:
+            out[name] = "owner override for " + ", ".join(sorted(validator(conf[key])))
+        except ValueError:
+            out[name] = "override is invalid and ignored: built-in seed in use"
+    return out
