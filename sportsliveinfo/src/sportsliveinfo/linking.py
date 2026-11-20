@@ -28,9 +28,16 @@ FEATURED_TAGS = {"team:england", "team:england_women", "team:scotland", "team:wa
                  "team:ireland", "team:lions", "team:great_britain", "ppv"}
 
 _STOP = {"fc", "afc", "cf", "sc", "ac", "club", "the", "de", "cd", "ud", "sv", "fk", "sk", "bk", "if", "and",
-         "v", "vs", "calcio", "1", "football", "rfc", "rlfc", "cc", "ccc"}
+         "v", "vs", "calcio", "1", "football", "rfc", "rlfc", "cc", "ccc",
+         # Club-form prefixes that sources add or drop ("DSC Arminia Bielefeld", "TSV Havelse", "RCD Espanyol").
+         "dsc", "tsv", "vfl", "vfb", "fsv", "ssv", "spvgg", "rcd"}
 _ABBR = {"man": "manchester", "utd": "united", "spurs": "tottenham", "wolves": "wolverhampton",
          "nottm": "nottingham", "munchen": "munich", "w": "women", "womens": "women", "ladies": "women", "st": "saint",
+         "frauen": "women", "damen": "women", "feminin": "women", "feminine": "women", "feminines": "women",
+         "femenino": "women",
+         # German exonyms ("1. FC Koeln" / "Cologne", "Nuernberg" / "Nuremberg", "Gladbach"). Dictionary aliases are
+         # channel-name rewrites, so team-name spellings belong here.
+         "cologne": "koln", "nuremberg": "nurnberg", "gladbach": "monchengladbach",
          "cymru": "wales", "lloegr": "england", "rep": "republic", "ny": "new york"}
 # Alias expansion is deliberately exact and small. Feed-provided short names are
 # also considered below; arbitrary fuzzy/substring team matching is not safe.
@@ -40,8 +47,14 @@ _TEAM_ALIASES = {
     "west brom": "west bromwich albion", "wba": "west bromwich albion",
     "qpr": "queens park rangers", "nz": "new zealand", "all blacks": "new zealand",
     "springboks": "south africa", "wallabies": "australia",
+    "estac troyes": "troyes", "es troyes ac": "troyes", "es troyes": "troyes", "troyes ac": "troyes",
     "yr alban": "scotland", "gogledd iwerddon": "northern ireland", "iwerddon": "ireland",
 }
+_CLUB_YEAR = re.compile(r"^(?:18|19|20)\d\d$")  # founding-year tokens ("Heidenheim 1846") are droppable, not identifying
+# Squad words that make a side a different team even though _VARIANT does not list them; the anchored event rule
+# below never lets a side's extra tokens contain these ("Real Madrid" != "Real Madrid Castilla").
+_SQUAD = {"castilla", "youth", "academy", "juvenil", "primavera", "amateure", "amateur", "reserve", "junior",
+          "juniors", "2", "3", "iii", "ladies", "feminin"}
 _VARIANT = {"women", "u17", "u18", "u19", "u20", "u21", "u23", "ii", "b", "reserves", "xi", "a", "jong"}
 # Suffix words that may be dropped without changing a club's identity
 # ("Leeds" == "Leeds United"). Anything else that differs (Miami, Northern,
@@ -163,7 +176,20 @@ def same_team(a, b, generic=None):
     if a == b:
         return True
     small, large = (a, b) if len(a) < len(b) else (b, a)
-    return small < large and bool(small - generic) and (large - small) <= generic
+    return (small < large and bool(small - generic)
+            and all(t in generic or _CLUB_YEAR.match(t) for t in large - small))
+
+
+def _anchored_side(small, large, blocked=frozenset()):
+    """`small` is a strictly shorter name wholly contained in `large` ("Espanyol" in "RCD Espanyol de Barcelona").
+    Only meaningful once the other side of the fixture is already equal and kick-offs agree."""
+    if not small or not large or not small < large or "tbc" in small or "tbc" in large:
+        return False
+    if (small & _VARIANT) != (large & _VARIANT) or (small & _SQUAD) != (large & _SQUAD):
+        return False
+    if not (small - _LOW_SIGNAL_TEAM_TOKENS - _GENERIC):
+        return False
+    return all((t.isalpha() and t not in blocked) or _CLUB_YEAR.match(t) for t in large - small)
 
 
 def _source_rank(source_id):
@@ -196,8 +222,18 @@ def _same_event(a, b):
     ta, tb = a["_teams"], b["_teams"]
     generic = _GENERIC | _RUGBY_GENERIC if _sport_family(a["sport"]) == "rugby" else _GENERIC
     if len(ta) == 2 and len(tb) == 2:
-        return ((same_team(ta[0], tb[0], generic) and same_team(ta[1], tb[1], generic)) or
-                (same_team(ta[0], tb[1], generic) and same_team(ta[1], tb[0], generic)))
+        if ((same_team(ta[0], tb[0], generic) and same_team(ta[1], tb[1], generic)) or
+                (same_team(ta[0], tb[1], generic) and same_team(ta[1], tb[0], generic))):
+            return True
+        # Anchored rule: one side agrees and the other is a contained short form, within 15 minutes.
+        # Rugby-only suffix words ("RC", "Rugby") never anchor a football side ("RC Lens" != "Lens" there).
+        blocked = frozenset() if _sport_family(a["sport"]) == "rugby" else _RUGBY_GENERIC
+        if gap <= 900:
+            for x, y in ((tb[0], tb[1]), (tb[1], tb[0])):
+                for (a0, a1) in ((ta[0], ta[1]), (ta[1], ta[0])):
+                    if same_team(a0, x, generic) and (_anchored_side(a1, y, blocked) or _anchored_side(y, a1, blocked)):
+                        return True
+        return False
     return gap <= 1800 and taxonomy.norm(a.get("title")) == taxonomy.norm(b.get("title"))
 
 

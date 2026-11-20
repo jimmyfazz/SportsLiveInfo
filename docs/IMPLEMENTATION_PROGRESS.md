@@ -7,6 +7,13 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 20 November 2026 — cross-source duplicate fixtures (branch `fix/event-dedupe-names`)
+
+- **Cause:** `linking.same_team` allowed only generic words to differ; real pairs (Bielefeld, Havelse, Heidenheim 1846, Espanyol, Troyes, Union Berlin Frauen) never merged.
+- **Change:** club-form stop tokens, droppable founding years, women spellings, German exonyms, and an anchored contained-name rule within 15 minutes (see CHANGELOG, Unreleased).
+- **Results:** compileall and `unittest discover` pass, 343 tests (329 before, 14 new). Negative tests cover Real Madrid/Betis, men v women, Castilla/II/U19/U21, other day, kick-offs 30 minutes apart, different competitions.
+- **NOT RUN:** a rerun against the live feed or Home Assistant; no deploy, no version bump. The `RC` prefix is deliberately not a football club form (existing test: RC Lens != Lens in football).
+
 ## 15 November 2026 — 0.3.21 to 0.3.23, audit, deployment and handover to Mac terminal agents
 
 - **Merged:** PR #32 (0.3.21: API-Sports plan window, TheSportsDB week-ahead per competition), #33 and #34 (documentation status, index, archive), #35 (0.3.22 audit fixes and 0.3.23 feed `sli/1.6`, `main` `f335c4e`).

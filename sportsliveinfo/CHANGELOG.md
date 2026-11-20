@@ -2,6 +2,13 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## Unreleased — Cross-source duplicate fixtures merge across club-name forms
+
+- **Before:** `same_team` only allowed generic words to differ, so real duplicates stayed as two rows: "Arminia Bielefeld"/"DSC Arminia Bielefeld", "Havelse"/"TSV Havelse", "Heidenheim"/"Heidenheim 1846", "Espanyol"/"RCD Espanyol de Barcelona", "Estac Troyes"/"ES Troyes AC", "Union Berlin W"/"Union Berlin Frauen".
+- **Now:** club-form prefixes (dsc, tsv, vfl, vfb, fsv, ssv, spvgg, rcd) are ignored; a four-digit founding year may be dropped (never the only difference between two different years); frauen/damen/feminin* mean women; Koeln/Cologne, Nuernberg/Nuremberg and Gladbach/Moenchengladbach are one team each; Troyes spellings are aliased (team spellings live in `linking`, the dictionary aliases only rewrite channel names).
+- **Anchored rule** in `_same_event`: kick-offs within 15 minutes, same sport, compatible competition, one side equal and the other a strictly contained shorter name. Women, youth, reserve and squad words (U21, II, Castilla, ...) and rugby-only words (RC) still block it.
+- Not changed: contract, versions. Tests: 343 pass (14 new in `tests/test_event_dedupe_names.py`).
+
 ## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
 
 Owner report 15 Nov 2026: Scotland v Australia and Spain v England showed an Irish or Asian channel before ITV1, and Pluto's re-run of "England v Samoa — Rugby World Cup 2023" was "probably live". ITV1 had been found (five guides; corroborated for Spain v England) but was listed last.
