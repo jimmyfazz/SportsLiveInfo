@@ -57,6 +57,10 @@ Cause: on 20 Nov 2026 the manifest stayed at 03:42Z for 3.5+ hours (the 04:00 co
 - Diagnostics shows the same data; a banner appears on every page while stalled.
 - Not included: Home Assistant sensor entities (not restart-safe through the REST API).
 - Tests: 354 pass (25 new). No version bump.
+## Unreleased
+
+- **Documentation only.** New [`docs/RIGHTS_RECORD.md`](../docs/RIGHTS_RECORD.md): publication status per source and data kind, the kill-switch for each, and an owner checklist. The repository records no supplier permission; provider terms could not be read from the cloud session.
+- **Status corrections.** Test count on 0.3.24 is 329 (re-run on `origin/main` 8da6e83); the repository is public, not private; API-Sports is "used by the running collector; owner approval not recorded". No code, schema or version change.
 
 ## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
 
