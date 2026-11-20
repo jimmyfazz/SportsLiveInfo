@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import __version__, coverage, dictionary, linking, providers, taxonomy
+from . import __version__, coverage, dictionary, health, linking, providers, taxonomy
 from .storage import utcnow
 
 LOGGER = logging.getLogger(__name__)
@@ -254,9 +254,11 @@ class UI(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
         if route.path == "/healthz":
-            beat = self.store._get("scheduler_heartbeat")
-            self._headers(200, "application/json")
-            self.wfile.write(json.dumps({"ok": True, "version": __version__, "scheduler_heartbeat": beat}).encode())
+            # 200 healthy, 503 stalled (scheduler heartbeat stale or manifest overdue). ?scope=liveness (used by the
+            # Supervisor watchdog) judges the scheduler heartbeat only: a restart cannot fix a stale manifest.
+            code, payload = health.healthz(self.store, __version__, urllib.parse.parse_qs(route.query).get("scope", [""])[0])
+            self._headers(code, "application/json")
+            self.wfile.write(json.dumps(payload).encode())
             return
         if route.path == "/coverage.csv":
             self._headers(200, "text/csv; charset=utf-8")
@@ -507,6 +509,12 @@ class UI(BaseHTTPRequestHandler):
             head += '<div class="alert">First-run setup: configure providers, review refresh times and optionally set a publishing destination. Credentials are stored privately in the Home Assistant App data volume.</div>'
         if notice:
             head += '<div class="alert">%s</div>' % e(notice)
+        try:
+            stalls = health.evaluate(self.store)["reasons"] if config["setup_complete"] else []
+        except Exception:
+            stalls = []
+        if stalls:
+            head += '<div class="alert error"><strong>Stalled:</strong> %s <a href="?page=health">Diagnostics</a></div>' % e("; ".join(r["message"] for r in stalls))
         def tab(key, label):
             current = ' class="active" aria-current="page"' if page == key else ""
             return '<a%s href="?page=%s">%s</a>' % (current, e(key), e(label))
@@ -1355,12 +1363,44 @@ class UI(BaseHTTPRequestHandler):
             " disabled" if blockers or running else "", "Publishing…" if running else "Publish feed now")) + '</section>'
         return body
 
+    def _health_card(self):
+        """Service health: the same data /healthz and the Home Assistant notifications use."""
+        try:
+            report = health.evaluate(self.store)
+        except Exception:
+            return '<section class="card" style="margin-top:16px"><h3>Service health</h3><p class="warn">Health could not be computed.</p></section>'
+        snap, now = report["snapshot"], datetime.now(timezone.utc)
+        alerts = self.store._get("health_alerts") or {}
+        notify = "Home Assistant notifications: " + ("on" if os.environ.get("SUPERVISOR_TOKEN") else "off (no Supervisor token; development run)")
+        verdict = ('<p class="critical">Stalled: %s</p>' % e("; ".join(r["message"] for r in report["reasons"]))
+                   if report["reasons"] else '<p class="ok">Healthy (/healthz answers 200).</p>')
+        expiry = ("not reported by GitHub" if snap["token_expires_at"] is None else
+                  "%s (%s day(s) left)" % (snap["token_expires_at"], snap["token_days_left"]))
+        rows = [
+            ("Scheduler heartbeat", when(snap["scheduler_heartbeat"], now)),
+            ("Last successful collection", "%s (%s)" % (when(snap["last_collect_ok"], now), snap["last_collect_state"] or "none yet")),
+            ("Last publication (manifest)", when(snap["last_publish"], now)),
+            ("Last publication activity", when(snap["last_publish_activity"], now)),
+            ("Publishing expected automatically", "yes" if snap["publish_expected"] else "no"),
+            ("Publish status", "%s %s" % (snap["publish_status"]["state"] or "none", when(snap["publish_status"]["at"], now) if snap["publish_status"]["at"] else "")),
+            ("GitHub token expiry", expiry),
+            ("Failing sources", ", ".join("%s (%d)" % (s["name"], s["consecutive_failures"]) for s in snap["failing_sources"]) or "none"),
+            ("Live-lane calls today", ", ".join("%s %d/%d" % (k, v, snap["budgets"].get("live_daily_budget", 0))
+                                               for k, v in sorted((snap["budgets"].get("live_calls_today") or {}).items())) or "none"),
+            ("Stall threshold", "%g h after a scheduled refresh slot" % report["settings"]["stall_hours"]),
+            ("Open notifications", ", ".join(sorted(alerts)) or "none"),
+        ]
+        table = "".join("<tr><th>%s</th><td>%s</td></tr>" % (e(k), e(v)) for k, v in rows)
+        incidents = "".join("<li>%s</li>" % e("%s: %s" % (i["code"], i["message"])) for i in report["incidents"])
+        return ('<section class="card" style="margin-top:16px"><h3>Service health</h3>%s<table>%s</table>%s<p class="help">%s</p></section>'
+                % (verdict, table, "<ul>%s</ul>" % incidents if incidents else "", e(notify)))
+
     def health(self, config=None):
         config = config or self.store.config()
         rows = self.store.recent_jobs(300)
         usage = self.store.usage()
         now = datetime.now(timezone.utc)
-        body = '<h2>Provider health &amp; diagnostics</h2><p>Errors are recorded locally without API keys, programme titles or private account URLs. Home Assistant persistent notifications require a separately reviewed, least-privilege integration.</p>'
+        body = '<h2>Provider health &amp; diagnostics</h2><p>Errors are recorded locally without API keys, programme titles or private account URLs. Stalls, blocked publishing, an expiring GitHub token and repeatedly failing sources raise one Home Assistant notification per incident (dismissed on recovery).</p>'
         beat = self.store._get("scheduler_heartbeat")
         stale = True
         try:
@@ -1369,6 +1409,7 @@ class UI(BaseHTTPRequestHandler):
             pass
         body += '<section class="card"><h3>Scheduler</h3><p class="%s">Last heartbeat: %s%s</p></section>' % (
             "warn" if stale else "ok", e(when(beat, now)), " — not running or stalled" if stale else "")
+        body += self._health_card()
         by_source = OrderedDict()
         for row in rows:
             by_source.setdefault(row["provider"], []).append(row)

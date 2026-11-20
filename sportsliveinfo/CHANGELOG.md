@@ -47,6 +47,16 @@ Mechanical clean-up from the event-source review. No contract field is added and
 - **References, not images.** The API-Sports decoders carry each side's team id; the merge aligns them to the merged `participants` (home/away swaps handled with `same_team`; a side is `null` when contributors disagree or orientation is uncertain). The feed publishes `participant_crests` (index-aligned, `{"src":"apisports","ref":"football/teams/42"}` or null) only when `publish_crest_refs` is true AND an API-Sports source is in the publication approvals. Default false: no event field changes, so asset hashes and the revision are unchanged.
 - **Master kill switch in the manifest:** `rights.crests` (`sources.apisports.enabled`/`url_template`/`attribution`/`cache_days`, `device_lookup.thesportsdb`, `monogram_only`) is always present; the `team_crests` capability is listed only when enabled. SLI never fetches, stores or mirrors a crest image. Additive; `min_reader_minor` unchanged; no version bump.
 - Owner to verify the API-Sports terms for crest use before setting `publish_crest_refs`. Tests: 15 new in `tests/test_crest_refs.py`.
+## Unreleased — Stall alerting and a real `/healthz`
+
+Cause: on 20 Nov 2026 the manifest stayed at 03:42Z for 3.5+ hours (the 04:00 collection did not publish; cause unproven) and the owner was not told. `/healthz` always answered ok, the watchdog only checked the TCP port, and there was no Home Assistant notification code.
+
+- New `health` module: last successful collection, last publication, manifest age, failing sources, GitHub token expiry (from GitHub's response header), live-lane budget use and scheduler heartbeat age.
+- `/healthz` answers 503 with a JSON reason when the scheduler heartbeat is stale or a scheduled refresh slot passed more than the threshold (default 3 h) with nothing published; hysteresis stops flapping. `?scope=liveness` is the heartbeat-only check now used by the Supervisor watchdog (HTTP instead of TCP).
+- One Home Assistant persistent notification per incident (stalled, publishing failing, token expiring, source failing repeatedly, collection stuck), dismissed on recovery; notification errors are swallowed and logged without secrets. New permission `homeassistant_api: true`; new option `stall_threshold_hours`.
+- Diagnostics shows the same data; a banner appears on every page while stalled.
+- Not included: Home Assistant sensor entities (not restart-safe through the REST API).
+- Tests: 354 pass (25 new). No version bump.
 
 ## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
 
