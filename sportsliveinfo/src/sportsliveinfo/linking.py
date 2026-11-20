@@ -222,13 +222,52 @@ def _sport_family(sport):
     return "rugby" if sport in ("rugby", "rugby_union", "rugby_league") else sport
 
 
+_TITLE_SESSIONS = (
+    (re.compile(r"\b(?:practice|fp)\s*(?:1|one)\b|\bfirst practice\b", re.I), "practice1"),
+    (re.compile(r"\b(?:practice|fp)\s*(?:2|two)\b|\bsecond practice\b", re.I), "practice2"),
+    (re.compile(r"\b(?:practice|fp)\s*(?:3|three)\b|\bthird practice\b", re.I), "practice3"),
+    (re.compile(r"\bsprint\s+(?:qualifying|shootout)\b", re.I), "sprint_qualifying"),
+    (re.compile(r"\bsprint\b", re.I), "sprint"),
+    (re.compile(r"\bqualifying\b", re.I), "qualifying"),
+    (re.compile(r"\brace\b", re.I), "race"),
+)
+# TheSportsDB titles the weekend ("Las Vegas Grand Prix"), not the session, at a session's start time.
+_SESSIONLESS_WINDOW = 900
+
+
+def _motor_session(event):
+    """The motorsport session of a row: its own ``session``, else one named in its title, else None."""
+    if event.get("session"):
+        return event["session"]
+    title = str(event.get("title") or "")
+    for pattern, session in _TITLE_SESSIONS:
+        if pattern.search(title):
+            return session
+    return None
+
+
+def _same_motorsport_event(a, b, gap):
+    if not (a.get("competition_id") and a.get("competition_id") == b.get("competition_id")):
+        return False
+    sa, sb = _motor_session(a), _motor_session(b)
+    if sa and sb:
+        return sa == sb and gap <= 5400
+    if not (sa or sb):
+        return False
+    # One row names no session: the same weekend's session when it starts within 15 minutes. A weekend id, when
+    # both rows carry one, must agree.
+    wa, wb = a.get("weekend_key"), b.get("weekend_key")
+    if wa and wb and wa != wb:
+        return False
+    return gap <= _SESSIONLESS_WINDOW
+
+
 def _same_event(a, b):
     if _sport_family(a["sport"]) != _sport_family(b["sport"]):
         return False
     gap = abs((a["_start"] - b["_start"]).total_seconds())
     if a["sport"] == "motorsport":
-        return (a.get("competition_id") and a.get("competition_id") == b.get("competition_id")
-                and a.get("session") and a.get("session") == b.get("session") and gap <= 5400)
+        return _same_motorsport_event(a, b, gap)
     if gap > 3 * 3600:
         return False
     ca, cb = a.get("competition_id"), b.get("competition_id")
