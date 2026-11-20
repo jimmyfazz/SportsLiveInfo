@@ -449,11 +449,13 @@ def sport_order(sport):
 EXPECTED_MINUTES = {
     "football": 120, "rugby_union": 120, "rugby_league": 120, "rugby": 120, "tennis": 180, "golf": 360,
     "darts": 240, "snooker": 240, "boxing": 240, "basketball": 150, "ice_hockey": 165, "american_football": 210,
-    "baseball": 210,
+    "baseball": 210, "handball": 120, "volleyball": 150,
 }
 DEFAULT_EXPECTED_MINUTES = 180
 _CRICKET_MINUTES = (("test", 450), ("first class", 450), ("odi", 480), ("list a", 480), ("t20", 240), ("t10", 240),
                     ("hundred", 240))
+_KNOCKOUT_STAGE = re.compile(r"\b(round of \d+|last \d+|finals?|semi finals?|quarter finals?|third place|knockout|play ?offs?)\b")
+KNOCKOUT_FOOTBALL_MINUTES = 150     # extra time and penalties can follow a level knockout tie
 
 
 def expected_minutes(event):
@@ -469,7 +471,13 @@ def expected_minutes(event):
             if word in kind:
                 return minutes
         return 240          # cricket of unstated format: the shortest common form, so "should be on now" ends early
-    if sport == "motorsport" and (event.get("session") == "race" or norm(event.get("event_type")) == "race"):
-        return 150
+    if sport == "motorsport":
+        session = str(event.get("session") or "")
+        if session == "race" or norm(event.get("event_type")) == "race":
+            return 150
+        if session.startswith("practice") or "qualifying" in session:
+            return 90
+    if sport == "football" and _KNOCKOUT_STAGE.search(re.sub(r"[^a-z0-9]+", " ", norm(event.get("stage")))):
+        return KNOCKOUT_FOOTBALL_MINUTES
     return EXPECTED_MINUTES.get(sport, DEFAULT_EXPECTED_MINUTES)
 

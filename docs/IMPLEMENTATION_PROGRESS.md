@@ -13,6 +13,12 @@
 - **Change:** club-form stop tokens, droppable founding years, women spellings, German exonyms, and an anchored contained-name rule within 15 minutes (see CHANGELOG, Unreleased).
 - **Results:** compileall and `unittest discover` pass, 343 tests (329 before, 14 new). Negative tests cover Real Madrid/Betis, men v women, Castilla/II/U19/U21, other day, kick-offs 30 minutes apart, different competitions.
 - **NOT RUN:** a rerun against the live feed or Home Assistant; no deploy, no version bump. The `RC` prefix is deliberately not a football club form (existing test: RC Lens != Lens in football).
+## Unreleased — event titles, status defaults and expected durations (branch `chore/event-titles-and-durations`)
+
+- **Done:** F1 session titles (`<race> — <session>`), F1 status always published (OpenF1 "finished" only with a passed provider `date_end`), missing status defaults to "scheduled", CricketData both-TBC fixtures without participants, TheSportsDB `T00:00:00` day-only sports as `date_only`, expected durations for F1 practice and qualifying (90), handball (120), volleyball (150) and knockout football (150). See [`sportsliveinfo/CHANGELOG.md`](../sportsliveinfo/CHANGELOG.md) "Unreleased".
+- **Tests:** compileall clean; `unittest discover` 338 pass (329 baseline plus 9 new). Two old duration assertions updated deliberately.
+- **Fixtures:** `tools/generate_feed_fixtures.py` run; only `status_normalized` on one event asset changed.
+- **NOT RUN:** the B1 interop fixture copy (`platforms/android/app/src/test/resources/sli-v1-6/`) belongs to the B1 repository and was not touched in this task.
 
 ## 15 November 2026 — 0.3.21 to 0.3.23, audit, deployment and handover to Mac terminal agents
 

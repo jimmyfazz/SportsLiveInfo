@@ -574,6 +574,10 @@ def decode_xmltv(raw, source, max_expanded=None, max_programmes=100_000,
 _F1_SESSIONS = {"race": "race", "FirstPractice": "practice1", "SecondPractice": "practice2", "ThirdPractice": "practice3",
                 "Qualifying": "qualifying", "Sprint": "sprint", "SprintQualifying": "sprint_qualifying",
                 "SprintShootout": "sprint_qualifying"}
+# Session labels for event titles ("<raceName> — <label>"), so practice, qualifying and race are distinguishable.
+_F1_LABELS = {"race": "Race", "FirstPractice": "Practice 1", "SecondPractice": "Practice 2", "ThirdPractice": "Practice 3",
+              "Qualifying": "Qualifying", "Sprint": "Sprint", "SprintQualifying": "Sprint Qualifying",
+              "SprintShootout": "Sprint Shootout"}
 
 
 def f1_events(data):
@@ -604,7 +608,10 @@ def f1_events(data):
                     continue
                 events.append({"id": f"f1:{season}:{round_}:{kind}", "sport": "motorsport", "competition": "Formula 1", "event_type": kind,
                                "session": _F1_SESSIONS[kind],
-                               "title": race.get("raceName", "Formula 1"), "start_utc": utc.isoformat(timespec="seconds"), "start_precision": precision,
+                               "title": "%s — %s" % (race.get("raceName", "Formula 1"), _F1_LABELS[kind]),
+                               "start_utc": utc.isoformat(timespec="seconds"), "start_precision": precision,
+                               # The calendar gives no end time or result, so a session is only ever "scheduled" here.
+                               "status_normalized": "scheduled",
                                "venue": circuit.get("circuitName", ""), "circuit_id": circuit.get("circuitId", ""), "country": location.get("country", ""),
                                "source_id": "jolpica", "broadcasts": [], "broadcast_verified": False})
         except (KeyError, ValueError, TypeError):
@@ -616,7 +623,8 @@ _OPENF1_SESSIONS = {"practice 1": "practice1", "practice 2": "practice2", "pract
                     "sprint": "sprint", "sprint qualifying": "sprint_qualifying", "sprint shootout": "sprint_qualifying", "race": "race"}
 
 
-def openf1_events(data):
+def openf1_events(data, now=None):
+    now = now or datetime.now(timezone.utc)
     rows = json.loads(data)
     if not isinstance(rows, list):
         raise ValueError("OpenF1 sessions payload missing or invalid")
@@ -630,11 +638,14 @@ def openf1_events(data):
             place = row.get("country_name") or row.get("location") or ""
             event = {"id": "openf1:%s" % row["session_key"], "sport": "motorsport", "competition": "Formula 1",
                      "event_type": name, "session": session, "title": ("Formula 1 %s — %s" % (place, name)) if place else "Formula 1 — %s" % name,
-                     "start_utc": _utc(row["date_start"]), "start_precision": "scheduled",
+                     "start_utc": _utc(row["date_start"]), "start_precision": "scheduled", "status_normalized": "scheduled",
                      "venue": row.get("circuit_short_name") or row.get("location") or "", "country": row.get("country_name") or "",
                      "source_id": "openf1", "broadcasts": [], "broadcast_verified": False}
             if row.get("date_end"):
                 event["end_utc"] = _utc(row["date_end"])
+                # "finished" only when the provider itself gives an end time that has already passed.
+                if datetime.fromisoformat(event["end_utc"]) < now:
+                    event["status_normalized"] = "finished"
             events.append(event)
         except (KeyError, ValueError, TypeError):
             continue
@@ -890,6 +901,10 @@ def pandascore_events(data):
     return events
 
 
+_MIDNIGHT_STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T00:00:00(?:Z|\+00:00)?")
+_DAY_ONLY_SPORTS = {"golf", "snooker", "darts", "motorsport"}
+
+
 def thesportsdb_events(data):
     """TheSportsDB v1 eventsday. strTimestamp/strTime are UTC by provider convention."""
     payload = json.loads(data)
@@ -905,7 +920,11 @@ def thesportsdb_events(data):
                 continue
             stamp = row.get("strTimestamp")
             precision = "scheduled"
-            if stamp:
+            if stamp and _MIDNIGHT_STAMP.fullmatch(str(stamp).strip()) and str(row.get("strSport") or "").casefold() in _DAY_ONLY_SPORTS:
+                # These feeds write T00:00:00 for "day only" (no kick-off or session time is known): date_only at noon, as elsewhere.
+                when = datetime.fromisoformat(str(stamp).strip()[:10] + "T12:00:00")
+                precision = "date_only"
+            elif stamp:
                 when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
             elif row.get("dateEvent") and re.fullmatch(r"\d{2}:\d{2}(?::\d{2})?.*", str(row.get("strTime") or "")):
                 when = datetime.fromisoformat("%sT%s" % (row["dateEvent"], row["strTime"][:8]))
@@ -938,6 +957,18 @@ def thesportsdb_events(data):
     return events
 
 
+_TBC_NAMES = {"tbc", "tba", "to be confirmed"}
+
+
+def _tbc_name(name):
+    return str(name or "").strip().casefold() in _TBC_NAMES
+
+
+def _tbc_pair(text):
+    halves = re.split(r"\s+(?:v|vs\.?)\s+", str(text or ""), flags=re.IGNORECASE)
+    return len(halves) == 2 and all(_tbc_name(h) for h in halves)
+
+
 def cricketdata_events(data, horizon_days=8, now=None):
     """CricAPI /v1/matches. dateTimeGMT is GMT by field definition. Test matches expand to one record per playing day.
 
@@ -960,6 +991,10 @@ def cricketdata_events(data, horizon_days=8, now=None):
             teams = [t for t in (row.get("teams") or []) if t][:2]
             parts = str(row.get("name") or "").split(", ")
             competition = ", ".join(parts[2:]) if len(parts) > 2 else (row.get("series") or "")
+            if len(teams) == 2 and all(_tbc_name(t) for t in teams):
+                teams = []      # both sides unknown: no participants, and no "Tbc v Tbc" title
+            # The first name part is the fixture when it is known; a placeholder pair falls back to the competition.
+            head = parts[0] if parts and not _tbc_pair(parts[0]) else (competition or "Cricket")
             match_type = str(row.get("matchType") or "").lower()
             if row.get("matchEnded"):
                 state = "finished"
@@ -971,7 +1006,7 @@ def cricketdata_events(data, horizon_days=8, now=None):
                     "event_type": match_type or "match", "participants": teams,
                     "status": str(row.get("status") or "")[:120], "status_normalized": state,
                     "venue": row.get("venue") or "", "source_id": "cricketdata", "broadcasts": [], "broadcast_verified": False}
-            title = " v ".join(teams) if len(teams) == 2 else (parts[0] if parts else "Cricket")
+            title = " v ".join(teams) if len(teams) == 2 else head
             days = 5 if match_type == "test" else 1
             ended = bool(row.get("matchEnded"))
             current = max(0, min(days - 1, (now - start) // timedelta(days=1))) if now >= start else 0

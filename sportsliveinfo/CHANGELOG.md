@@ -21,6 +21,18 @@
 - **Quota:** own counter `settle:<product>`, 4 calls a day per product (also counted in the product's quota), same reserve check as the live lane (`usage >= daily_limit - 20` skips), provider back-off and plan-window checks. Counters are shown on the Live status lane card and in the usage table. Estimate: at most 4 extra calls per product per day (a paged response costs one call per page).
 - No wire change: the `live` schema already allows `finished`, `postponed` and `cancelled`; no new fields, providers or secrets. MMA has no live board and is not settled.
 - Tests: 340 pass (11 new in `tests/test_settle_pass.py`).
+## Unreleased — event titles, status defaults and expected durations
+
+Mechanical clean-up from the event-source review. No contract field is added and no version is bumped; the wire changes are titles, a status default and the expected end.
+
+- **F1 sessions are titled by session.** Jolpica titles are now "<race name> — Race", "— Practice 1", "— Qualifying" and so on (were the race name for every session). The `session` field is unchanged and is what EPG matching uses.
+- **F1 status is always published.** Jolpica and OpenF1 sessions are "scheduled". OpenF1 is "finished" only when the provider's own `date_end` has passed.
+- **Missing status defaults to "scheduled".** Any event published without `status_normalized` now carries "scheduled" (it previously carried nothing).
+- **CricketData placeholders.** When both teams are "TBC", "TBA" or "to be confirmed", there are no participants and the title is the name's first part, not "Tbc v Tbc". A placeholder first part falls back to the competition.
+- **TheSportsDB day-only times.** A `strTimestamp` of `T00:00:00` for golf, snooker, darts or motorsport is `date_only` at noon UTC. Other sports keep the stated time.
+- **Expected durations.** F1 practice and qualifying 90 minutes; handball 120; volleyball 150; knockout football (round of N, quarter, semi, final, third place, play-off stages) 150. The defaults and all other sports are unchanged.
+- Tests: 338 pass (329 existing plus 9 in `tests/test_event_titles_and_durations.py`). Two existing duration assertions were changed deliberately (handball 180 to 120, F1 qualifying 180 to 90).
+- Golden feed fixtures regenerated: the only change is `status_normalized` on one event asset and the manifest hash.
 
 ## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
 
