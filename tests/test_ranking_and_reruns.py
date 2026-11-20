@@ -111,6 +111,12 @@ class RerunTests(unittest.TestCase):
         self.assertFalse(linking.names_past_year("Champions League", "2026-2027", 2026))
         self.assertFalse(linking.names_past_year("World Darts Championship 2027", "", 2026))
         self.assertFalse(linking.names_past_year("Live: Arsenal v Spurs", "Kick-off 20:00", 2026))
+        # Season-boundary cases: 2024/25 is a past season when current_year=2026
+        self.assertTrue(linking.names_past_year("Premier League", "2024/25 Season", 2026))
+        self.assertTrue(linking.names_past_year("FA Cup", "2024-25", 2026))
+        # Current and future seasons must not be filtered
+        self.assertFalse(linking.names_past_year("FA Cup", "2026/27", 2026))
+        self.assertFalse(linking.names_past_year("Premier League", "2026/27 Season", 2026))
 
     def test_rerun_never_becomes_a_guide_listed_live_event(self):
         now = datetime(2026, 11, 15, 9, 0, tzinfo=timezone.utc)

@@ -192,9 +192,9 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertFalse(extra_asset["required"])
         for event in list(core.values()) + list(extra.values()):
             self.assertRegex(event["status_observed_at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
-        self.assertEqual(core["football-data:5001"]["expected_end_utc"], "2026-11-14T17:00:00+00:00")   # football 2 h
-        self.assertEqual(core["f1:2026:22:race"]["expected_end_utc"], "2026-11-21T08:00:00+00:00")      # source end
-        self.assertEqual(core["cricketdata:ash1:d1"]["expected_end_utc"], "2026-11-21T07:00:00+00:00")  # Test day 7 h 30
+        self.assertEqual(core["football-data:5001"]["expected_end_utc"], "2026-11-14T17:00:00Z")   # football 2 h
+        self.assertEqual(core["f1:2026:22:race"]["expected_end_utc"], "2026-11-21T08:00:00Z")      # source end
+        self.assertEqual(core["cricketdata:ash1:d1"]["expected_end_utc"], "2026-11-21T07:00:00Z")  # Test day 7 h 30
         live = self.asset("live")
         self.assertEqual(live, {"schema": "sli.live/1", "generated_at": "2026-11-14T13:55:00Z",
                                 "events": [{"id": "api-sports-rugby:301", "status_normalized": "live",

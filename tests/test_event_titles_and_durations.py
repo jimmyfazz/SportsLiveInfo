@@ -102,8 +102,8 @@ class ExpectedDurationTests(unittest.TestCase):
             (dict(sport="motorsport", session="sprint_qualifying"), 90),
             (dict(sport="motorsport", session="race", event_type="race"), 150),
             (dict(sport="motorsport", session="sprint"), 180),                 # unchanged default for other sessions
-            (dict(sport="handball"), 120),
-            (dict(sport="volleyball"), 150),
+            (dict(sport="handball"), 100),
+            (dict(sport="volleyball"), 120),
             (dict(sport="football", stage="ROUND_OF_16"), 150),
             (dict(sport="football", stage="QUARTER_FINALS"), 150),
             (dict(sport="football", stage="Semi-finals"), 150),

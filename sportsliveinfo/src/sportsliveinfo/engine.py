@@ -921,7 +921,7 @@ class Engine:
             kept = []
             for event in rows:
                 try:
-                    local_day = datetime.fromisoformat(event["start_utc"]).astimezone(LONDON).date()
+                    local_day = datetime.fromisoformat(event["start_utc"].replace("Z", "+00:00")).astimezone(LONDON).date()
                     # Yesterday stays for the feed's history asset only (today's rail is built from today's date).
                     if london_today - timedelta(days=HISTORY_DAYS) <= local_day <= london_today + timedelta(days=7):
                         kept.append(event)
@@ -1209,7 +1209,7 @@ class Engine:
                     or event.get("start_precision") in linking.UNCONFIRMED_START_PRECISIONS):
                 continue
             try:
-                start, end = datetime.fromisoformat(event["start_utc"]), linking.expected_end(event)
+                start, end = datetime.fromisoformat(event["start_utc"].replace("Z", "+00:00")), linking.expected_end(event)
             except (KeyError, TypeError, ValueError):
                 continue
             if not start <= now <= end + linking.LIVE_END_GRACE:

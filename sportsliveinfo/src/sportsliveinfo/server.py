@@ -129,10 +129,8 @@ def _coverage_csv(store):
 
 
 def e(value):
-    return html.escape(str("" if value is None else value), quote=True)
-
     """HTML-escape for text and attributes. Zero and False must still render."""
-    return html.escape("" if value is None else str(value), quote=True)
+    return html.escape(str("" if value is None else value), quote=True)
 
 
 def when(value, now=None):
