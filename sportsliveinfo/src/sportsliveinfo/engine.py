@@ -1807,7 +1807,9 @@ class Engine:
             message = "Automatic publish refused: %s; the previous feed stays live. Publish manually to override" % exc
             LOGGER.warning("Feed publication refused (%s): %s", trigger, message)
             self.store.job("publisher", "blocked", message)
-            self.store._put("publish_gate", {"blocked_at": utcnow(), "reason": str(exc)[:200], "trigger": trigger})
+            gate = {"blocked_at": utcnow(), "reason": str(exc)[:200], "trigger": trigger}
+            gate.update(getattr(exc, "details", None) or {})
+            self.store._put("publish_gate", gate)
             self._set_publish_status("failed", message + private_note, trigger)
             return None
         except (ValueError, RuntimeError, OSError) as exc:
@@ -1897,7 +1899,14 @@ class Engine:
         if not allow_regression and manifest["revision"] != state.get("last_revision"):
             reason = publish_regression(state.get("stats"), manifest)
             if reason:
-                raise PublishRegression(reason)
+                cover = manifest.get("coverage") or {}
+                before = state.get("stats") or {}
+                failure = PublishRegression(reason)
+                failure.details = {
+                    "events_before": before.get("events"), "events_after": cover.get("events", 0),
+                    "bindings_before": before.get("corroborated_bindings"),
+                    "bindings_after": cover.get("guide_corroborated_broadcasts", 0)}
+                raise failure
         outcome, revision = self._commit_feed(owner, repository, branch, token, manifest, files, state,
                                               "feed_state", "publisher", "SportsLiveInfo feed", private=False)
         self._publish_outcome = outcome

@@ -147,6 +147,11 @@ def snapshot(store, now=None, *, started_at=None):
             publish_failures += 1
         else:
             break
+    last_outcome = next((r for r in publisher_rows if r["state"] != "preview"), None)
+    gate = None
+    if last_outcome is not None and last_outcome["state"] == "blocked":
+        gate = dict(store._get("publish_gate") or {})
+        gate.setdefault("blocked_at", last_outcome["time"])
     sources = []
     by_source = {}
     for row in jobs:
@@ -177,6 +182,7 @@ def snapshot(store, now=None, *, started_at=None):
         "publish_status": {"state": status.get("state"), "at": status.get("at")},
         "publish_consecutive_failures": publish_failures,
         "publish_expected": publish_expected(conf),
+        "publish_gate": gate,
         "schedule": list(conf.get("schedule") or []),
         "failing_sources": sources,
         "token_expires_at": _iso(expiry),
@@ -203,6 +209,21 @@ def _latest_slot_due(schedule, now, grace):
             if at <= cutoff and (best is None or at > best):
                 best = at
     return best
+
+
+def _before_after(before, after):
+    return "%s -> %s" % ("?" if before is None else before, "?" if after is None else after)
+
+
+def gate_message(gate):
+    """One line naming what the pre-publish regression gate saw and how to override it."""
+    detail = "events %s, guide-confirmed bindings %s" % (
+        _before_after(gate.get("events_before"), gate.get("events_after")),
+        _before_after(gate.get("bindings_before"), gate.get("bindings_after")))
+    reason = gate.get("reason")
+    return ("The automatic publish was refused by the pre-publish regression gate (%s)%s; the previous feed stays live. "
+            "If the drop is expected, open SportsLiveInfo > Publishing and press Publish feed now to override" % (
+                detail, " - " + reason if reason else ""))
 
 
 def raw_reasons(snap, now, settings, active=()):
@@ -247,6 +268,9 @@ def raw_reasons(snap, now, settings, active=()):
                                growth.get("per_day"), (growth.get("projected_bytes_per_year") or 0) // 1_000_000))
     if snap["publish_expected"] and snap["publish_consecutive_failures"] >= PUBLISH_FAIL_THRESHOLD:
         add("publish_blocked", "Publishing failed %d times in a row (see Diagnostics on the Home Assistant page)" % snap["publish_consecutive_failures"])
+    gate = snap.get("publish_gate")
+    if gate:
+        add("publish_gate_blocked", gate_message(gate))
     left = snap["token_days_left"]
     if left is not None and left <= TOKEN_WARN_DAYS:
         add("token_expiring", "The GitHub publishing token %s" % (
@@ -313,6 +337,9 @@ def healthz(store, version, scope="", now=None, *, started_at=None):
         body["reasons"] = [r["code"] for r in report["reasons"]]
     if scope != "liveness":
         body["incidents"] = [i["code"] for i in report["incidents"]]
+        advisories = [{"code": i["code"], "message": i["message"]} for i in report["incidents"] if not i["stall"]]
+        if advisories:
+            body["advisories"] = advisories      # advisory incidents never change the HTTP status
         body["manifest_age_s"] = snap.get("manifest_age_s")
         body["last_publish"] = snap.get("last_publish")
         body["last_collect_ok"] = snap.get("last_collect_ok")
@@ -326,6 +353,7 @@ TITLES = {
     "manifest_old": "SportsLiveInfo: feed not published",
     "collector_hung": "SportsLiveInfo: collection stuck",
     "publish_blocked": "SportsLiveInfo: publishing is failing",
+    "publish_gate_blocked": "SportsLiveInfo: publish refused by the regression gate",
     "collector_stuck": "SportsLiveInfo: a source collection was abandoned",
     "feed_growth": "SportsLiveInfo: feed repository history is growing fast",
     "asset_size": "SportsLiveInfo: feed asset near the reader size limit",

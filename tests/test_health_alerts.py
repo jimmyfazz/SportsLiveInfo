@@ -320,3 +320,60 @@ class PackagingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublishGateBlockedTests(HealthCase):
+    """A refusal by the pre-publish regression gate (job state 'blocked') used to raise no alert at all."""
+
+    def block(self):
+        self.store.job("publisher", "blocked", "Automatic publish refused: events fell from 100 to 50")
+        self.store._put("publish_gate", {"blocked_at": iso(D(12)), "reason": "events fell from 100 to 50 (more than 20%)",
+                                         "events_before": 100, "events_after": 50,
+                                         "bindings_before": 40, "bindings_after": 38})
+
+    def now(self):
+        return datetime.fromisoformat(self.store.recent_jobs(1)[0]["time"]) + timedelta(minutes=1)
+
+    def test_blocked_publish_is_an_advisory_incident_with_override_text(self):
+        self.block()
+        self.published(self.now() - timedelta(minutes=10))
+        now = self.now()
+        report = self.evaluate(now)
+        self.assertEqual(self.codes(report), ["publish_gate_blocked"])
+        self.assertTrue(report["ok"])                                # advisory: no 503
+        message = report["incidents"][0]["message"]
+        for text in ("events 100 -> 50", "bindings 40 -> 38", "Publish feed now", "previous feed stays live"):
+            self.assertIn(text, message)
+        code, body = health.healthz(self.store, "x", now=now, started_at=START)
+        self.assertEqual(code, 200)
+        self.assertEqual(body["advisories"][0]["code"], "publish_gate_blocked")
+        self.assertNotIn("reasons", body)
+
+    def test_notification_is_sent_once_and_dismissed_on_recovery(self):
+        self.block()
+        self.published(self.now() - timedelta(minutes=10))
+        sent = []
+        notifier = health.Notifier(self.store, post=lambda service, payload: sent.append((service, payload)))
+        now = self.now()
+        for step in range(3):
+            self.beat(now + timedelta(minutes=step))
+            notifier.sync(health.evaluate(self.store, now + timedelta(minutes=step), settings=SETTINGS, started_at=START)["incidents"],
+                          now + timedelta(minutes=step))
+        creates = [p for s, p in sent if s == "create"]
+        self.assertEqual(len(creates), 1)
+        self.assertEqual(creates[0]["notification_id"], "sportsliveinfo_publish_gate_blocked")
+        self.assertIn("Publish feed now", creates[0]["message"])
+        self.assertIn("events 100 -> 50", creates[0]["message"])
+        self.store.job("publisher", "submitted", "Feed committed")          # manual override succeeded
+        later = now + timedelta(minutes=20)
+        for at in (later, later + timedelta(minutes=11)):
+            self.beat(at)
+            notifier.sync(health.evaluate(self.store, at, settings=SETTINGS, started_at=START)["incidents"], at)
+        self.assertEqual([p["notification_id"] for s, p in sent if s == "dismiss"], ["sportsliveinfo_publish_gate_blocked"])
+
+    def test_preview_row_does_not_clear_it_and_failure_chain_unaffected(self):
+        self.block()
+        self.published(self.now() - timedelta(minutes=10))
+        self.store.job("publisher", "preview", "built locally")
+        now = self.now()
+        self.assertEqual(self.codes(self.evaluate(now)), ["publish_gate_blocked"])
