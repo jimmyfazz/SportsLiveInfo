@@ -454,3 +454,11 @@ content-length: 729267
 App-parser checks used `providers.decode_xmltv(..., max_programmes=400000)` and confirmed the counts/horizons in the table. Three new synthetic tests cover direct source URLs, retirement/market retention, redirect rejection and diagnostic text. Golden fixtures were regenerated with `PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py` (14 assets). `PYTHONPATH=sportsliveinfo/src python3 -m compileall -q sportsliveinfo/src tests` and `git diff --check` passed. `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests -v` completed with **202 tests, OK**.
 
 **Home Assistant acceptance:** NOT RUN at this documentation point. Before merging, create the required Home Assistant backup. After merge, verify version 0.3.9 is offered/installed, run “Collect now,” then check the app Diagnostics/logs for nonzero NZ and Sydney imports and the retired UK source no longer being selected. Do not claim live HA verification until those steps complete.
+
+## 20 Nov 2026: live-lane expiry, manifest live_lane, publish regression gate (branch fix/live-lane-expiry)
+
+Diagnosed: the live asset kept rows after `live_until_utc`, and stored `live` observations were only downgraded when the event left a live-board response. Changes: expired rows dropped at build time; stale `live` (older than 45 min) downgraded to `unknown` without an API call and republished; manifest gains `refresh.live_stale_after_minutes` and `refresh.live_lane`; automatic publication refuses a more than 20% drop in events or guide-corroborated bindings (manual overrides).
+
+Results: `python3 -m compileall -q sportsliveinfo/src tests` and `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests` pass (335 tests; 6 new in `tests/test_live_tiers_corroboration.py`). Golden manifest fixture regenerated. Version files not bumped (owner releases).
+
+NOT RUN: Home Assistant deployment, a real GitHub commit, and any check against the live 20 Nov manifest. The cause of the 04:00 UK publication stall is not proven; see the hand-off report for the code paths that can skip publishing.

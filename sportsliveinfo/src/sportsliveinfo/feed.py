@@ -75,6 +75,8 @@ def event_tier(event):
 
 
 LIVE_MAX_AGE = timedelta(minutes=45)
+LIVE_LANE_INTERVAL_MINUTES = 15       # published in refresh.live_lane; applies only while events are in play
+LIVE_QUIET_SLOT_GUARD_MINUTES = 3     # the lane stays quiet this long either side of a scheduled refresh
 LIVE_END_GRACE = timedelta(minutes=30)
 
 
@@ -379,12 +381,13 @@ def _broadcast_links(event, private=False):
     return links
 
 
-def live_document(store, events):
+def live_document(store, events, now=None):
     """The optional ``live`` asset (contract sli/1.6 §2), or None.
 
     Built from the live-status lane's observations (``live_observations``, keyed by source event id). An event is
     listed when an observation newer than its published status either changes the status or confirms play in
-    progress (so a reader keeps trusting "live" for 45 minutes). Ids, statuses and times only: no scores."""
+    progress (so a reader keeps trusting "live" for 45 minutes). Rows whose ``live_until_utc`` is not after ``now``
+    are dropped: a build never lists an expired "live". Ids, statuses and times only: no scores."""
     observations = ((store._get("live_observations") or {}).get("events") or {})
     if not observations:
         return None
@@ -409,6 +412,8 @@ def live_document(store, events):
             until = live_until(status, observed, event.get("start_utc"), end)
             if until:
                 row["live_until_utc"] = until
+                if now is not None and datetime.fromisoformat(until.replace("Z", "+00:00")) <= now:
+                    continue
             rows.append(row)
     if not rows:
         return None
@@ -525,7 +530,7 @@ def build_feed(store, now=None, previous_revision=None, private=False):
     add("today", today_doc, "sli.today/1", True, date=window[0], records=len(todays))
     published_ids = {e["id"] for e in events}
     live_doc = live_document(store, [dict(e, status_observed_at=e.get("status_observed_at") or observed_fallback)
-                                     for e in selected if e.get("id") in published_ids])
+                                     for e in selected if e.get("id") in published_ids], now=now)
     if live_doc:
         add("live", live_doc, "sli.live/1", False, records=len(live_doc["events"]))
     add("health", health_document(store, conf, snapshots), "sli.health/1", False)
@@ -574,6 +579,8 @@ def build_feed(store, now=None, previous_revision=None, private=False):
         "timezone_reference": "Europe/London", "window": {"from": window[0], "to": window[-1]},
         "refresh": {"schedule_europe_london": schedule, "expected_interval_minutes": interval,
                     "reader_poll_minutes": 30, "stale_after_hours": 30,
+                    "live_stale_after_minutes": int(LIVE_MAX_AGE.total_seconds() // 60),
+                    "live_lane": live_lane_refresh(store, conf),
                     "expires_at": (now + timedelta(hours=48)).isoformat(timespec="seconds")},
         "capabilities": ["taxonomy", "channel_registry", "channel_families", "guide_catalogue", "events_by_day",
                          "today", "source_health", "fixture_corroboration", "status_observed_at", "event_tiers"]
@@ -614,6 +621,23 @@ def build_feed(store, now=None, previous_revision=None, private=False):
             manifest["capabilities"].append("guide_listed_events")
         manifest["notices"] = ["Private personal-use feed: never copy it to a public location."] + manifest["notices"]
     return manifest, files
+
+
+def live_lane_refresh(store, conf):
+    """``refresh.live_lane`` (contract §4.2): the 15 minute cadence applies only while events are in play."""
+    products = [n for n in providers.SPORTS if n.startswith("api_sports") and n != "api_sports_mma"]
+    enabled = bool(conf.get("live_status", True) and conf["keys"].get("api_sports")
+                   and any(conf["sports"].get(n) for n in products))
+    row = {"enabled": enabled, "interval_minutes": LIVE_LANE_INTERVAL_MINUTES,
+           "active_only_while_events_in_play": True, "quiet_slots_guard_minutes": LIVE_QUIET_SLOT_GUARD_MINUTES}
+    try:
+        last = store._get("live_lane") or {}
+        stamp = _z(last.get("last_run"))
+    except Exception:
+        stamp = None
+    if stamp:
+        row["last_run_utc"] = stamp
+    return row
 
 
 def _interval_minutes(schedule):

@@ -45,6 +45,33 @@ LIVE_RETAIN = timedelta(hours=36)
 LIVE_SLOT_GUARD = 3             # minutes either side of a scheduled refresh when the lane stays quiet
 LIVE_UNSUPPORTED_DAYS = 3       # a product that refuses live=all is not asked again for this long
 # Football uses fixtures?live=all; the v1 "games" products games?live=all. The MMA API has no live board.
+# Pre-publish regression gate: automatic publication is refused when the new feed has more than this share fewer
+# events, or fewer guide-corroborated bindings, than the one last published (manual publish overrides). Baselines
+# below the minimum are ignored so a tiny feed cannot trip it.
+PUBLISH_REGRESSION_THRESHOLD = 0.20
+PUBLISH_REGRESSION_MIN_BASELINE = 5
+
+
+class PublishRegression(RuntimeError):
+    """Automatic publication refused: the new feed lost too much against the published one."""
+
+
+def publish_regression(previous, manifest):
+    """Reason string when ``manifest`` regresses against ``previous`` (stored stats), else None."""
+    if not isinstance(previous, dict):
+        return None
+    cover = manifest.get("coverage") or {}
+    now = {"events": cover.get("events", 0), "corroborated_bindings": cover.get("guide_corroborated_broadcasts", 0)}
+    labels = {"events": "events", "corroborated_bindings": "guide-corroborated bindings"}
+    for key, label in labels.items():
+        before = previous.get(key)
+        if (isinstance(before, int) and before >= PUBLISH_REGRESSION_MIN_BASELINE
+                and now[key] < before * (1 - PUBLISH_REGRESSION_THRESHOLD)):
+            return "%s fell from %d to %d (more than %d%%)" % (label, before, now[key],
+                                                                round(PUBLISH_REGRESSION_THRESHOLD * 100))
+    return None
+
+
 LIVE_PRODUCTS = tuple(name for name in providers.SPORTS if name.startswith("api_sports") and name != "api_sports_mma")
 
 
@@ -1193,6 +1220,18 @@ class Engine:
                         continue
                     observations[sid] = {"status": raw, "status_normalized": status, "status_observed_at": stamp}
                     changed += 1
+        # A stored "live" nobody re-confirmed within LIVE_MAX_AGE becomes "unknown" (no API call), so the lane
+        # republishes and a published "live" cannot outlive its evidence (readers already ignore it after 45 min).
+        for sid, obs in observations.items():
+            try:
+                stale = (obs.get("status_normalized") == "live"
+                         and now - datetime.fromisoformat(obs["status_observed_at"]) > feed.LIVE_MAX_AGE)
+            except (KeyError, TypeError, ValueError, AttributeError):
+                stale = False
+            if stale:
+                observations[sid] = {"status": "stale live expired", "status_normalized": "unknown",
+                                     "status_observed_at": stamp}
+                changed += 1
         cutoff = (now - LIVE_RETAIN).isoformat()
         observations = {k: v for k, v in observations.items() if str(v.get("status_observed_at", "")) >= cutoff}
         if changed or observations != (stored.get("events") or {}):
@@ -1550,7 +1589,14 @@ class Engine:
                 self._set_publish_status(state, private_note.lstrip("; ").capitalize(), trigger)
                 return None
         try:
-            revision = self.publish()
+            revision = self.publish() if trigger == "manual" else self.publish(allow_regression=False)
+        except PublishRegression as exc:
+            message = "Automatic publish refused: %s; the previous feed stays live. Publish manually to override" % exc
+            LOGGER.warning("Feed publication refused (%s): %s", trigger, message)
+            self.store.job("publisher", "blocked", message)
+            self.store._put("publish_gate", {"blocked_at": utcnow(), "reason": str(exc)[:200], "trigger": trigger})
+            self._set_publish_status("failed", message + private_note, trigger)
+            return None
         except (ValueError, RuntimeError, OSError) as exc:
             message = str(exc)[:300]
             LOGGER.warning("Feed publication failed (%s): %s", trigger, message)
@@ -1571,8 +1617,11 @@ class Engine:
         self._set_publish_status("failed" if "failed" in private_note else "succeeded", message + private_note, trigger)
         return revision
 
-    def publish(self):
+    def publish(self, allow_regression=True):
         """Publish the sli/1 feed in ONE atomic commit; EPG programme text is never copied.
+
+        ``allow_regression=False`` (automatic publication) refuses a feed that lost more than
+        ``PUBLISH_REGRESSION_THRESHOLD`` of its events or corroborated bindings against the published one.
 
         Disabled by default. Events appear only for sources whose public
         redistribution licence has been explicitly approved.
@@ -1580,7 +1629,7 @@ class Engine:
         if not self._publish_lock.acquire(timeout=120):
             raise RuntimeError("Another feed publication is already running")
         try:
-            return self._publish()
+            return self._publish() if allow_regression else self._publish(False)
         finally:
             self._publish_lock.release()
 
@@ -1613,7 +1662,7 @@ class Engine:
         self._private_outcome = outcome
         return revision
 
-    def _publish(self):
+    def _publish(self, allow_regression=True):
         conf = self.store.config()
         target = conf["github"]
         self._publish_outcome = None
@@ -1632,6 +1681,10 @@ class Engine:
         validate_github_target(owner, repository, branch)
         state = self.store._get("feed_state") or {"revisions": []}
         manifest, files = feed.build_feed(self.store, previous_revision=state.get("last_revision"))
+        if not allow_regression and manifest["revision"] != state.get("last_revision"):
+            reason = publish_regression(state.get("stats"), manifest)
+            if reason:
+                raise PublishRegression(reason)
         outcome, revision = self._commit_feed(owner, repository, branch, token, manifest, files, state,
                                               "feed_state", "publisher", "SportsLiveInfo feed", private=False)
         self._publish_outcome = outcome
@@ -1664,7 +1717,10 @@ class Engine:
         self._github_commit(owner, repository, branch, token, uploads, deletions,
                             "%s %s (%d events)" % (label, revision, manifest["coverage"]["events"]),
                             required=files, private=private)
-        self.store._put(state_key, {"last_revision": revision, "revisions": keep, "published_at": utcnow()})
+        cover = manifest["coverage"]
+        self.store._put(state_key, {"last_revision": revision, "revisions": keep, "published_at": utcnow(),
+                                    "stats": {"events": cover["events"],
+                                              "corroborated_bindings": cover["guide_corroborated_broadcasts"]}})
         self.store.job(job, "submitted", "Feed %s committed atomically (%d new files, %d removed); verify the static endpoint" % (
             revision, len(uploads), len(deletions)))
         return "committed", revision

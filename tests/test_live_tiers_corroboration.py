@@ -327,7 +327,7 @@ def board(*rows):
          "league": {"id": 39, "name": "Premier League"}} for fid, short in rows]}).encode()
 
 
-class LiveLaneTests(StoreCase):
+class LiveLaneBase(StoreCase):
     def setUp(self):
         super().setUp()
         self.store.configure({"setup_complete": True, "keys": {"api_sports": "k"},
@@ -361,6 +361,8 @@ class LiveLaneTests(StoreCase):
         with patch("sportsliveinfo.providers.fetch", side_effect=fetch):
             return self.engine.live_lane(now=now)
 
+
+class LiveLaneTests(LiveLaneBase):
     def test_no_calls_when_nothing_is_in_play(self):
         self.snapshot(start="2026-11-14T20:00:00+00:00")
         self.assertEqual(self.run_lane(board()), 0)
@@ -494,6 +496,85 @@ class LiveLaneTests(StoreCase):
             self.assertEqual(calls, [1])
         self.assertTrue(self.engine._busy.acquire(blocking=False))     # the lane released the collector lock
         self.engine._busy.release()
+
+
+class LiveExpiryAndPublishGateTests(LiveLaneBase):
+    """Live-lane expiry (stale "live" must not outlive its evidence) and the pre-publish regression gate."""
+
+    def test_live_asset_drops_rows_past_live_until(self):
+        self.snapshot()
+        self.run_lane(board((1, "2H")))                                   # live, observed 15:30, until 16:15
+        fresh, _ = feed.build_feed(self.store, now=NOW + timedelta(minutes=30))
+        self.assertIn("live", {a["kind"] for a in fresh["assets"]})
+        expired, _ = feed.build_feed(self.store, now=NOW + timedelta(minutes=50))
+        self.assertNotIn("live", {a["kind"] for a in expired["assets"]})
+        self.assertNotIn("live_status", expired["capabilities"])
+
+    def test_stale_live_is_downgraded_without_an_api_call_and_counts_as_a_change(self):
+        self.snapshot()
+        self.run_lane(board((1, "2H")))
+        calls = len(self.urls)
+        later = NOW + timedelta(hours=3)                                   # nothing in play any more
+        self.assertEqual(self.run_lane(board(), now=later), 1)
+        self.assertEqual(len(self.urls), calls)                            # no provider call
+        observation = self.store._get("live_observations")["events"]["api-sports:1"]
+        self.assertEqual((observation["status_normalized"], observation["status_observed_at"]),
+                         ("unknown", iso(later)))
+        self.assertEqual(self.run_lane(board(), now=later + timedelta(minutes=15)), 0)   # settled, no republish
+
+    def test_fresh_live_is_not_downgraded(self):
+        self.snapshot()
+        self.run_lane(board((1, "2H")))
+        self.assertEqual(self.run_lane(board((1, "2H")), now=NOW + timedelta(minutes=44)), 1)   # re-confirmed
+        self.assertEqual(self.store._get("live_observations")["events"]["api-sports:1"]["status_normalized"], "live")
+
+    def test_manifest_declares_the_lane_and_stays_backward_compatible(self):
+        self.snapshot()
+        self.run_lane(board((1, "2H")))
+        manifest, _ = feed.build_feed(self.store, now=NOW)
+        refresh = manifest["refresh"]
+        self.assertEqual(refresh["live_stale_after_minutes"], 45)
+        self.assertEqual(refresh["live_lane"], {"enabled": True, "interval_minutes": 15,
+                                                "active_only_while_events_in_play": True,
+                                                "quiet_slots_guard_minutes": 3, "last_run_utc": "2026-11-14T15:30:00Z"})
+        self.assertLessEqual(manifest["compatibility"]["min_reader_minor"], 6)
+        self.assertEqual(manifest["compatibility"]["min_reader_minor"], 0)
+        self.assertIn("live_stale_after_minutes", json.loads(
+            (Path(__file__).resolve().parents[1] / "schemas" / "sli-manifest.schema.json").read_text())
+            ["properties"]["refresh"]["properties"])
+
+    def test_regression_rule(self):
+        manifest = {"coverage": {"events": 79, "guide_corroborated_broadcasts": 10}}
+        rule = engine_module.publish_regression
+        self.assertIsNone(rule(None, manifest))
+        self.assertIsNone(rule({"events": 100, "corroborated_bindings": 12}, {"coverage": {
+            "events": 80, "guide_corroborated_broadcasts": 10}}))              # exactly 20% down: allowed
+        self.assertIn("events fell from 100 to 79", rule({"events": 100, "corroborated_bindings": 10}, manifest))
+        self.assertIn("corroborated bindings fell from 20 to 10",
+                      rule({"events": 79, "corroborated_bindings": 20}, manifest))
+        self.assertIsNone(rule({"events": 3, "corroborated_bindings": 3}, {"coverage": {
+            "events": 0, "guide_corroborated_broadcasts": 0}}))                 # tiny baseline ignored
+
+    def test_automatic_publish_is_refused_on_regression_and_manual_overrides(self):
+        self.snapshot()
+        commits = []
+        with patch.object(Engine, "_github_commit", side_effect=lambda *a, **k: commits.append(a)), \
+                patch("sportsliveinfo.feed.datetime", FixedClock):
+            self.engine.publish()
+            self.assertEqual(len(commits), 1)
+            state = self.store._get("feed_state")
+            self.assertEqual(state["stats"]["events"], 1)
+            self.store._put("feed_state", dict(state, stats={"events": 50, "corroborated_bindings": 0},
+                                               last_revision="0" * 20))
+            self.assertIsNone(self.engine._publish_job("automatic"))
+            self.assertEqual(len(commits), 1)                              # nothing committed
+            status = self.store._get("publish_status")
+            self.assertEqual(status["state"], "failed")
+            self.assertIn("events fell from 50 to 1", status["message"])
+            self.assertEqual(self.store.recent_jobs(1, provider="publisher")[0]["state"], "blocked")
+            self.assertIn("events fell", self.store._get("publish_gate")["reason"])
+            self.assertIsNotNone(self.engine._publish_job("manual"))      # manual publish overrides
+            self.assertEqual(len(commits), 2)
 
 
 class LiveLaneIngressTests(StoreCase):

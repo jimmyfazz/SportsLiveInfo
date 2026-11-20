@@ -2,6 +2,13 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## Unreleased — Live status expires; manifest declares the live lane; publish regression gate
+
+- **Stale "live" no longer lingers.** `live_document` now takes the build time and drops rows whose `live_until_utc` has passed. The live lane downgrades any stored `live` observation older than 45 minutes to `unknown` with no API call, counts it as a change, and so republishes.
+- **Manifest (additive, `sli/1.6`, `min_reader_minor` unchanged at 0):** `refresh.live_stale_after_minutes` (45) and optional `refresh.live_lane` (`enabled`, `interval_minutes` 15, `active_only_while_events_in_play`, `quiet_slots_guard_minutes` 3, `last_run_utc`). Schema and contract §4.2 updated: the 15 minute cadence applies only while events are in play.
+- **Pre-publish regression gate.** Automatic publication (after a collection or a live change) is refused, with the previous feed left live, when events or guide-corroborated bindings fall by more than 20% against the last published feed (`PUBLISH_REGRESSION_THRESHOLD`; baselines under 5 are ignored). The refusal is logged, recorded as a `publisher` job in state `blocked`, stored in `publish_gate`, and shown as the last publication attempt. A manual publish overrides.
+- Golden manifest fixture regenerated. Tests: 335 pass (6 new; baseline 329).
+
 ## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
 
 Owner report 15 Nov 2026: Scotland v Australia and Spain v England showed an Irish or Asian channel before ITV1, and Pluto's re-run of "England v Samoa — Rugby World Cup 2023" was "probably live". ITV1 had been found (five guides; corroborated for Spain v England) but was listed last.
