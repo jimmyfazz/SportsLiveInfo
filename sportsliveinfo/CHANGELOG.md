@@ -4,6 +4,16 @@
 
 ## 0.3.26 — 20 Nov 2026 follow-ups: blocked-publish alert, crest toggles, seeded tables review and overrides
 
+### Audit 20 Nov follow-ups (SLI side of `COMBINED_AUDIT_2026-11-20`; no version bump)
+
+- **CA-08 F1 sessions published twice.** `linking._same_event` merges motorsport rows of one competition when both name the same session (own `session`, or one found in the title) within 90 minutes, or when one row names no session (TheSportsDB titles the weekend, for example "Las Vegas Grand Prix") and starts within 15 minutes of the other's session. A title that names a different session ("Reverse Grid Race") stays separate; two sessionless rows never merge. `tests/test_f1_practice_dedupe.py`.
+- **CA-06 `refresh.collected_at`** (optional) and `refresh.collected_at_expected` in the manifest, and `collected_at` in the health asset: the last full collection (`sports` snapshot `generated_at`), not renewed by a live-lane publish. Contract section 3, schema, golden fixtures regenerated. B1G does not read it yet.
+- **CA-07 rollback.** RUNBOOK section 5 rewritten (republish as a NEW revision); `tools/republish_revision.py` (dry run by default) builds that manifest; `tests/test_republish_revision.py`.
+- **CA-03 dictionary budget.** Confirmed existing: parts splitter, 80% alert, plain `dictionary` alias when UK/Europe fits in one part. Added `tests/test_audit_20nov_sli.py` with the recorded live size (6,969,653 bytes, 83%) and a headroom test (fails when the recorded size plus 15% reaches the cap). B1G cannot read parts yet.
+- **CA-12 crest preview.** The Publishing page says "Crest references: OFF/ON, N of M collected events would carry / carry crests" (`feed.crest_preview`). Enabling is still owner configuration.
+- **CA-24** README, CLAUDE.md, CURRENT_STATUS and the contract header now say `sli/1.7` / 0.3.26 with the capability list.
+- Not done: CA-09, CA-18 (they trade API budget against flicker, owner decision), CA-16 (a real 00:00Z kick-off is plausible for US events), CA-17 (tennis settle, size M), CA-19.
+
 ## 0.3.25 — 20 Nov 2026 release: history, scores, crests, standings, channel hints, health alerts, ops hardening
 
 ### Follow-ups: blocked-publish alert, crest toggles, seeded-table overrides (after 0.3.25 was cut; the lead bumps the version)

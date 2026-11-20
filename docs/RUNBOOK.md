@@ -140,18 +140,23 @@ Never edit the threshold to get past a block. Changing the threshold is a code c
 
 ## 5. Rollback (republishing a previous revision)
 
-**Supported by the App: no.** Nothing in `src/` republishes an earlier revision. `build_feed` only records `previous_revision` in the manifest. There is no action, page or function that restores a revision. Verified by reading `feed.py`, `engine.py` and `server.py`.
+**Supported by the App: no, but a tool builds the rollback manifest.** Nothing in `src/` republishes an earlier revision; `tools/republish_revision.py` does it as a manual operator step.
+
+**Why restoring the old `manifest.json` does not work (audit 20 Nov 2026, CA-07).** B1G ignores any manifest whose `generated_at` is older than the one it already holds (`SliFeedUpdater.kt`, the cache guard). A restored manifest keeps its old `generated_at` (and an `expires_at` that is probably past), so every TV keeps the bad feed. The correct rollback is therefore a **new revision**: the old asset set under a fresh `generated_at`, `expires_at`, `revision` and `previous_revision`.
 
 **What exists to work with:**
-- The public repository keeps the last 10 revisions: `v1/manifests/<revision>.json` and the assets they reference (`FEED_RETAIN = 10`). Older files are deleted in the same commit.
-- Every feed commit is a single atomic commit with the message `SportsLiveInfo feed <revision> (<n> events)`. Git history therefore holds every published state.
+- The public repository keeps the last 10 revisions: `v1/manifests/<revision>.json` and the assets they reference (`FEED_RETAIN = 10`). Older files are deleted in the same commit and are only in git history.
+- Every feed commit is a single atomic commit with the message `SportsLiveInfo feed <revision> (<n> events)`.
 
-**Manual rollback (operator action outside the App; not run, owner approval required):**
-1. **Stop the App writing first.** Untick **Enable publishing** on the Publishing page and save. Otherwise the App's next run will commit its own current build over the rollback. The App does not know about changes made in GitHub.
-2. Find the target commit: `git log --oneline -- v1/manifest.json` in a clone of `LiveSports-EPG`.
-3. Restore `v1/manifest.json` (and any assets it needs that are missing) from that commit, as a **new** commit. Do not force-push or rewrite history.
-4. **Check the expiry.** The old manifest's `expires_at` was set 48 h after its build. An old copy is probably already expired, and readers may treat it as stale. The App has no code to re-stamp it. A rollback therefore often means fixing the source data and publishing a new revision, not restoring old bytes.
-5. Re-enable publishing only when you have decided what the next run should publish. Note that the App republishes its current build after its 24 h renewal.
+**Manual rollback (operator action outside the App; not run against the real feed, owner approval required):**
+1. **Stop the App writing first.** Untick **Enable publishing** on the Publishing page and save. Otherwise its next run commits its own current build over the rollback.
+2. Update a clone of `LiveSports-EPG` (`git pull`). Pick the target revision from `v1/manifests/` (or `git log --oneline -- v1/manifest.json`; restore missing asset files from that commit first).
+3. Dry run: `python3 tools/republish_revision.py --repo <clone> --revision <old revision>`. It checks that every asset file exists and matches its sha256, and prints the new revision, `generated_at` and `expires_at`. It refuses a clock behind the current manifest.
+4. Apply: the same command with `--apply`. It writes `v1/manifest.json` and `v1/manifests/<new revision>.json`. Commit both as **one new commit** and push. Never force-push or rewrite history.
+5. Check from a TV or `curl`: the manifest has `rollback_of` set, a newer `generated_at`, and the old asset hashes. `refresh.collected_at` still shows the old collection time, which is honest.
+6. Re-enable publishing only when you know what the next run should publish. The next App run will replace the rollback with its own build; fix the data problem first, or keep publishing off.
+
+**Limits:** the `live` asset in an old revision holds old statuses (readers treat anything older than 45 minutes as not live). If the Home Assistant clock ever jumps forward, TVs reject later manifests until `generated_at` passes it: use the same tool with a correct clock, never a forged time. A monotonic `sequence` (audit suggestion) is not implemented.
 
 **App code rollback** (not the feed): restore the App backup taken before the update (section 7). Whether a backup restore also reverts the App image is **not verified**. Check on the device. Otherwise reinstall the previous source revision as described in [the operator guide](../sportsliveinfo/DOCS.md#update-an-existing-local-installation).
 

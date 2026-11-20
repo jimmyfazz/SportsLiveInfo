@@ -578,6 +578,10 @@ Gate: `python3 -m compileall -q sportsliveinfo/src tests` and `PYTHONPATH=sports
 
 NOT RUN: Home Assistant deployment, a real GitHub commit or squash, the dead-man workflow on GitHub, any run against real 11 to 33 MB dictionaries, a live slow upstream. The header phase of a request is not bound by the wall-clock deadline (documented). B1G reading `dictionary:*`/`guide_map:*` parts is NOT DONE: it needs the separate B1G change; until then TVs that read only `dictionary` receive the UK/Europe part when it fits alone, and nothing for a dictionary over the cap (as before, but now announced in `notices`).
 
+## 20 Nov 2026 audit follow-ups (branch s4-auditfix, from origin/main ee2752d, 0.3.26; no version bump)
+
+CA-08 F1 session merge, CA-06 `collected_at`, CA-07 rollback runbook and `tools/republish_revision.py`, CA-03 size budget test, CA-12 crest preview on the Publishing page, CA-24 docs. Details in the CHANGELOG "Audit 20 Nov follow-ups". Gate: compileall clean; `unittest discover` passes (611 before, 633 after). NOT RUN: Home Assistant, B1G, a real rollback against LiveSports-EPG.
+
 ## SportsLiveInfo — 20 Nov 2026 handover (release/20nov, merged to main)
 
 Written so Claude or ChatGPT can resume. Nothing was deployed and no version file was bumped; the owner updates Home Assistant.
