@@ -7,6 +7,12 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 20 November 2026 — scores per source behind a rights flag (branch `feat/scores-sli-1-7`)
+
+- **Decision (advisor):** ship scores per source behind `score_approvals`, default off; the owner must read the API-Sports and football-data.org terms and approve before anything is published. Design is additive (`sli/1.7`, capability `scores`, `min_reader_minor` unchanged).
+- **Change:** decoders keep goals and scores; live lane and settle pass store them with the status observation; a changed score republishes the live asset; merge re-aligns scores to the published participants order; feed publishes final scores in day assets and live scores in the live asset only for approved sources and sports; manifest `compatibility.scores` and `rights.scores`; Ingress approval form; contract §4.4, schemas, SOURCE_REGISTRY, CHANGELOG. See CHANGELOG, Unreleased.
+- **Results:** compileall and `unittest discover` pass (see the gate line in the hand-off); the existing golden fixtures are unchanged (disabled output is byte-identical); `schemas/fixtures/sli-v1-scores` is the new `sli/1.7` variant.
+- **NOT RUN:** a live API-Sports or football-data.org call, Home Assistant, a deploy; no version bump. The owner must still: read each source's score terms and approve in Ingress; confirm `PEN` semantics (score before the shootout) and API-Sports field shapes on a live match; and decide whether B1G shows scores (the B1 reader has not been changed).
 ## 20 November 2026 — cross-source duplicate fixtures (branch `fix/event-dedupe-names`)
 
 - **Cause:** `linking.same_team` allowed only generic words to differ; real pairs (Bielefeld, Havelse, Heidenheim 1846, Espanyol, Troyes, Union Berlin Frauen) never merged.

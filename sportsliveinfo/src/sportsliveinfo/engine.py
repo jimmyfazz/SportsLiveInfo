@@ -826,6 +826,12 @@ class Engine:
                              status_normalized=seen.get("status_normalized"),
                              status_observed_at=seen["status_observed_at"])
                 event.pop("live_status_unconfirmed", None)
+                # A newer observation replaces the record's score (sli/1.7); one without a score clears it, so a
+                # score never outlives the status it was read with. Both stay internal unless scores are enabled.
+                if isinstance(seen.get("score"), dict):
+                    event["score"] = seen["score"]
+                else:
+                    event.pop("score", None)
             out.append(event)
         return out
 
@@ -1167,6 +1173,7 @@ class Engine:
         observations = dict(stored.get("events") or {})
         candidates = self._live_candidates(conf, now, observations)
         calls, changed, notes = 0, 0, []
+        score_sources = feed.score_approvals(conf)      # empty (the default): scores are neither read nor stored
         for name, rows in sorted(candidates.items()):
             _, base, key_name, daily_limit = providers.SPORTS[name]
             unsupported = self.store._get("live_unsupported:" + name) or ""
@@ -1215,8 +1222,11 @@ class Engine:
             for event, ids in rows:
                 for sid in ids:
                     previous = observations.get(sid)
+                    score = None
                     if sid in board:
                         status, raw = board[sid]["status_normalized"], str(board[sid].get("status") or "")[:20]
+                        if name in score_sources:
+                            score = board[sid].get("score")
                     else:
                         before = (previous or event).get("status_normalized")
                         if before != "live":
@@ -1224,13 +1234,18 @@ class Engine:
                         status, raw = "unknown", "left the live board"   # finished? abandoned? not claimed
                     if previous and previous.get("status_normalized") == status:
                         try:
-                            if now - datetime.fromisoformat(previous["status_observed_at"]) < LIVE_REFRESH:
+                            # A changed score is news at once (it republishes the live asset); otherwise an unchanged
+                            # status is only re-confirmed every LIVE_REFRESH.
+                            if (previous.get("score") == score
+                                    and now - datetime.fromisoformat(previous["status_observed_at"]) < LIVE_REFRESH):
                                 continue       # unchanged and recently confirmed: no new asset
                         except (KeyError, TypeError, ValueError):
                             pass
                     elif not previous and status == event.get("status_normalized") and status != "live":
                         continue
                     observations[sid] = {"status": raw, "status_normalized": status, "status_observed_at": stamp}
+                    if score:
+                        observations[sid]["score"] = score
                     changed += 1
         # A stored "live" nobody re-confirmed within LIVE_MAX_AGE becomes "unknown" (no API call), so the lane
         # republishes and a published "live" cannot outlive its evidence (readers already ignore it after 45 min).
@@ -1308,6 +1323,7 @@ class Engine:
             return 0
         today = now.astimezone(LONDON).date()
         calls, changed, notes = 0, 0, []
+        score_sources = feed.score_approvals(conf)
         for name, days in sorted(candidates.items()):
             _, base, key_name, daily_limit = providers.SPORTS[name]
             last = self.store._get("settle_last:" + name) or ""
@@ -1361,10 +1377,14 @@ class Engine:
                     if status not in SETTLE_FINAL:
                         continue               # still in progress, or not listed: never claimed finished
                     previous = observations.get(sid)
-                    if previous and previous.get("status_normalized") == status:
+                    score = row.get("score") if name in score_sources and status == "finished" else None
+                    if previous and previous.get("status_normalized") == status and (
+                            score is None or previous.get("score") == score):
                         continue
                     observations[sid] = {"status": str(row.get("status") or "")[:20], "status_normalized": status,
                                          "status_observed_at": stamp}
+                    if score:
+                        observations[sid]["score"] = score     # the final score, read with the final status
                     changed += 1
         if changed:
             self.store._put("live_observations", {"events": observations, "updated_at": stamp})

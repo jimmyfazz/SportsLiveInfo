@@ -303,7 +303,7 @@ class UI(BaseHTTPRequestHandler):
         message = "Settings saved"
         page = {"sports": "sources", "bulk_sources": "sources", "options": "sources",
                 "epg": "sources", "test_source": "sources", "dictionary": "sources", "github": "publishing",
-                "test_github": "publishing", "approvals": "publishing", "publish": "publishing",
+                "test_github": "publishing", "approvals": "publishing", "score_approvals": "publishing", "publish": "publishing",
                 "private_feed": "publishing", "test_private_github": "publishing",
                 "preview_feed": "publishing", "schedule": "scheduler", "live_status": "scheduler", "lineup_upload": "coverage",
                 "lineup_delete": "coverage", "coverage_survey": "coverage", "coverage_rebuild": "coverage",
@@ -419,6 +419,16 @@ class UI(BaseHTTPRequestHandler):
             log.append({"at": utcnow(), "approved": chosen})
             self.store._put("approval_log", log)
             return "publishing", ("Publication approvals saved: %s" % ", ".join(chosen)) if chosen else "All publication approvals withdrawn"
+        if action == "score_approvals":
+            # Scores are a separate right from fixture facts: each source's score terms are approved on their own.
+            chosen = sorted({s for s in form.get("approve_score", []) if s in providers.SCORE_ELIGIBLE})
+            if chosen and value("attest_scores") != "on":
+                raise ValueError("Confirm you have read each selected source's terms for publishing scores")
+            self.store.configure({"score_approvals": chosen})
+            log = (self.store._get("approval_log") or [])[-49:]
+            log.append({"at": utcnow(), "scores_approved": chosen})
+            self.store._put("approval_log", log)
+            return "publishing", ("Score approvals saved: %s" % ", ".join(chosen)) if chosen else "All score approvals withdrawn"
         if action == "test_github":
             # Authenticate and inspect the SAVED destination; never commit. Runs in the background.
             started = self.engine.start_connection_test(private=False)
@@ -1184,7 +1194,10 @@ class UI(BaseHTTPRequestHandler):
                 '15 minutes (football <code>fixtures?live=all</code>, other products <code>games?live=all</code>), '
                 'at most %d calls a day per product, counted in the product\'s own daily quota and always leaving '
                 'calls for the scheduled refreshes. Only status changes are published, as the small <code>live</code> '
-                'asset (when automatic publishing is on). No scores are kept.</p><p class="%s">%s</p>'
+                'asset (when automatic publishing is on). Scores are kept and published only for sources you approve on '
+                'the Publishing page (Score approvals, off by default); with none approved no score is read, stored or '
+                'published. A changed score also republishes the live asset, so approved live scores can add up to '
+                'one commit per 15 minute pass during play.</p><p class="%s">%s</p>'
                 '<p class="sub">Last pass: %s · %s · Live calls today (UTC): %s</p>'
                 '<p class="sub">Settle pass (final results after the end, hourly, at most %d calls a day per product): '
                 '%s · %s · Settle calls today (UTC): %s</p>%s</section>') % (
@@ -1294,6 +1307,22 @@ class UI(BaseHTTPRequestHandler):
         last = ("Last changed %s." % e(when(log[-1]["at"]))) if log else "Never changed."
         body += '<section class="card" style="margin-top:16px"><h2>Publication rights register</h2><p class="sub">Approved now: %s. %s</p>%s</section>' % (
             e(", ".join(approvals) or "none"), last, self._form("approvals", rights))
+        score_approved = list(config.get("score_approvals", []))
+        scores = ('<p>Scores (feed sli/1.7) are a separate right from fixture facts and are <strong>off by default</strong>. '
+                  'Tick a source only after reading its terms for publishing scores. Eligible: API-Sports products '
+                  '(live and final scores for football, rugby, basketball, ice hockey, American football, baseball, '
+                  'handball, volleyball and AFL) and football-data.org (final scores only). TheSportsDB, Jolpica and OpenF1 '
+                  'are never eligible; tennis, cricket, golf, motorsport, boxing and MMA never carry scores. A score is '
+                  'published only for an event that is also approved above. Untick everything to switch scores off.</p><div class="grid">')
+        for name in providers.SCORE_ELIGIBLE:
+            scores += ('<label class="card" style="margin:0"><input type="checkbox" name="approve_score" value="%s" %s> '
+                       '<strong>%s</strong><br><small>%s</small></label>') % (
+                e(name), "checked" if name in score_approved else "", e(providers.SPORTS[name][0]),
+                "final scores only" if providers.SCORE_ELIGIBLE[name] == "final" else "live and final scores")
+        scores += ('</div><label><input type="checkbox" name="attest_scores" value="on"> I have read the terms of every '
+                   'source ticked above and they allow publishing scores.</label><button type="submit">Save score approvals</button>')
+        body += '<section class="card" style="margin-top:16px"><h2>Score approvals</h2><p class="sub">Approved now: %s.</p>%s</section>' % (
+            e(", ".join(score_approved) or "none (no score is published)"), self._form("score_approvals", scores))
         blockers = []
         if not config.get("setup_complete"):
             blockers.append("first-run setup is not finished (Sources page)")

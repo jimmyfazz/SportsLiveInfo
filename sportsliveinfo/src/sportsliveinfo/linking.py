@@ -18,7 +18,7 @@ from . import dictionary as channel_dictionary, taxonomy
 from .guide import (COUNTRY_BY_SOURCE, REGIONAL_PARENTS, canonical_channel, channel_families, foreign_guide_channel,
                     normalized_name)
 from .identity import name_signature
-from .providers import EPG_FAMILY, SPORT_FAMILY, UNVERIFIED_LINEAGE_FAMILIES
+from .providers import EPG_FAMILY, SCORE_ELIGIBLE, SCORE_SPORTS, SPORT_FAMILY, UNVERIFIED_LINEAGE_FAMILIES
 
 LONDON = ZoneInfo("Europe/London")
 UNCONFIRMED_START_PRECISIONS = frozenset({"date_only", "time_tbc"})
@@ -250,6 +250,45 @@ def status_choice(rows):
                                     str(r.get("status_observed_at") or "")))
 
 
+def _orientation(own, other, generic, blocked):
+    """+1 when ``other``'s two sides line up with ``own``'s in the same order, -1 when swapped, None when the pairing is
+    not certain (a side missing, or both orders plausible). Used so a score stays attached to the right team."""
+    if len(own) != 2 or len(other) != 2:
+        return None
+
+    def side(x, y):
+        return same_team(x, y, generic) or _anchored_side(x, y, blocked) or _anchored_side(y, x, blocked)
+    straight = side(own[0], other[0]) and side(own[1], other[1])
+    swapped = side(own[0], other[1]) and side(own[1], other[0])
+    if straight == swapped:
+        return None
+    return 1 if straight else -1
+
+
+def _group_scores(rows, primary):
+    """(``scores``, ``score_align``) for a merged group (feed sli/1.7). Every contributor's own ``score`` (its home and
+    away follow its own participants order) is re-expressed in the merged event's participants order, which is the
+    primary record's: ``score_align[source event id]`` is +1 (same order) or -1 (swapped), absent when uncertain, in
+    which case that contributor's score is dropped. ``scores`` is {source event id: aligned score candidate}."""
+    family = _sport_family(primary["sport"])
+    generic = _GENERIC | _RUGBY_GENERIC if family == "rugby" else _GENERIC
+    blocked = frozenset() if family == "rugby" else _RUGBY_GENERIC
+    align, scores = {}, {}
+    for row in rows:
+        direction = 1 if row is primary or row["id"] == primary["id"] \
+            else _orientation(primary["_teams"], row["_teams"], generic, blocked)
+        if direction is None:
+            continue
+        align[row["id"]] = direction
+        score = row.get("score")
+        if isinstance(score, dict) and isinstance(score.get("home"), int) and isinstance(score.get("away"), int):
+            home, away = (score["home"], score["away"]) if direction == 1 else (score["away"], score["home"])
+            scores[row["id"]] = {"home": home, "away": away, "period": score.get("period"),
+                                 "source": row.get("source_id"), "observed_at": row.get("status_observed_at"),
+                                 "status": row.get("status_normalized")}
+    return scores, align
+
+
 def merge_events(events):
     """Fuse duplicate fixtures across providers; keep the most precise record as primary, and take the status from
     the most advanced, most recently observed contributor."""
@@ -306,6 +345,12 @@ def merge_events(events):
                 primary[field] = status[field]
             else:
                 primary.pop(field, None)
+        scores, align = _group_scores(rows, rows[0])
+        primary.pop("score", None)
+        if scores:
+            primary["scores"] = scores
+        if len(rows) > 1 and primary.get("sport") in SCORE_SPORTS and any(r["source_id"] in SCORE_ELIGIBLE for r in rows):
+            primary["score_align"] = align
         primary.update({
             "sources": sources, "source_events": sorted(r["id"] for r in rows),
             "corroboration": len(families),

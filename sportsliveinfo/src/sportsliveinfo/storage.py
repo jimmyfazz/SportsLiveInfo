@@ -25,6 +25,9 @@ DEFAULT = {
     "github": {"owner": "jimmyfazz", "repository": "LiveSports-EPG", "branch": "main",
                "token": "", "enabled": False, "auto_publish": False},
     "publication_approvals": [],
+    # Scores (feed sli/1.7): sources whose live and final scores may be published, per source, DEFAULT EMPTY (off).
+    # Separate from publication_approvals: the owner approves each source's score terms on their own.
+    "score_approvals": [],
     # Light live-status lane (API-Sports live boards in match hours, within a daily budget). Runs only when an
     # API-Sports key is saved and an API-Sports product is enabled; switch off here or on the Scheduler page.
     "live_status": True,
@@ -157,6 +160,8 @@ class Store:
                         raise ValueError("Invalid scheduler time")
                     if key == "publication_approvals" and any(x not in providers.SPORTS for x in value):
                         raise ValueError("Unknown publication source")
+                    if key == "score_approvals" and any(x not in providers.SCORE_ELIGIBLE for x in value):
+                        raise ValueError("Source is not eligible for score publication")
                     config[key] = value
                 else:
                     config[key] = value

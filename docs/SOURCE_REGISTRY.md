@@ -13,6 +13,19 @@
 
 The tables below retain dated research claims. Endpoint operation, supplier quotas/free eligibility and legal terms were **not newly reverified** in this review and test correction. DOC-CONFIRMED refers to the original research, not current deployment approval. Even a working source is not automatically licensed for public redistribution.
 
+## Scores in the public feed (format `sli/1.7`, `score_approvals`, default off)
+
+Scores are a separate right from fixture facts. **No source is approved for scores until the owner records that they have read its terms** (Ingress → Publishing → Score approvals, which writes `score_approvals`); until then no score is read into the feed, and with none approved the feed is byte-identical to `sli/1.6`. Contract: [FEED_CONTRACT_SLI_V1.md](FEED_CONTRACT_SLI_V1.md) §4.4.
+
+| Source | Scores status | Notes |
+|---|---|---|
+| API-Sports (football, rugby, basketball, hockey, NFL, baseball, handball, volleyball, AFL) | Eligible, **not approved**: live and final | Read from the live boards and the settle pass that already run (no extra calls). Terms on publishing scores to third parties are **not yet read**; the owner must read and approve. |
+| API-Sports MMA | Never | No scores are decoded. |
+| football-data.org | Eligible, wired, **not approved**: final scores of regular-time results only | Free plan scores are delayed; extra-time and shootout results are not read. Terms not yet read. |
+| TheSportsDB | Never | Free key terms do not allow it; the setting is rejected. |
+| Jolpica-F1, OpenF1 | Never | F1 carries no scores. |
+| All other sources (OpenLigaDB, CricketData.org, PandaScore, racing, boxing) | Never in v1 | Tennis, cricket, golf, motorsport, boxing and MMA are outside the sport list. |
+
 ## Fixture / event data
 
 | Provider | Sports and role | Advertised free limit | Restrictions / caveats | Initial decision |

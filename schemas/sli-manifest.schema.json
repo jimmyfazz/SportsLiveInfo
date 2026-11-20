@@ -26,7 +26,9 @@
         "link_rule": {"type": "string", "description": "0.3.24+: how readers use link order and binds"},
         "live_until_rule": {"type": "string", "description": "0.3.24+: readers show LIVE while start_utc <= now < live_until_utc"},
         "live_max_age_minutes": {"type": "integer", "minimum": 1, "description": "0.3.24+: observation age limit used by live_state_rule, for readers without live_until_utc"},
-        "live_end_grace_minutes": {"type": "integer", "minimum": 0, "description": "0.3.24+: minutes after expected_end_utc that live_state_rule still trusts 'live'"}
+        "live_end_grace_minutes": {"type": "integer", "minimum": 0, "description": "0.3.24+: minutes after expected_end_utc that live_state_rule still trusts 'live'"},
+        "scores": {"type": "object", "required": ["enabled"], "description": "1.7+, present only while at least one source is approved for scores (kill switch: absent means scores are off and readers must show none)",
+                   "properties": {"enabled": {"type": "boolean"}, "rule": {"type": "string", "description": "How readers pair and show scores"}}}
       }
     },
     "revision": {"type": "string", "pattern": "^[0-9a-f]{20}$"},
@@ -87,6 +89,8 @@
       "required": ["events", "epg_programmes", "attribution"],
       "properties": {
         "epg_programmes": {"const": "not_published"},
+        "scores": {"type": "object", "required": ["approved_sources"], "description": "1.7+, present only while a source is approved for scores: the owner-approved score sources (config score_approvals)",
+                   "properties": {"approved_sources": {"type": "array", "items": {"type": "string"}}}},
         "attribution": {"type": "array", "items": {"type": "object", "required": ["source", "text", "licence"]}}
       }
     },

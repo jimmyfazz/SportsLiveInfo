@@ -439,6 +439,59 @@ def status_of(raw, sport=None):
     return "unknown"
 
 
+# ---- scores (feed sli/1.7, capability "scores"; default OFF, see docs/FEED_CONTRACT_SLI_V1.md section 4.4) ------------
+# Sources whose scores may ever be published, and only when the owner lists them in config ``score_approvals`` after
+# reading their terms. TheSportsDB, Jolpica, OpenF1 and every other source are never eligible. football-data.org is
+# wired for final scores only. The API-Sports MMA product has no scores here.
+SCORE_ELIGIBLE = {name: ("final" if name == "football_data" else "live_and_final")
+                  for name in ("api_sports", "api_sports_rugby", "api_sports_basketball", "api_sports_hockey",
+                               "api_sports_nfl", "api_sports_baseball", "api_sports_handball", "api_sports_volleyball",
+                               "api_sports_afl", "football_data")}
+# Sports whose scores v1 may carry. Tennis, cricket, golf, motorsport, boxing and MMA are excluded by design.
+SCORE_SPORTS = frozenset({"football", "rugby", "rugby_union", "rugby_league", "basketball", "ice_hockey",
+                          "american_football", "baseball", "handball", "volleyball", "aussie_rules"})
+# Closed period vocabulary: 1H HT 2H ET PEN FT AET (AET also covers "after overtime"), basketball/NFL/AFL Q1-Q4,
+# hockey P1-P3, OT. Anything else (break times, baseball innings, volleyball sets) is null: never invented.
+SCORE_PERIODS = frozenset({"1H", "HT", "2H", "ET", "PEN", "FT", "AET", "Q1", "Q2", "Q3", "Q4", "P1", "P2", "P3", "OT"})
+_PERIOD_OF_STATUS = {
+    "1h": "1H", "ht": "HT", "2h": "2H", "et": "ET", "p": "PEN", "pt": "PEN", "ap": "PEN", "pen": "PEN", "ft": "FT",
+    "aet": "AET", "aot": "AET", "q1": "Q1", "q2": "Q2", "q3": "Q3", "q4": "Q4", "p1": "P1", "p2": "P2", "p3": "P3",
+    "ot": "OT",
+}
+# Awarded or walkover results carry no played score.
+_NO_SCORE_STATUS = {"awd", "wo", "aw", "awarded"}
+
+
+def score_period(raw_status):
+    """Canonical period for a provider status code, or None (break times, innings, sets and unknown codes)."""
+    return _PERIOD_OF_STATUS.get(str(raw_status or "").strip().casefold())
+
+
+def _points(value):
+    """A non-negative whole number from an API-Sports score cell: an int, a digit string, or a dict holding its
+    ``total`` (basketball, NFL, baseball) or ``score`` (AFL). Anything else (null before the start) is None."""
+    if isinstance(value, dict):
+        value = value.get("total") if value.get("total") is not None else value.get("score")
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if 0 <= value < 1000 else None
+    if isinstance(value, str) and value.isdigit() and len(value) < 4:
+        return int(value)
+    return None
+
+
+def _score_of(home, away, raw_status, status_normalized):
+    """``{"home", "away", "period"}`` in the record's own participants order, or None when it is not certain:
+    both sides must be whole numbers and the status live or finished (never awarded, abandoned or postponed)."""
+    if status_normalized not in ("live", "finished") or str(raw_status or "").strip().casefold() in _NO_SCORE_STATUS:
+        return None
+    home, away = _points(home), _points(away)
+    if home is None or away is None:
+        return None
+    return {"home": home, "away": away, "period": score_period(raw_status)}
+
+
 def xmltv_time(value):
     value = (value or "").strip()
     if value.endswith("Z"):
@@ -669,7 +722,7 @@ def football_data_events(data):
             away = away_team.get("name") or "TBC"
             competition = m.get("competition") or {}
             raw_status = m.get("status", "SCHEDULED")
-            events.append({"id": "football-data:%s" % m["id"], "sport": "football", "competition": competition.get("name", ""),
+            event = ({"id": "football-data:%s" % m["id"], "sport": "football", "competition": competition.get("name", ""),
                            "competition_code": "fd:%s" % competition["code"] if competition.get("code") else None,
                            "competition_country": (m.get("area") or competition.get("area") or {}).get("name", ""),
                            "event_type": "match", "title": f"{home} v {away}", "participants": [home, away],
@@ -680,6 +733,15 @@ def football_data_events(data):
                            "status": raw_status, "status_normalized": status_of(raw_status),
                            "stage": m.get("stage") or "", "round": str(m.get("matchday") or ""), "venue": m.get("venue") or "",
                            "source_id": "football_data", "broadcasts": [], "broadcast_verified": False})
+            # Final scores only, and only a result decided in regular time: extra time and shootouts are not read
+            # (the full-time cell is not reliably "after 90 minutes" there), so nothing is carried when uncertain.
+            result = m.get("score") if isinstance(m.get("score"), dict) else {}
+            full = result.get("fullTime") if isinstance(result.get("fullTime"), dict) else {}
+            score = (_score_of(full.get("home"), full.get("away"), "FT", "finished")
+                     if raw_status == "FINISHED" and result.get("duration") == "REGULAR" else None)
+            if score:
+                event["score"] = score
+            events.append(event)
         except (ValueError, KeyError, TypeError):
             continue
     return events
@@ -705,7 +767,7 @@ def api_sports_events(data):
             away = (teams.get("away") or {}).get("name") or "TBC"
             league = row.get("league") or {}
             short = (fixture.get("status") or {}).get("short", "NS")
-            events.append({"id": f"api-sports:{fixture['id']}", "sport": "football", "competition": league.get("name", ""),
+            event = ({"id": f"api-sports:{fixture['id']}", "sport": "football", "competition": league.get("name", ""),
                            "competition_code": "as:%s" % league["id"] if league.get("id") else None,
                            "competition_country": league.get("country") or "",
                            "event_type": "match", "title": f"{home} v {away}", "participants": [home, away],
@@ -714,6 +776,11 @@ def api_sports_events(data):
                            "status": short, "status_normalized": status_of(short), "round": league.get("round") or "",
                            "venue": (fixture.get("venue") or {}).get("name") or "",
                            "source_id": "api_sports", "broadcasts": [], "broadcast_verified": False})
+            goals = row.get("goals") or {}
+            score = _score_of(goals.get("home"), goals.get("away"), short, event["status_normalized"])
+            if score:
+                event["score"] = score      # kept in the record's own order; the feed decides whether it is published
+            events.append(event)
         except (ValueError, KeyError, TypeError, AttributeError):
             continue
     return events
@@ -749,7 +816,7 @@ def api_sports_games_events(data, source_id, sport):
             league = row.get("league") or {}
             country = row.get("country") or league.get("country") or {}
             short = (game.get("status") or {}).get("short", "NS")
-            events.append({"id": "%s:%s" % (source_id.replace("_", "-"), game["id"]), "sport": sport,
+            event = ({"id": "%s:%s" % (source_id.replace("_", "-"), game["id"]), "sport": sport,
                            "competition": league.get("name", ""),
                            "competition_code": "as-%s:%s" % (sport, league["id"]) if league.get("id") else None,
                            "competition_country": country.get("name", "") if isinstance(country, dict) else str(country),
@@ -759,6 +826,11 @@ def api_sports_games_events(data, source_id, sport):
                            "round": str(row.get("week") or game.get("week") or game.get("stage") or ""),
                            "venue": (game.get("venue") or {}).get("name", "") if isinstance(game.get("venue"), dict) else "",
                            "source_id": source_id, "broadcasts": [], "broadcast_verified": False})
+            points = row.get("scores") if isinstance(row.get("scores"), dict) else {}
+            score = _score_of(points.get("home"), points.get("away"), short, event["status_normalized"])
+            if score and sport in SCORE_SPORTS:
+                event["score"] = score
+            events.append(event)
         except (ValueError, KeyError, TypeError, OverflowError):
             continue
     return events
