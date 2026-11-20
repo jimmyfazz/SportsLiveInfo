@@ -307,7 +307,7 @@ class UI(BaseHTTPRequestHandler):
                 "epg": "sources", "test_source": "sources", "dictionary": "sources", "github": "publishing",
                 "test_github": "publishing", "approvals": "publishing", "score_approvals": "publishing", "publish": "publishing",
                 "private_feed": "publishing", "test_private_github": "publishing",
-                "preview_feed": "publishing", "schedule": "scheduler", "live_status": "scheduler", "lineup_upload": "coverage",
+                "preview_feed": "publishing", "schedule": "scheduler", "live_status": "scheduler", "standings": "scheduler", "lineup_upload": "coverage",
                 "lineup_delete": "coverage", "coverage_survey": "coverage", "coverage_rebuild": "coverage",
                 "tv_export_upload": "coverage", "tv_export_delete": "coverage"}.get(action, page)
         try:
@@ -472,6 +472,10 @@ class UI(BaseHTTPRequestHandler):
             enabled = value("enabled") == "on"
             self.store.configure({"live_status": enabled})
             return "scheduler", "Live status lane %s" % ("switched on" if enabled else "switched off")
+        if action == "standings":
+            enabled = value("enabled") == "on"
+            self.store.configure({"publish_standings": enabled, "standings_api_sports": value("api_sports") == "on"})
+            return "scheduler", "League tables %s" % ("switched on" if enabled else "switched off")
         if action == "finish":
             self.store.configure({"setup_complete": True})
             return "dashboard", "First-run setup complete; collector is ready"
@@ -1176,7 +1180,31 @@ class UI(BaseHTTPRequestHandler):
         local = datetime.now(LONDON)
         beat = self.store._get("scheduler_heartbeat")
         text += '<p class="sub">Current London time: %s · Scheduler last active: %s</p>' % (e(local.strftime("%d %b %Y, %H:%M %Z")), e(when(beat)))
-        return text + self._live_card(config)
+        return text + self._live_card(config) + self._standings_card(config)
+
+    def _standings_card(self, config):
+        """League tables (feed asset ``standings``): kill switch, optional API-Sports source, budgets and last pass."""
+        from . import standings
+        on = standings.enabled(config)
+        usage = self.store.usage()
+        last = (self.store.recent_jobs(1, provider="standings") or [{}])[0]
+        form = ('<label><input type="checkbox" name="enabled" value="on" %s> Publish league tables</label>'
+                '<label><input type="checkbox" name="api_sports" value="on" %s> Also use API-Sports for tables '
+                'football-data.org lacks (needs the API-Sports key; at most %d calls a day)</label>'
+                '<button type="submit">Save</button>' % ("checked" if on else "",
+                                                          "checked" if config.get("standings_api_sports") else "",
+                                                          standings.AS_DAILY_BUDGET))
+        return ('<section class="card" style="margin-top:16px"><h3>League tables</h3><p>Once a day (first refresh of the '
+                'London day) SportsLiveInfo reads each supported league table from football-data.org (needs its key and '
+                'the source enabled): at most %d calls a day, always leaving %d of its daily calls for fixtures. Tables '
+                'are published as small <code>standings</code> assets with the football-data.org attribution; switching '
+                'this off removes them from the next feed.</p><p class="%s">%s</p>'
+                '<p class="sub">Last pass: %s · %s · Calls today (UTC): football-data.org %d/%d, API-Sports %d/%d</p>%s'
+                '</section>') % (
+            standings.FD_DAILY_BUDGET, standings.FD_RESERVE, "ok" if on else "warn", "On." if on else "Switched off.",
+            e(when(last.get("time"))), e(last.get("details") or "not run yet"),
+            usage.get("standings:football_data", 0), standings.FD_DAILY_BUDGET,
+            usage.get("standings:api_sports", 0), standings.AS_DAILY_BUDGET, self._form("standings", form))
 
     def _live_card(self, config):
         """The live-status lane: switch, whether it can run, and its last pass (Scheduler page and Diagnostics)."""

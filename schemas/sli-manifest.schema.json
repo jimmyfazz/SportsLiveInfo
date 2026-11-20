@@ -32,7 +32,9 @@
         "time_precision_rule": {"type": "string", "description": "Contract 4.5: date_only and time_tbc starts are 00:00 Europe/London, never a clock time"},
         "starting_soon_minutes": {"type": "integer", "minimum": 0, "description": "Contract 4.5: display_state starting_soon begins this many minutes before start_utc"},
         "scores": {"type": "object", "required": ["enabled"], "description": "1.7+, present only while at least one source is approved for scores (kill switch: absent means scores are off and readers must show none)",
-                   "properties": {"enabled": {"type": "boolean"}, "rule": {"type": "string", "description": "How readers pair and show scores"}}}
+                   "properties": {"enabled": {"type": "boolean"}, "rule": {"type": "string", "description": "How readers pair and show scores"}}},
+        "standings": {"type": "object", "required": ["enabled"], "description": "Optional, present only while standings assets are published (capability standings; kill switch: absent means readers show no feed standings)",
+                      "properties": {"enabled": {"type": "boolean"}, "rule": {"type": "string", "description": "How readers use the standings assets"}}}
       }
     },
     "revision": {"type": "string", "pattern": "^[0-9a-f]{20}$"},
@@ -71,7 +73,7 @@
         "type": "object",
         "required": ["kind", "path", "sha256", "bytes", "schema", "content_type", "required"],
         "properties": {
-          "kind": {"type": "string", "description": "taxonomy | channels | identity | dictionary | guide_map | events:YYYY-MM-DD | events:<history_from> (optional, required false, previous London day, contract 4.5) | events_extra:YYYY-MM-DD (1.6, optional, tier extra) | today | live (1.6, optional, sli.live/1) | health | (future kinds: ignore)"},
+"kind": {"type": "string", "description": "taxonomy | channels | identity | dictionary | guide_map | events:YYYY-MM-DD | events:<history_from> (optional, required false, previous London day, contract 4.6) | events_extra:YYYY-MM-DD (1.6, optional, tier extra) | today | live (1.6, optional, sli.live/1) | standings:<competition_id> (optional, sli.standings/1, capability standings) | health | (future kinds: ignore)"},
           "path": {"type": "string", "pattern": "^v1/assets/[a-z_]+/[0-9a-f]{24}\\.json$"},
           "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "bytes": {"type": "integer", "minimum": 1},
@@ -79,6 +81,7 @@
           "content_type": {"const": "application/json"},
           "required": {"type": "boolean"},
           "date": {"type": "string"},
+"competition_id": {"type": "string", "description": "standings:<competition_id> assets only"},
           "records": {"type": "integer"},
           "history": {"type": "boolean", "description": "Contract 4.5, optional: true on the events:<history_from> asset"}
         }
@@ -96,6 +99,10 @@
         "epg_programmes": {"const": "not_published"},
         "scores": {"type": "object", "required": ["approved_sources"], "description": "1.7+, present only while a source is approved for scores: the owner-approved score sources (config score_approvals)",
                    "properties": {"approved_sources": {"type": "array", "items": {"type": "string"}}}},
+        "standings": {"type": "object", "required": ["enabled", "max_age_days", "sources"], "description": "Optional (capability standings), present only while standings assets are published: master switch, maximum table age and the attribution of every source used",
+                      "properties": {"enabled": {"type": "boolean"}, "max_age_days": {"type": "integer", "minimum": 1},
+                                     "sources": {"type": "array", "items": {"type": "object", "required": ["source", "text", "licence"],
+                                                 "properties": {"source": {"type": "string"}, "text": {"type": "string"}, "licence": {"type": "string"}}}}}},
         "crests": {
           "type": "object",
           "description": "Optional (capability team_crests). Master kill switch: crests can be switched off centrally without a TV update. References only, never images.",

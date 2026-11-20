@@ -19,7 +19,7 @@ from functools import partial
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import coverage, dictionary, feed, health, identity, linking, providers, taxonomy
+from . import coverage, dictionary, feed, health, identity, linking, providers, standings, taxonomy
 from .storage import utcnow
 from .guide import analyze_guide
 
@@ -285,6 +285,8 @@ class Engine:
                 except Exception as exc:  # A crashed lane must not mask missing data.
                     LOGGER.error("Collector lane failed (%s)", type(exc).__name__)
                     self.store.job("collector", "lane_error", type(exc).__name__)
+        if scope in ("both", "sports"):
+            self._collect_standings(conf)
         if scope in ("both", "epg") and conf.get("dictionary", {}).get("iptvorg"):
             self._refresh_dictionary()
         if guides_refreshed:
@@ -313,6 +315,14 @@ class Engine:
                 and conf.get("publication_approvals")):
             self._publish_job("automatic")
         return bool(successes)
+
+    def _collect_standings(self, conf):
+        """League tables (optional ``standings`` asset): own budgets and reserves, never fails a collection."""
+        try:
+            standings.collect(self, conf)
+        except Exception as exc:
+            LOGGER.error("Standings collection failed (%s)", type(exc).__name__)
+            self.store.job("standings", "failed", "Unexpected %s; last-good tables retained" % type(exc).__name__)
 
     # ---- request planning -------------------------------------------------
     @staticmethod

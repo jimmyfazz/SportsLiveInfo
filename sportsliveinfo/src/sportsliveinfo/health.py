@@ -47,7 +47,7 @@ NOTIFY_URL = "http://supervisor/core/api/services/persistent_notification/%s"
 # Reasons that make /healthz answer 503. ``scheduler_stalled`` is also the only reason for the liveness scope used by
 # the Supervisor watchdog (restarting cannot fix a stale manifest caused by a revoked token or a failing source).
 STALL_CODES = ("scheduler_stalled", "manifest_overdue", "manifest_old")
-NON_SOURCE_JOBS = {"collector", "publisher", "private_publisher", "scheduler", "ui", "dictionary", "identity", "live_status"}
+NON_SOURCE_JOBS = {"collector", "publisher", "private_publisher", "scheduler", "ui", "dictionary", "identity", "live_status", "standings"}
 
 _TOKEN_EXPIRY = {"seen": False, "value": None}
 

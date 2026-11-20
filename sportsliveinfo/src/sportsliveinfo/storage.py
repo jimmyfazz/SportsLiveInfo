@@ -35,6 +35,12 @@ DEFAULT = {
    # Light live-status lane (API-Sports live boards in match hours, within a daily budget). Runs only when an
     # API-Sports key is saved and an API-Sports product is enabled; switch off here or on the Scheduler page.
     "live_status": True,
+    # League tables (contract §4.6, optional asset kind "standings"). Owner statement 20 Nov 2026: rights permitted for
+    # this app's use, so default on; this is the kill switch (nothing collected or published while false).
+    "publish_standings": True,
+    # Optional second source for tables football-data.org lacks or returns incomplete: API-Sports `standings`, a very
+    # small separate daily cap, never into the live-lane reserve. Off by default.
+    "standings_api_sports": False,
     # Optional PRIVATE feed for the owner's own TVs (personal use): every collected event plus
     # guide-listed live sport. Uses the GitHub token above; must be a private repository.
     "private_feed": {"owner": "jimmyfazz", "repository": "", "branch": "main", "enabled": False},
