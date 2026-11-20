@@ -1176,7 +1176,7 @@ class Engine:
         observations = dict(stored.get("events") or {})
         candidates = self._live_candidates(conf, now, observations)
         calls, changed, notes = 0, 0, []
-        score_sources = feed.score_approvals(conf)      # empty (the default): scores are neither read nor stored
+        score_sources = feed.score_approvals(conf)      # empty (kill switch): scores are neither read nor stored
         for name, rows in sorted(candidates.items()):
             _, base, key_name, daily_limit = providers.SPORTS[name]
             unsupported = self.store._get("live_unsupported:" + name) or ""

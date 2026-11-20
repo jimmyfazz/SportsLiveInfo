@@ -7,6 +7,12 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (public; it was private when this section was written on 12 November 2026).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 20 November 2026 — owner statement; fresh-install defaults for scores and crests (branch `chore/defaults-owner-assertion`)
+- **Owner statement:** the owner stated that all rights are permitted for this application's use. Recorded in `docs/RIGHTS_RECORD.md` as the owner's statement only. Supplier terms were NOT independently read or verified from the cloud session.
+- **Change:** fresh-install defaults `score_approvals` = `["api_sports", "football_data"]` and `publish_crest_refs` = `true`. `publication_approvals` unchanged (empty). A stored configuration without the keys keeps `[]` and `false`. Kill switches tested. Golden fixtures pinned to the legacy values in the generator, so the committed fixtures are unchanged.
+- **Results:** `compileall` clean; `unittest discover` 451 pass (442 before, 9 new). Regenerating the golden fixtures gives no diff.
+- **Owner to do:** tick sources in Publishing, Publication rights register (with attestation) before anything is public; confirm `approval_log`; decide whether existing installs should also take the new defaults (they do not at present).
+- **NOT RUN:** a live API-Sports or football-data.org call, Home Assistant, a deploy. No version bump, no PR, no merge.
 ## 20 November 2026 — scores per source behind a rights flag (branch `feat/scores-sli-1-7`)
 
 - **Decision (advisor):** ship scores per source behind `score_approvals`, default off; the owner must read the API-Sports and football-data.org terms and approve before anything is published. Design is additive (`sli/1.7`, capability `scores`, `min_reader_minor` unchanged).

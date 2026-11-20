@@ -2,9 +2,50 @@
 
 **Recorded 20 November 2026 · documentation only (branch `docs/rights-record-and-status`, from `origin/main` 8da6e83).**
 
-This page records what the repository already says about each source and data kind, and marks every gap. **It grants no permission.** A row says "NOT RECORDED" unless the repository itself records an approval. Read it with [CURRENT_STATUS.md](CURRENT_STATUS.md), [SOURCE_REGISTRY.md](SOURCE_REGISTRY.md), [LICENSING_AND_HOSTING.md](LICENSING_AND_HOSTING.md) and [FEED_CONTRACTS_AND_PUBLICATION.md](FEED_CONTRACTS_AND_PUBLICATION.md) §5 and §6.1.
+This page records what the repository already says about each source and data kind, and marks every gap. **It grants no permission itself.** The owner's statement of 20 November 2026 is recorded in its own section below and is not a supplier permission. A row says "NOT RECORDED" unless the repository itself records an approval. Read it with [CURRENT_STATUS.md](CURRENT_STATUS.md), [SOURCE_REGISTRY.md](SOURCE_REGISTRY.md), [LICENSING_AND_HOSTING.md](LICENSING_AND_HOSTING.md) and [FEED_CONTRACTS_AND_PUBLICATION.md](FEED_CONTRACTS_AND_PUBLICATION.md) §5 and §6.1.
 
 > **Provider terms could not be read from the cloud session.** The terms pages listed below were not available from this session. Every "terms" entry is only the URL the repository already holds. What the terms say is **unknown** until the owner reads them (checklist at the end).
+
+## Owner statement 20 November 2026
+
+**Recorded:** 20 November 2026, branch `chore/defaults-owner-assertion`.
+
+**What the owner stated.** The owner stated that all rights are permitted for what this application does: publication of fixtures, live status, scores, team crest references, broadcast links, standings, and guide-listed links to the feed.
+
+**What this section does not establish.**
+- Supplier terms were **not** independently read or verified from the cloud session. No row in sections 1 to 8 is changed by this statement. "NOT RECORDED" still means no supplier permission and no approval in the repository.
+- No permission wording, licence text or URL has been added. The statement is recorded as the owner gave it.
+- The statement is general, not per source. It adds no feature: standings are still not implemented (section 7).
+- Guide programme text is still not published. The code never publishes `origin: guide_listing` events (section 4), and this statement does not change that gate.
+
+**Defaults changed in code on this date (fresh installs only).**
+- `score_approvals` defaults to `["api_sports", "football_data"]`, the two eligible football sources. Other API-Sports products stay off unless ticked. Eligibility validation is unchanged.
+- `publish_crest_refs` defaults to `true`.
+- A stored configuration saved before either key existed keeps the legacy value (`[]` and `false`, `storage.LEGACY_ABSENT_DEFAULTS`), so an upgrade changes nothing the owner has not chosen. A configuration that saved either key keeps the saved value.
+- `publication_approvals` is unchanged and stays empty by default. Nothing reaches the public feed until the owner ticks a source.
+
+**What the owner must do before anything is public (the owner's acts, not the agent's):**
+1. Publishing, Publication rights register: tick each source whose fixtures, live status and linked events may be public, tick the attestation and save. The approval history is kept in `approval_log` on the Home Assistant App, not in this repository.
+2. Publishing, Score approvals: the two football sources are ticked on a fresh install. Saving the form requires the attestation tick. Untick a source to stop its scores.
+3. Crest references need no separate tick. They are published only for events from an API-Sports source ticked in step 1, and only while `publish_crest_refs` is true.
+
+**Kill switches (config keys):**
+
+| Config key | Value that stops it | Stops | Where on the App |
+|---|---|---|---|
+| `publication_approvals` | `[]` (or untick the source) | Public fixtures, events, crest references and `guide_map` | Publishing, Publication rights register |
+| `score_approvals` | `[]` (or untick the source) | All scores in the feed | Publishing, Score approvals |
+| `publish_crest_refs` | `false` | Crest references (`participant_crests`, `team_crests`) | Config (no form control in the repository's UI) |
+| `crest_device_lookup_thesportsdb` | `false` | TheSportsDB crest device lookup | Config |
+| `live_status` | `false` | The live-status lane | Scheduler tab, Live status toggle |
+| `github.enabled` / `github.auto_publish` | `false` | Publishing to LiveSports-EPG, and automatic publishing | Publishing |
+| `private_feed.enabled` | `false` | The owner's private feed | Publishing |
+| `sports.<source>` / `epg.<guide>` | `false` | Collection from that source or guide | Sources and API keys |
+| `keys` (remove the saved key) | no key | Collection from that provider | Sources and API keys |
+
+**Withdrawal.** The owner remains the only person who can withdraw this statement. An agent, a session or a code change does not withdraw it. The owner withdraws it by setting the kill switches above, or by a dated note here made at the owner's instruction.
+
+---
 
 ## Legend
 
@@ -19,6 +60,7 @@ This page records what the repository already says about each source and data ki
 
 - `publication_approvals` is empty by default (`storage` defaults). An event reaches the public feed only when its primary source and every fused contributor are approved (contract §5). Since 0.3.23 the public feed is built from approved-source records only (audit C1).
 - The Publishing tab's approval form requires an attestation tick ("Confirm you have reviewed each selected source's redistribution terms"). That tick is an attestation by the person saving it. It is **not** a licence record. The approval history is kept on the Home Assistant App (`approval_log`), **not in this repository**. The owner must check it on the App.
+- `score_approvals` and `publish_crest_refs` default on for a fresh install (owner statement 20 Nov 2026, above). Their kill switches are listed there.
 - "Enable publishing" and "Publish automatically" both default OFF (Publishing tab).
 
 ---

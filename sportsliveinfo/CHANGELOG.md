@@ -2,7 +2,15 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
-## Unreleased — Scores per source behind a rights flag (feed `sli/1.7`, default off)
+## Unreleased — Owner statement 20 Nov 2026: scores and crest references on for fresh installs
+
+- **Fresh installs:** `score_approvals` defaults to `["api_sports", "football_data"]` (the eligible football sources; other API-Sports products stay off) and `publish_crest_refs` defaults to `true`. This follows the owner's statement that rights are permitted for this application's use. Supplier terms were not independently read or verified. `docs/RIGHTS_RECORD.md` ("Owner statement 20 Nov 2026") records the statement and lists every kill switch.
+- **Upgrades are unchanged:** a stored configuration that predates a key keeps the legacy value (`storage.LEGACY_ABSENT_DEFAULTS`: `[]` and `false`). A saved configuration keeps what was saved.
+- **Unchanged:** `publication_approvals` stays empty by default, so nothing reaches the public feed until the owner ticks a source and attests. Eligibility validation is unchanged: TheSportsDB, Jolpica, OpenF1, MMA and every other ineligible source are rejected.
+- **Kill switches:** an empty `score_approvals` or `publish_crest_refs: false` restores the legacy output byte for byte (tested). The golden fixtures are pinned to the legacy values in `tools/generate_feed_fixtures.py`, so `schemas/fixtures/` did not change.
+- **Tests:** 9 new in `tests/test_owner_defaults_20nov.py`; 451 pass (442 before). Existing score, crest and golden tests that assumed defaults off now set them explicitly. No version bump.
+
+## Unreleased — Scores per source behind a rights flag (feed `sli/1.7`, default off at the time; see the 20 Nov entry above)
 
 - **Nothing is published until the owner approves a source.** New config `score_approvals` (list of source ids, default empty, separate from `publication_approvals`; Ingress → Publishing → Score approvals, with an attestation checkbox). Eligible: the API-Sports products except MMA (live and final) and football-data.org (final scores of regular-time results only). TheSportsDB, Jolpica, OpenF1 and every other source are rejected by validation. The owner must still read each source's terms and approve.
 - **Disabled means byte-identical.** With no approved source the manifest is still `sli/1.6`, there is no `score` field, no `scores` capability and the revision hash is unchanged (the golden `schemas/fixtures/sli-v1` fixtures did not change). With approved sources the manifest is `sli/1.7` (`min_reader_minor` unchanged), capability `scores`, `compatibility.scores` and `rights.scores.approved_sources`; removing the approvals is the kill switch.

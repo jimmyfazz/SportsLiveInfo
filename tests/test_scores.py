@@ -212,8 +212,10 @@ class FeedScoreTests(StoreCase):
     def build(self):
         return feed.build_feed(self.store, now=NOW)
 
-    def test_disabled_by_default_no_field_same_revision_and_still_sli_1_6(self):
-        seed(self.store, self.final_events())
+    def test_kill_switch_empty_list_is_byte_identical_to_legacy_output(self):
+        # Fresh installs now start with scores on (see test_owner_defaults_20nov). Emptying the list, with crest
+        # references off as well, must still give the legacy output: no score, sli/1.6, same revision as no score at all.
+        seed(self.store, self.final_events(), score_approvals=[], publish_crest_refs=False)
         manifest, files = self.build()
         stripped = {n: [{k: v for k, v in e.items() if k != "score"} for e in rows] for n, rows in self.final_events().items()}
         import tempfile
@@ -221,7 +223,7 @@ class FeedScoreTests(StoreCase):
         from sportsliveinfo.storage import Store
         with tempfile.TemporaryDirectory() as tmp:
             bare = Store(Path(tmp) / "b.sqlite3")
-            seed(bare, stripped)
+            seed(bare, stripped, score_approvals=[], publish_crest_refs=False)
             bare_manifest, bare_files = feed.build_feed(bare, now=NOW)
         self.assertEqual(manifest["revision"], bare_manifest["revision"])
         self.assertEqual(files, bare_files)
@@ -257,7 +259,7 @@ class FeedScoreTests(StoreCase):
         validate(manifest, schema, schema)
 
     def test_enabling_changes_the_revision_and_removing_approvals_is_the_kill_switch(self):
-        seed(self.store, self.final_events())
+        seed(self.store, self.final_events(), score_approvals=[], publish_crest_refs=False)
         off_manifest, off_files = self.build()
         self.store.configure({"score_approvals": ["api_sports"]})
         on_manifest, _ = self.build()
@@ -315,7 +317,8 @@ class FeedScoreTests(StoreCase):
         for bad in ("thesportsdb", "jolpica", "openf1", "api_sports_mma", "nope"):
             with self.assertRaises(ValueError):
                 self.store.configure({"score_approvals": [bad]})
-        self.assertEqual(self.store.config()["score_approvals"], [])
+        # Rejected attempts leave the saved list unchanged (the fresh-install default is the eligible football pair).
+        self.assertEqual(self.store.config()["score_approvals"], ["api_sports", "football_data"])
         self.store.configure({"score_approvals": ["api_sports", "football_data"]})
         # An ineligible name that slipped into saved config is still ignored by the feed.
         self.assertEqual(feed.score_approvals({"score_approvals": ["thesportsdb", "api_sports"]}), frozenset({"api_sports"}))
@@ -469,7 +472,7 @@ class IngressTests(StoreCase):
         return client.open(urllib.request.Request(client.base, body, method="POST"))
 
     def test_score_approvals_form_requires_attestation_and_rejects_ineligible_sources(self):
-        self.store.configure({"setup_complete": True})
+        self.store.configure({"setup_complete": True, "score_approvals": []})
         with closing(IngressTestClient(self.store, "c")) as client:
             with client.open(client.base + "?page=publishing") as response:
                 page = response.read().decode()

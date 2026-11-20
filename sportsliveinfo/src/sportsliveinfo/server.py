@@ -1316,7 +1316,8 @@ class UI(BaseHTTPRequestHandler):
         body += '<section class="card" style="margin-top:16px"><h2>Publication rights register</h2><p class="sub">Approved now: %s. %s</p>%s</section>' % (
             e(", ".join(approvals) or "none"), last, self._form("approvals", rights))
         score_approved = list(config.get("score_approvals", []))
-        scores = ('<p>Scores (feed sli/1.7) are a separate right from fixture facts and are <strong>off by default</strong>. '
+        scores = ('<p>Scores (feed sli/1.7) are a separate right from fixture facts. A fresh install starts with API-Sports and '
+                  'football-data.org ticked (owner statement 20 Nov 2026, see the rights record); this is not a licence check. '
                   'Tick a source only after reading its terms for publishing scores. Eligible: API-Sports products '
                   '(live and final scores for football, rugby, basketball, ice hockey, American football, baseball, '
                   'handball, volleyball and AFL) and football-data.org (final scores only). TheSportsDB, Jolpica and OpenF1 '
