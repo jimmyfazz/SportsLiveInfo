@@ -4,8 +4,16 @@
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](CURRENT_STATUS.md).
 
 **Updated:** 12 November 2026  
-**Repository:** `jimmyfazz/SportsLiveInfo` (remains PRIVATE).  
+**Repository:** `jimmyfazz/SportsLiveInfo` (public; it was private when this section was written on 12 November 2026).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
+
+## 20 November 2026 — rights record and status reconciliation (documentation only)
+
+- **Branch:** `docs/rights-record-and-status` from `origin/main` 8da6e83. No code, schema or version change.
+- **Added:** [RIGHTS_RECORD.md](RIGHTS_RECORD.md): publication status per source and data kind, kill-switch locations and an owner checklist. The repository records no supplier permission. Provider terms could not be read from the cloud session.
+- **Corrected:** [CURRENT_STATUS.md](CURRENT_STATUS.md) validation (329 tests on 0.3.24, not 315); [LICENSING_AND_HOSTING.md](LICENSING_AND_HOSTING.md) and the repository line here said the App repository is private (it is public); API-Sports status in [SOURCE_REGISTRY.md](SOURCE_REGISTRY.md); a stale pointer in CLAUDE.md.
+- **Verified:** `PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -s tests` gave 329 tests, OK, on 8da6e83 before these edits.
+- **Open for the owner:** the RIGHTS_RECORD checklist; feed contract §3 against D8 for broadcast links; the "Codex owns" lines in CLAUDE.md (binding, left unchanged).
 
 ## 15 November 2026 — 0.3.21 to 0.3.23, audit, deployment and handover to Mac terminal agents
 

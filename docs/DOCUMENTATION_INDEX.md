@@ -50,6 +50,7 @@ SportsLiveInfo is the public App source repository. LiveSports-EPG is the separa
 | [docs/QUALITY_SECURITY_AND_ACCEPTANCE.md](QUALITY_SECURITY_AND_ACCEPTANCE.md) | Current specification / guide |
 | [docs/RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md](RESEARCH_2026-11-14_CHANNEL_IDENTIFICATION_AND_EPG_SOURCES.md) | Current research record |
 | [docs/RESEARCH_FINDINGS_2026-11-12.md](archive/RESEARCH_FINDINGS_2026-11-12.md) | Historical audit / receipt |
+| [docs/RIGHTS_RECORD.md](RIGHTS_RECORD.md) | Current record: publication rights per source and data kind, kill-switches, owner checklist (20 Nov 2026) |
 | [docs/SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md](archive/SOURCE_EXPANSION_SPORTS_TAXONOMY_AND_B1G_LINEUP_2026-11-12.md) | Historical audit / receipt |
 | [docs/SOURCE_REGISTRY.md](SOURCE_REGISTRY.md) | Current specification / guide |
 | [docs/SOURCES_AND_IMPROVEMENTS_AUDIT_2026-11-12.md](archive/SOURCES_AND_IMPROVEMENTS_AUDIT_2026-11-12.md) | Historical audit / receipt |

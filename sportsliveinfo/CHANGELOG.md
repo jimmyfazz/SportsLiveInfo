@@ -2,6 +2,11 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## Unreleased
+
+- **Documentation only.** New [`docs/RIGHTS_RECORD.md`](../docs/RIGHTS_RECORD.md): publication status per source and data kind, the kill-switch for each, and an owner checklist. The repository records no supplier permission; provider terms could not be read from the cloud session.
+- **Status corrections.** Test count on 0.3.24 is 329 (re-run on `origin/main` 8da6e83); the repository is public, not private; API-Sports is "used by the running collector; owner approval not recorded". No code, schema or version change.
+
 ## 0.3.24 — The right channel first; re-runs are not live; TVs follow SportsLiveInfo's decisions
 
 Owner report 15 Nov 2026: Scotland v Australia and Spain v England showed an Irish or Asian channel before ITV1, and Pluto's re-run of "England v Samoa — Rugby World Cup 2023" was "probably live". ITV1 had been found (five guides; corroborated for Spain v England) but was listed last.
