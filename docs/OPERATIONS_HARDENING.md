@@ -1,6 +1,6 @@
-# Operations hardening (unreleased, after 0.3.24)
+# Operations hardening (shipped in 0.3.25)
 
-What keeps the collector alive, small and observable, and what the owner does for the three things code cannot do (history squash, release bump, the dead-man workflow). Findings: [audit](AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md) O1, O3, C4, C10. Status: implemented on branch `fix/ops-hardening`, **not released, not run on Home Assistant**.
+What keeps the collector alive, small and observable, and what the owner does for the three things code cannot do (history squash, release bump, the dead-man workflow). Findings: [audit](AUDIT_2026-11-15_FORENSIC_SPORTSLIVEINFO.md) O1, O3, C4, C10. Status: implemented and released in 0.3.25 (merged from `fix/ops-hardening`); the Home Assistant behaviour was checked by the owner after the update, items marked NOT RUN below were not re-run from a cloud session.
 
 ## 1. A slow upstream cannot hold the collector (O1)
 

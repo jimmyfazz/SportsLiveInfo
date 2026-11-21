@@ -1230,7 +1230,8 @@ class UI(BaseHTTPRequestHandler):
 
     def _live_card(self, config):
         """The live-status lane: switch, whether it can run, and its last pass (Scheduler page and Diagnostics)."""
-        from .engine import LIVE_DAILY_BUDGET, LIVE_PRODUCTS, SETTLE_DAILY_BUDGET, Engine
+        from .engine import (LIVE_BACKOFF_INTERVAL, LIVE_DAILY_BUDGET, LIVE_EVENING_END, LIVE_EVENING_SHARE,
+                             LIVE_EVENING_START, LIVE_PRODUCTS, SETTLE_DAILY_BUDGET, Engine, live_daily_budget)
         on = bool(config.get("live_status", True))
         if not on:
             state = "Switched off."
@@ -1240,18 +1241,34 @@ class UI(BaseHTTPRequestHandler):
             state = "On, but idle: it needs a saved API-Sports key and an enabled API-Sports football or games product."
         last = self.store._get("live_lane") or {}
         usage = self.store.usage()
-        calls = ", ".join("%s %d/%d" % (name, usage.get("live:" + name, 0), LIVE_DAILY_BUDGET)
-                          for name in LIVE_PRODUCTS if config["sports"].get(name)) or "no API-Sports product enabled"
+        counters = {row["product"]: row for row in health.live_counters(self.store, datetime.now(timezone.utc))}
+
+        def budget(name):
+            return live_daily_budget(providers.SPORTS[name][3])
+
+        def counts(name):
+            row = counters.get(name)
+            text = "%s %d/%d" % (name, usage.get("live:" + name, 0), budget(name))
+            if row:
+                text += " (core %d, extra %d in play, last call %s%s%s)" % (
+                    row["core"], row["extra"], when(row["last_call"]) if row["last_call"] else "none today",
+                    ", slowed to every %d min" % (LIVE_BACKOFF_INTERVAL.total_seconds() // 60) if row["backoff"] else "",
+                    ", BUDGET USED UP until 00:00 UTC" if row["exhausted"] else "")
+            return text
+        calls = "; ".join(counts(name) for name in LIVE_PRODUCTS
+                          if config["sports"].get(name)) or "no API-Sports product enabled"
         settle_last = self.store._get("settle_lane") or {}
         settle = ", ".join("%s %d/%d" % (name, usage.get("settle:" + name, 0), SETTLE_DAILY_BUDGET)
                            for name in LIVE_PRODUCTS if config["sports"].get(name)) or "none"
         form = ('<label><input type="checkbox" name="enabled" value="on" %s> Check live statuses during matches</label>'
                 '<button type="submit">Save</button>' % ("checked" if on else ""))
-        return ('<section class="card" style="margin-top:16px"><h3>Live status lane</h3><p>While a collected event is '
-                'between its start and expected end, SportsLiveInfo reads the API-Sports live board at most every '
-                '15 minutes (football <code>fixtures?live=all</code>, other products <code>games?live=all</code>), '
-                'at most %d calls a day per product, counted in the product\'s own daily quota and always leaving '
-                'calls for the scheduled refreshes. Only status changes are published, as the small <code>live</code> '
+        return ('<section class="card" style="margin-top:16px"><h3>Live status lane</h3><p>While a collected core-tier '
+                'event is between its start and expected end, SportsLiveInfo reads the API-Sports live board at most every '
+                '15 minutes (football <code>fixtures?live=all</code>, other products <code>games?live=all</code>); '
+                'extra-tier events never trigger a read but are updated when a read happens. At most %d calls a day per '
+                'product, counted in the product\'s own daily quota and always leaving calls for the scheduled refreshes; '
+                '%d%% of the budget is held back for %02d:00-%02d:00 UTC, and when less than a quarter is left the lane '
+                'polls every 30 minutes, only while a core event is live. Only status changes are published, as the small <code>live</code> '
                 'asset (when automatic publishing is on). Scores are kept and published only for sources you approve on '
                 'the Publishing page (Score approvals, off by default); with none approved no score is read, stored or '
                 'published. A changed score also republishes the live asset, so approved live scores can add up to '
@@ -1259,7 +1276,8 @@ class UI(BaseHTTPRequestHandler):
                 '<p class="sub">Last pass: %s · %s · Live calls today (UTC): %s</p>'
                 '<p class="sub">Settle pass (final results after the end, hourly, at most %d calls a day per product): '
                 '%s · %s · Settle calls today (UTC): %s</p>%s</section>') % (
-            LIVE_DAILY_BUDGET, "ok" if on else "warn", e(state), e(when(last.get("last_run"))),
+            LIVE_DAILY_BUDGET, round(LIVE_EVENING_SHARE * 100), LIVE_EVENING_START, LIVE_EVENING_END,
+            "ok" if on else "warn", e(state), e(when(last.get("last_run"))),
             e(last.get("summary") or "not run yet"), e(calls), SETTLE_DAILY_BUDGET,
             e(when(settle_last.get("last_run"))), e(settle_last.get("summary") or "not run yet"), e(settle),
             self._form("live_status", form))
@@ -1496,8 +1514,14 @@ class UI(BaseHTTPRequestHandler):
             ("Publish status", "%s %s" % (snap["publish_status"]["state"] or "none", when(snap["publish_status"]["at"], now) if snap["publish_status"]["at"] else "")),
             ("GitHub token expiry", expiry),
             ("Failing sources", ", ".join("%s (%d)" % (s["name"], s["consecutive_failures"]) for s in snap["failing_sources"]) or "none"),
-            ("Live-lane calls today", ", ".join("%s %d/%d" % (k, v, snap["budgets"].get("live_daily_budget", 0))
-                                               for k, v in sorted((snap["budgets"].get("live_calls_today") or {}).items())) or "none"),
+            ("Live-lane calls today (UTC)", "; ".join(
+                "%s %d/%d, core %d / extra %d in play, last call %s%s%s" % (
+                    r["product"], r["used"], r["limit"], r["core"], r["extra"],
+                    when(r["last_call"], now) if r["last_call"] else "none", ", slowed (30 min)" if r["backoff"] else "",
+                    ", BUDGET USED UP (resets %s UTC)" % r["resets_at"][:16].replace("T", " ") if r["exhausted"] else "")
+                for r in snap.get("live_budget") or []) or ", ".join(
+                "%s %d/%d" % (k, v, snap["budgets"].get("live_daily_budget", 0))
+                for k, v in sorted((snap["budgets"].get("live_calls_today") or {}).items())) or "none"),
             ("Stall threshold", "%g h after a scheduled refresh slot" % report["settings"]["stall_hours"]),
             ("Open notifications", ", ".join(sorted(alerts)) or "none"),
         ]

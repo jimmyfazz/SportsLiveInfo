@@ -428,7 +428,7 @@ class LiveLaneTests(LiveLaneBase):
         self.assertIn("daily live budget", self.store._get("live_lane")["summary"])
         with self.store._db() as db:
             db.execute("DELETE FROM requests WHERE provider='live:api_sports'")
-        for _ in range(providers.SPORTS["api_sports"][3] - engine_module.LIVE_RESERVE):
+        for _ in range(providers.SPORTS["api_sports"][3]):
             self.store.increment("api_sports", 1000)
         self.assertEqual(self.run_lane(board((1, "2H"))), 0)       # calls kept for the scheduled refreshes
         with self.store._db() as db:

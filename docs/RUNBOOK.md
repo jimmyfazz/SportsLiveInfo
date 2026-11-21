@@ -1,6 +1,6 @@
 # SportsLiveInfo operations runbook
 
-**Status:** 20 November 2026 · for the Home Assistant App (source at `13a8994`, version string `0.3.24`) · docs only.
+**Status:** 21 November 2026 · for the Home Assistant App (version `0.3.28`; steps first traced on 20 Nov against the 0.3.24 to 0.3.26 source and re-read for 0.3.28) · docs only.
 **How this was checked:** each step was traced to the code (file and function in brackets). Where a step is a manual
 operator action that the code does not automate, it says so. Anything that could not be run from the cloud session
 is marked **NOT RUN**. Context: [CURRENT_STATUS](CURRENT_STATUS.md), [AGENT_OPERATING_MANUAL](AGENT_OPERATING_MANUAL.md),
@@ -29,7 +29,7 @@ Every page and `/healthz` answer only through Home Assistant Ingress. A direct r
   - **Last publication (manifest)** is the time of the last real commit. This is the `manifest_age_s` value in `/healthz`.
   - **Last publication activity** also counts an "unchanged" check. The stall rules use this value, not the commit time.
 
-**Step 2. Read what the App says.** The stall checks below are described as unreleased in the [operator guide](../sportsliveinfo/DOCS.md#stall-alerting-and-health-unreleased-after-0324). If the Service health card is missing from Diagnostics, the installed build predates them, and the job rows below are the only evidence.
+**Step 2. Read what the App says.** The stall checks below are described in the [operator guide](../sportsliveinfo/DOCS.md#stall-alerting-and-health). If the Service health card is missing from Diagnostics, the installed build predates them, and the job rows below are the only evidence.
 - **Diagnostics > Service health.** The verdict line lists the stall reasons. The incidents list uses these codes (from `health.py`):
 
 | Code | Meaning | Look next at |

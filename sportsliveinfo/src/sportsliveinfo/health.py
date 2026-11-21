@@ -34,7 +34,7 @@ PROCESS_START = datetime.now(timezone.utc)
 DEFAULT_STALL_HOURS = 3.0
 HEARTBEAT_ENTER = timedelta(seconds=180)   # scheduler ticks every 10 s
 HEARTBEAT_LEAVE = timedelta(seconds=60)
-HOLD = {"scheduler_stalled": timedelta(minutes=2)}
+HOLD = {"scheduler_stalled": timedelta(minutes=2), "live_budget_exhausted": timedelta(0)}
 DEFAULT_HOLD = timedelta(minutes=10)
 MAX_MANIFEST_AGE = timedelta(hours=30)
 COLLECT_HANG = timedelta(minutes=90)
@@ -169,6 +169,7 @@ def snapshot(store, now=None, *, started_at=None):
                    "live_calls_today": {k[5:]: v for k, v in store.usage().items() if k.startswith("live:")}}
     except Exception:
         pass
+    live_budget = live_counters(store, now)
     return {
         "now": _iso(now),
         "scheduler_heartbeat": _iso(beat),
@@ -188,9 +189,33 @@ def snapshot(store, now=None, *, started_at=None):
         "token_expires_at": _iso(expiry),
         "token_days_left": None if expiry is None else round((expiry - now).total_seconds() / 86400, 1),
         "budgets": budgets,
+        "live_budget": live_budget,
         "asset_budget": store._get("asset_budget"),
         "feed_growth": (store._get("feed_growth") or {}).get("report"),
     }
+
+
+def live_counters(store, now):
+    """Today's (UTC) live-lane counters per product, from the lane's last pass, with the call counts refreshed from the
+    request ledger: ``[{product, used, limit, last_call, core, extra, exhausted, backoff, resets_at}]``.
+    ``exhausted`` is true only while the budget really is spent (it clears if the ledger shows room again)."""
+    try:
+        state = store._get("live_budget") or {}
+        if state.get("day") != now.date().isoformat():
+            return []
+        usage = store.usage()
+        reset = datetime(now.year, now.month, now.day, tzinfo=timezone.utc) + timedelta(days=1)
+        out = []
+        for name, row in sorted((state.get("products") or {}).items()):
+            used = usage.get("live:" + name, 0)
+            limit = row.get("limit") or row.get("budget") or 0
+            room = min(limit - used, limit - usage.get(name, 0))
+            out.append({"product": name, "used": used, "limit": limit, "last_call": row.get("last_call"),
+                        "core": row.get("core", 0), "extra": row.get("extra", 0), "backoff": bool(row.get("backoff")),
+                        "exhausted": bool(row.get("exhausted")) and room <= 0, "resets_at": _iso(reset)})
+        return out
+    except Exception:
+        return []
 
 
 def _latest_slot_due(schedule, now, grace):
@@ -275,6 +300,11 @@ def raw_reasons(snap, now, settings, active=()):
     if left is not None and left <= TOKEN_WARN_DAYS:
         add("token_expiring", "The GitHub publishing token %s" % (
             "has expired" if left <= 0 else "expires in %.0f day(s)" % left))
+    for row in snap.get("live_budget") or []:
+        if row["exhausted"]:
+            add("live_budget_exhausted:" + row["product"], "Live status budget used up for %s: %d of %d live calls today "
+                "(UTC). Live statuses pause until it resets at %s UTC (midnight); scheduled refreshes are not affected" % (
+                    row["product"], row["used"], row["limit"], (row["resets_at"] or "")[:16].replace("T", " ")))
     for source in snap["failing_sources"]:
         if source["consecutive_failures"] >= SOURCE_FAIL_THRESHOLD:
             add("source_failing:" + source["name"], "Source %s failed %d refreshes in a row" % (source["name"], source["consecutive_failures"]))
@@ -298,7 +328,7 @@ def evaluate(store, now=None, *, settings=None, started_at=None):
             continue
         entry = latch[code]
         entry.setdefault("clear_since", _iso(now))
-        hold = HOLD.get(code, DEFAULT_HOLD)
+        hold = HOLD.get(code, HOLD.get(code.split(":")[0], DEFAULT_HOLD))
         if now - (_parse(entry["clear_since"]) or now) >= hold:
             del latch[code]
     store._put("health_state", latch)
@@ -358,6 +388,7 @@ TITLES = {
     "feed_growth": "SportsLiveInfo: feed repository history is growing fast",
     "asset_size": "SportsLiveInfo: feed asset near the reader size limit",
     "token_expiring": "SportsLiveInfo: GitHub token expiring",
+    "live_budget_exhausted": "SportsLiveInfo: live status budget used up",
 }
 
 

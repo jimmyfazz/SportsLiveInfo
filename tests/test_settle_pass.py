@@ -119,7 +119,7 @@ class SettlePassTests(StoreCase):
 
     def test_reserve_backoff_and_plan_window_skip(self):
         self.snapshot()
-        for _ in range(providers.SPORTS["api_sports"][3] - engine_module.LIVE_RESERVE):
+        for _ in range(providers.SPORTS["api_sports"][3]):
             self.store.increment("api_sports", 1000)
         self.assertEqual(self.settle(board((1, "FT"))), 0)
         self.assertIn("kept for scheduled refreshes", self.store._get("settle_lane")["summary"])

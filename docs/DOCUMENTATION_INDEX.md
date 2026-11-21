@@ -1,6 +1,6 @@
 # Documentation index and precedence
 
-**Reconciled 20 November 2026 for v0.3.24** (first reconciled 13 November for v0.3.4).
+**Reconciled 21 November 2026 for v0.3.28** (first reconciled 13 November for v0.3.4).
 
 SportsLiveInfo is the public App source repository. LiveSports-EPG is the separate public data destination. Installation and in-place update steps are in the [operator guide](../sportsliveinfo/DOCS.md).
 

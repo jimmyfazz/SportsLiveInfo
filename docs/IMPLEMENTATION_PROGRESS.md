@@ -7,6 +7,14 @@
 **Repository:** `jimmyfazz/SportsLiveInfo` (public; it was private when this section was written on 12 November 2026).  
 **Historical v0.2 development branch:** `feat/haos-epg-coverage-openligadb-v0.2-20261112`; PR #2. Historical PR #1 delivered v0.1.0.
 
+## 21 November 2026 — live budget fix, live-budget advisory, docs refresh (0.3.28, branch `s6-live-budget`; owner approved CA-09)
+
+- **Root cause (evidence):** on 21 Nov live publishes ran every 15 minutes from 08:43 to 10:13 UTC, then at 10:28 and 11:13, then none until the 12:14 collection although six events were live at 12:00. `engine.live_lane` polled the API-Sports live board every 15 minutes whenever any collected event, extra tier included, was in its window, and `LIVE_DAILY_BUDGET` was 40 calls per product a day (10 hours at 15 minutes), exhausted at about 11:13 UTC.
+- **Change:** only core-tier candidates (`feed.event_tier`) trigger a board read; extras are updated opportunistically. Budget computed from the plan (`live_daily_budget` = 80 - 20 = 60; the old extra stop at total use >= limit - reserve double-counted scheduled calls and is replaced by the hard limit for live and settle). `live_allowance`: 30% of the budget (18 calls) held until 17:00 UTC; below 25% left, 30-minute polling while a core event is live. Advisory `live_budget_exhausted:<product>` (200, de-duplicated, clears on the new UTC day or recovery) with a Home Assistant notification; per-product counters in `live_budget` state, the Scheduler page and Service health.
+- **Results:** compileall clean, `unittest discover` 657 tests pass (646 baseline plus 11 in `tests/test_live_budget.py`; a MemoryError line from a mock is expected). A simulated Saturday (06:00-23:45 UTC, 15-minute ticks, scheduled and settle calls counted) makes 56 live calls, 16 of them in 17:00-23:00 UTC, and the last at 23:45; an extra-only day makes none. Golden fixtures regenerated (version string only).
+- **Docs:** README, add-on README and DOCS, CURRENT_STATUS, contract header, RUNBOOK, DOCUMENTATION_INDEX, OPERATIONS_HARDENING, CHANGELOG headings 0.3.25 to 0.3.27 tidied and 0.3.28 added.
+- **NOT RUN:** Home Assistant update, a real notification, a live API-Sports call. The lead backs up and updates Home Assistant. "Prefer fixtures starting within the next 2 hours" was not implemented: the lane only sees events from their start time, it does not pre-poll.
+
 ## 20 November 2026 — follow-ups: blocked-publish alert, Publishing toggles, seeded-table review (branch `s3-followups`)
 
 - Root cause: the regression gate stored publisher state `blocked` but `health.py` only counted `failed` rows, so a refusal raised no notification or stall code (runbook finding). Fix: snapshot `publish_gate` (latest non-preview publisher row is `blocked`) and advisory code `publish_gate_blocked` (new name; `publish_blocked` already meant two failed publishes).

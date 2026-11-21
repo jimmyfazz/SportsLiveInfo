@@ -2,6 +2,7 @@
 import base64
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -43,8 +44,28 @@ FEED_RETAIN = 10  # published manifests (and the assets they reference) kept for
 # event between its start and expected end, at most every 15 minutes, within a daily budget per product that also
 # counts against the product's own daily quota (and always leaves calls for the scheduled refreshes).
 LIVE_INTERVAL = timedelta(minutes=15)
-LIVE_DAILY_BUDGET = 40          # live calls per product per UTC day
 LIVE_RESERVE = 20               # product calls kept back for the scheduled refreshes
+
+
+def live_daily_budget(daily_limit):
+    """Live calls per product per UTC day, from the plan: the product's configured daily limit minus the reserve for
+    the scheduled refreshes and the settle pass (80 - 20 = 60; the API-Sports free plan allows 100 a day)."""
+    return max(0, int(daily_limit) - LIVE_RESERVE)
+
+
+# Explicit default (every API-Sports product here is configured at 80 calls a day). It was 40 until 21 Nov 2026:
+# 40 calls at a 15 minute cadence is 10 hours, so it ran out at about 11:13 UTC, before the Saturday afternoon
+# kick-offs (CA-09). Live (60) + scheduled refreshes and settle (about 20) stay inside the configured 80 a day.
+LIVE_DAILY_BUDGET = live_daily_budget(80)
+# Time-of-day reserve: at least this share of the daily live budget is held back until 17:00 UTC, so the morning and
+# afternoon cannot spend the evening's polling (the 17:00-23:00 window is when most live sport is on).
+LIVE_EVENING_START, LIVE_EVENING_END = 17, 23      # UTC hours, [start, end)
+LIVE_EVENING_SHARE = 0.30
+# Adaptive back-off: when the usable live budget is below this share of its nominal size, the interval stretches to
+# LIVE_BACKOFF_INTERVAL and only core events that are live (or kicked off in the last interval) justify a call.
+LIVE_BACKOFF_SHARE = 0.25
+LIVE_BACKOFF_INTERVAL = timedelta(minutes=30)
+LIVE_BACKOFF_SLACK = timedelta(minutes=1)          # the scheduler tick is not exact
 # Re-confirm (re-stamp) an unchanged "live" this often so readers keep trusting it. 15 minutes (owner decision 20 Nov
 # 2026, CA-18): re-stamp 15 + CDN cache 5 + TV poll 15 = 35 minutes, inside LIVE_MAX_AGE (45), so LIVE never flickers.
 # No extra provider calls (the lane already reads the board every LIVE_INTERVAL); it costs about 4 live commits an
@@ -226,6 +247,36 @@ def validate_github_target(owner, repository, branch):
                          "branch main (a github.com link in the repository field also works)" % field)
     return owner, repository, branch
 
+
+
+def live_allowance(now, daily_limit, live_used, total_used, last_call=None, active_core=True):
+    """Decide whether the live lane may call one product's board now. Pure; returns ``(ok, reason, detail)``.
+
+    ``live_used`` = live calls today, ``total_used`` = every call the product made today (scheduled, settle, live),
+    ``last_call`` = time of the last live call (datetime or None), ``active_core`` = a core event is known live or just
+    kicked off. ``detail`` carries the numbers the Scheduler page and the health report show."""
+    budget = live_daily_budget(daily_limit)
+    # LIVE_RESERVE is what the scheduled refreshes and the settle pass (about 16 + 4 calls) may still need: it is held
+    # back only while they have not used it, so their own calls never eat into the live budget twice.
+    still_needed = max(0, LIVE_RESERVE - (total_used - live_used))
+    room = min(budget - live_used, daily_limit - total_used - still_needed)
+    hour = now.hour
+    reserve = math.ceil(budget * LIVE_EVENING_SHARE) if hour < LIVE_EVENING_START else 0   # held until 17:00 UTC
+    usable = room - reserve
+    pool = max(1, budget - reserve)
+    detail = {"budget": budget, "room": max(0, room), "evening_reserve": reserve, "usable": max(0, usable),
+              "backoff": False}
+    if room <= 0:
+        return False, "exhausted", detail
+    if usable <= 0:
+        return False, "evening_reserve", detail
+    if usable < LIVE_BACKOFF_SHARE * pool:
+        detail["backoff"] = True
+        if last_call is not None and now - last_call < LIVE_BACKOFF_INTERVAL - LIVE_BACKOFF_SLACK:
+            return False, "backoff_spacing", detail
+        if not active_core:
+            return False, "backoff_idle", detail
+    return True, "ok", detail
 
 class Engine:
     def __init__(self, store):
@@ -1199,7 +1250,10 @@ class Engine:
             self._publish_job("live")
 
     def _live_candidates(self, conf, now, observations):
-        """{product: [(event, [source event ids])]} for collected events between start and expected end."""
+        """{product: [(event, [source event ids])]} for collected events between start and expected end.
+
+        Each event dict carries ``_live_tier`` ('core' or 'extra', the tier the feed publishes) and ``_live_active``
+        (its latest known status is live, or it kicked off within the last LIVE_INTERVAL)."""
         snapshot = self.store.snapshot("sports")
         events = ((snapshot or {}).get("data") or {}).get("events") or []
         found = {}
@@ -1219,12 +1273,37 @@ class Engine:
             latest = max(seen, key=lambda o: str(o.get("status_observed_at") or ""))
             if latest.get("status_normalized") in ("finished", "postponed", "cancelled"):
                 continue
+            tagged = None
             for name in products:
                 prefix = name.replace("_", "-") + ":"
                 mine = [sid for sid in ids if isinstance(sid, str) and sid.startswith(prefix)]
                 if mine:
-                    found.setdefault(name, []).append((event, mine))
+                    if tagged is None:
+                        classified = event if "category_id" in event else taxonomy.classify(event)
+                        tagged = dict(event, _live_tier=feed.event_tier(classified),
+                                      _live_active=(latest.get("status_normalized") == "live"
+                                                    or now - start <= LIVE_INTERVAL))
+                    found.setdefault(name, []).append((tagged, mine))
         return found
+
+    def _live_last_call(self, name):
+        try:
+            return datetime.fromisoformat(self.store._get("live_last_call:" + name))
+        except (TypeError, ValueError):
+            return None
+
+    def _record_live_counters(self, now, counters):
+        """Per-product live counters for today (UTC) for the Scheduler page and the health report: calls used and the
+        limit, the last live call, core and extra candidates, and whether the budget ran out while core events were in
+        play. Replaced when the UTC day changes."""
+        day = now.date().isoformat()
+        state = self.store._get("live_budget") or {}
+        products = dict(state.get("products") or {}) if state.get("day") == day else {}
+        for name, row in counters.items():
+            products[name] = row
+        if counters or state.get("day") != day:
+            self.store._put("live_budget", {"day": day, "updated_at": now.isoformat(timespec="seconds"),
+                                            "products": products})
 
     def live_lane(self, now=None):
         """One pass of the live-status lane; returns the number of status observations that changed.
@@ -1239,7 +1318,7 @@ class Engine:
         stored = self.store._get("live_observations") or {}
         observations = dict(stored.get("events") or {})
         candidates = self._live_candidates(conf, now, observations)
-        calls, changed, notes = 0, 0, []
+        calls, changed, notes, info, counters = 0, 0, [], [], {}
         score_sources = feed.score_approvals(conf)      # empty (kill switch): scores are neither read nor stored
         for name, rows in sorted(candidates.items()):
             _, base, key_name, daily_limit = providers.SPORTS[name]
@@ -1251,8 +1330,26 @@ class Engine:
             if window and not window[0] <= 0 <= window[1]:
                 notes.append("%s: today is outside the provider plan's dates" % name)
                 continue
-            if self.store.usage().get(name, 0) >= daily_limit - LIVE_RESERVE:
-                notes.append("%s: remaining calls kept for scheduled refreshes" % name)
+            core = [row for row in rows if row[0]["_live_tier"] == "core"]
+            tiers = {"core": len(core), "extra": len(rows) - len(core)}
+            usage = self.store.usage()
+            last_call = self._live_last_call(name)
+            ok, reason, detail = live_allowance(now, daily_limit, usage.get("live:" + name, 0), usage.get(name, 0),
+                                                last_call, any(row[0]["_live_active"] for row in core))
+            counters[name] = dict(detail, used=usage.get("live:" + name, 0), total_used=usage.get(name, 0),
+                                  limit=detail["budget"], core=tiers["core"], extra=tiers["extra"],
+                                  last_call=last_call.isoformat(timespec="seconds") if last_call else None,
+                                  exhausted=reason == "exhausted" and bool(core), reason=reason)
+            if not core:
+                # Extra-tier events never trigger a board read (CA-09); they ride along when core events cause one.
+                info.append("%s: only extra-tier events in play (%d); no live call" % (name, tiers["extra"]))
+                continue
+            if not ok:
+                notes.append({"exhausted": "%s: daily live budget (%d) used" % (name, detail["budget"]),
+                              "evening_reserve": "%s: live calls kept for the evening (from %02d:00 UTC)" % (name, LIVE_EVENING_START),
+                              "backoff_spacing": "%s: live budget low, polling every %d minutes" % (
+                                  name, LIVE_BACKOFF_INTERVAL.total_seconds() // 60),
+                              "backoff_idle": "%s: live budget low, no core event live" % name}[reason])
                 continue
             if name == "api_sports":
                 decode = providers.api_sports_events
@@ -1264,10 +1361,13 @@ class Engine:
             try:
                 self._check_sport_backoff(name)
                 try:
-                    self.store.increment("live:" + name, LIVE_DAILY_BUDGET)
+                    self.store.increment("live:" + name, detail["budget"])
                 except RuntimeError:
-                    notes.append("%s: daily live budget (%d) used" % (name, LIVE_DAILY_BUDGET))
+                    notes.append("%s: daily live budget (%d) used" % (name, detail["budget"]))
+                    counters[name].update(exhausted=True, reason="exhausted")
                     continue
+                self.store._put("live_last_call:" + name, stamp)
+                counters[name].update(used=counters[name]["used"] + 1, last_call=stamp)
                 board = {row["id"]: row for row in self._request(name, item, daily_limit)}
                 calls += 1
             except QuotaExhausted as exc:
@@ -1332,8 +1432,9 @@ class Engine:
             self.store._put("live_observations", {"events": observations, "updated_at": stamp})
         in_play = sum(len(rows) for rows in candidates.values())
         summary = "%d events in play; %d live calls; %d status changes" % (in_play, calls, changed)
-        if notes:
-            summary += "; " + "; ".join(notes[:3])
+        if notes or info:
+            summary += "; " + "; ".join((notes + info)[:3])
+        self._record_live_counters(now, counters)
         self.store._put("live_lane", {"last_run": stamp, "in_play": in_play, "calls": calls, "changed": changed,
                                       "summary": summary[:300]})
         if candidates or notes:
@@ -1404,7 +1505,10 @@ class Engine:
             if window and not window[0] <= (day - today).days <= window[1]:
                 notes.append("%s: %s is outside the provider plan's dates" % (name, day))
                 continue
-            if self.store.usage().get(name, 0) >= daily_limit - LIVE_RESERVE:
+            # The live lane is capped by its own budget (daily_limit - LIVE_RESERVE), which leaves this pass its calls, so
+            # only the product's hard daily limit stops it (it used to stop at daily_limit - LIVE_RESERVE, which the
+            # larger live budget would now reach every evening).
+            if self.store.usage().get(name, 0) >= daily_limit:
                 notes.append("%s: remaining calls kept for scheduled refreshes" % name)
                 continue
             if name == "api_sports":

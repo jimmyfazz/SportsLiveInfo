@@ -24,7 +24,7 @@ In **Sources & API keys**, select the keyless sports and private guide groups wi
 | Sources / setup | Individual source selection and Save/Test; optional key settings for API-Sports, football-data.org and CricketData.org; keyless providers identified |
 | Live today / events | Classified and fused fixtures, UK times, featured groups, filters and explicitly provisional EPG channel candidates |
 | EPG coverage | Private source programmes, canonical identity hints, 24/72/168-hour gaps and family/service diagnostics |
-| Schedule | Europe/London daily refresh slots, durable claims, manual-refresh overlap protection; defaults 04:00, 12:00 and 17:00. **Live status lane** (0.3.23, on by default once an API-Sports key is saved): while a collected event is between its start and expected end, the API-Sports live board is read at most every 15 minutes, at most 40 calls a day per product inside that product's quota (20 calls always kept for the scheduled refreshes). Status changes are published as the small `live` asset when automatic publishing is on. Switch it off here |
+| Schedule | Europe/London daily refresh slots, durable claims, manual-refresh overlap protection; defaults 04:00, 12:00 and 17:00. **Live status lane** (on by default once an API-Sports key is saved): while a collected core-tier event is between its start and expected end, the API-Sports live board is read at most every 15 minutes (extra-tier events never trigger a read), at most 60 calls a day per product inside that product's quota (the configured 80 minus 20 kept for the scheduled refreshes and the settle pass). 30% of the budget is held back for 17:00-23:00 UTC, and when under a quarter is left the lane polls every 30 minutes while a core event is live. The Scheduler page shows calls used and the limit, the last live call and the core and extra events in play; Home Assistant gets one notification if the budget runs out. Status changes are published as the small `live` asset when automatic publishing is on. Switch it off here |
 | Diagnostics | Last-good snapshots, source errors, daily UTC request counts and bounded recent job history |
 | Publishing | Local preview, masked fine-grained token setup, separate GET-only connection check and optional atomic static-feed publication |
 
@@ -37,7 +37,7 @@ Sports source tests make one quota-accounted request. EPG tests download and par
 - **Team crests:** tickboxes for `publish_crest_refs` and `crest_device_lookup_thesportsdb`, with the current effect and the kill-switch wording; switching either on needs the attestation tickbox (same pattern as score approvals), switching both off does not.
 - **Channel link policy:** read-only `binds_rule` and `rights_holder_prior` state, and optional JSON corrections to the seeded broadcaster ranking and rights-holder prior tables (empty = built-in). Review checklist: [`docs/SEEDED_TABLES_REVIEW.md`](../docs/SEEDED_TABLES_REVIEW.md).
 
-## Stall alerting and health (unreleased, after 0.3.24)
+## Stall alerting and health
 
 SportsLiveInfo now tells you when the feed stops moving. On 20 Nov the published manifest stayed at 03:42Z for more than three hours and nothing said so.
 
@@ -54,6 +54,8 @@ SportsLiveInfo now tells you when the feed stops moving. On 20 Nov the published
 Also reported, each as one notification but **not** a 503: publishing failed twice in a row, the GitHub token expires within 7 days (read from GitHub's response header; fine-grained tokens with an expiry only), a source failed three refreshes in a row, a collection started more than 90 minutes ago and never finished.
 
 Also advisory: **`publish_gate_blocked`**, an automatic publish refused by the pre-publish regression gate (events or guide-confirmed bindings fell by more than 20 %). The notification names the before and after counts and says to press Publish feed now on the Publishing page if the drop is expected. It clears when a later publisher row is not `blocked`. `/healthz` lists advisories under `advisories` and stays 200.
+
+Also advisory: **`live_budget_exhausted:<product>`**, raised when a core event is in play and the product's daily live budget (60 calls) is used up. The notification names the product, the calls used of the limit and when it resets (00:00 UTC); scheduled refreshes are not affected. It is dismissed when the new UTC day starts or the budget recovers, and shown under Service health and `/healthz` `advisories` (still `200`).
 
 **`/healthz`:** `200` healthy, `503` with `{"ok": false, "reason": "...", "reasons": [codes]}` when stalled. `/healthz?scope=liveness` looks at the scheduler heartbeat only; the Supervisor watchdog uses that one, because restarting the App cannot fix a stale manifest caused by a revoked token or a failing source. Like every page it answers only to the Ingress/Supervisor address.
 
@@ -79,7 +81,7 @@ Not done: Home Assistant sensor entities (for example `sensor.sli_manifest_age`)
 
 ## Important limits
 
-The current `sli/1.0` output has events, taxonomy, channel/guide metadata, Today grouping and health, **no EPG programme rows**. The local suggestion evaluator in `supplement.py` does not implement a public programme supplement or a B1G Guide reader. Keep provider EPG primary and preserve local account, manual mapping and hidden choices. Provisional candidates are not verified broadcasts or playable streams.
+The current `sli/1.7` output has events, taxonomy, channel/guide metadata, Today grouping and health, **no EPG programme rows**. The local suggestion evaluator in `supplement.py` does not implement a public programme supplement or a B1G Guide reader. Keep provider EPG primary and preserve local account, manual mapping and hidden choices. Provisional candidates are not verified broadcasts or playable streams.
 
 See [current validation](../docs/CURRENT_STATUS.md) for tested behaviour and open deployment checks.
 
