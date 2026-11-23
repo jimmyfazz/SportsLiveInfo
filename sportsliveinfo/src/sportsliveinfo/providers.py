@@ -17,7 +17,10 @@ from datetime import date, datetime, timedelta, timezone
 # Every EPG source is disabled by default; URLs marked "verify" must pass the
 # Ingress "Test EPG" button before being enabled.
 # Retired 13 Nov 2026: fr_programmetv, fr_telerama, iptvorg_sky_uk, iptvorg_foxtel_au. iptv-org no longer
-# hosts pre-built guides (HTTP 404 from the collector); iptv-epg.org and EPGShare cover the same markets.
+# hosts pre-built guides (HTTP 404 from the collector).
+# 23 Nov 2026: iptv-epg.org began returning HTTP 403 to all automated fetchers (Cloudflare TLS fingerprint
+# block; not IP- or User-Agent-based — a browser-UA alone does not fix it). All iptv_epg_* source URLs
+# redirected to the equivalent epgshare01.online tags; keys and config unchanged, family updated to "epgshare".
 EPG = {
     "farleyflex": ("UK sports · farleyflex", "https://raw.githubusercontent.com/farleyflex/epg-guide/main/epg.xml"),
     "uk_freeview": ("UK free-to-air · Freeview-EPG (dp247)", "https://raw.githubusercontent.com/dp247/Freeview-EPG/master/epg.xml"),
@@ -28,20 +31,20 @@ EPG = {
     # Feeds already offered by the B1G Android backup-guide list (SkyGuideScene.backupFeeds).
     "epgtalk_uk": ("UK national · EPGTalk (B1G suggested feed)", "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/UK_guide.xml.gz"),
     "epgtalk_sports": ("Sports · EPGTalk (B1G suggested feed)", "https://raw.githubusercontent.com/acidjesuz/EPGTalk/master/Sports_guide.xml.gz"),
-    "iptv_epg_fr": ("France · IPTV-EPG.org (B1G; terms not explicit)", "https://iptv-epg.org/files/epg-fr.xml.gz"),
+    "iptv_epg_fr": ("France · EPGShare FR1 (rerouted from iptv-epg.org 23 Nov 2026; terms not explicit)", "https://epgshare01.online/epgshare01/epg_ripper_FR1.xml.gz"),
     "epgshare_us": ("United States · EPG Share US2", "https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz"),
     "epgshare_us_sports": ("United States sports · EPG Share US SPORTS1", "https://epgshare01.online/epgshare01/epg_ripper_US_SPORTS1.xml.gz"),
-    "iptv_epg_gb": ("UK broad · IPTV-EPG.org", "https://iptv-epg.org/files/epg-gb.xml.gz"),
-    "iptv_epg_au": ("Australia · IPTV-EPG.org", "https://iptv-epg.org/files/epg-au.xml.gz"),
-    "iptv_epg_de": ("Germany · IPTV-EPG.org", "https://iptv-epg.org/files/epg-de.xml.gz"),
-    "iptv_epg_it": ("Italy · IPTV-EPG.org", "https://iptv-epg.org/files/epg-it.xml.gz"),
-    "iptv_epg_es": ("Spain · IPTV-EPG.org", "https://iptv-epg.org/files/epg-es.xml.gz"),
-    "iptv_epg_nl": ("Netherlands · IPTV-EPG.org", "https://iptv-epg.org/files/epg-nl.xml.gz"),
-    "iptv_epg_ca": ("Canada · IPTV-EPG.org", "https://iptv-epg.org/files/epg-ca.xml.gz"),
+    "iptv_epg_gb": ("UK broad · EPGShare UK1 (rerouted from iptv-epg.org 23 Nov 2026)", "https://epgshare01.online/epgshare01/epg_ripper_UK1.xml.gz"),
+    "iptv_epg_au": ("Australia · EPGShare AU1 (rerouted from iptv-epg.org 23 Nov 2026)", "https://epgshare01.online/epgshare01/epg_ripper_AU1.xml.gz"),
+    "iptv_epg_de": ("Germany · EPGShare DE1 (rerouted from iptv-epg.org 23 Nov 2026)", "https://epgshare01.online/epgshare01/epg_ripper_DE1.xml.gz"),
+    "iptv_epg_it": ("Italy · EPGShare IT1 (rerouted from iptv-epg.org 23 Nov 2026)", "https://epgshare01.online/epgshare01/epg_ripper_IT1.xml.gz"),
+    "iptv_epg_es": ("Spain · EPGShare ES1 (rerouted from iptv-epg.org 23 Nov 2026)", "https://epgshare01.online/epgshare01/epg_ripper_ES1.xml.gz"),
+    "iptv_epg_nl": ("Netherlands · EPGShare NL1 (rerouted from iptv-epg.org 23 Nov 2026)", "https://epgshare01.online/epgshare01/epg_ripper_NL1.xml.gz"),
+    "iptv_epg_ca": ("Canada · EPGShare CA2 (rerouted from iptv-epg.org 23 Nov 2026)", "https://epgshare01.online/epgshare01/epg_ripper_CA2.xml.gz"),
     # International sports lineups named in the B1G 10 Nov sports-coverage register entry.
     "epgshare_hk": ("Hong Kong · EPG Share HK1 — Now Sports/beIN (verify)", "https://epgshare01.online/epgshare01/epg_ripper_HK1.xml.gz"),
-    "iptv_epg_hk": ("Hong Kong · IPTV-EPG.org (verify)", "https://iptv-epg.org/files/epg-hk.xml.gz"),
-    "iptv_epg_ge": ("Georgia · IPTV-EPG.org — Setanta (verify)", "https://iptv-epg.org/files/epg-ge.xml.gz"),
+    "iptv_epg_hk": ("Hong Kong · EPGShare HK1 (rerouted from iptv-epg.org 23 Nov 2026; verify)", "https://epgshare01.online/epgshare01/epg_ripper_HK1.xml.gz"),
+    "iptv_epg_ge": ("Georgia · EPGShare GE1 (rerouted from iptv-epg.org 23 Nov 2026; verify)", "https://epgshare01.online/epgshare01/epg_ripper_GE1.xml.gz"),
     "epgshare_my": ("Malaysia · EPG Share MY1 — Astro (verify)", "https://epgshare01.online/epgshare01/epg_ripper_MY1.xml.gz"),
     # Matt Huisman regional guides (path pattern reported in community forums).
     "mjh_nz": ("New Zealand free-to-air · Matt Huisman", "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/nz/epg.xml.gz"),
@@ -98,10 +101,12 @@ EPG = {
     "mjh_skygo_nz": ("New Zealand · Sky Go, all Sky NZ channels (Matt Huisman, 100 channels, about 3 months)",
                      "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/SkyGo/epg.xml.gz"),
 }
-# Further iptv-epg.org country files named on its guides page (not reachable from the development
-# sandbox: "verify" with Test EPG before enabling).
+# Further country files (were iptv-epg.org; rerouted to epgshare01.online 23 Nov 2026).
+# "verify" with Test EPG before enabling; GE/HK/GE tags may not exist on epgshare01.online.
 for _cc in ("se", "no", "dk", "tr", "pt", "pl", "ru", "al", "bg", "cz", "hu", "ro"):
-    EPG["iptv_epg_" + _cc] = ("%s · IPTV-EPG.org (verify)" % _cc.upper(), "https://iptv-epg.org/files/epg-%s.xml.gz" % _cc)
+    _tag = "RU1" if _cc == "ru" else _cc.upper() + "1"
+    EPG["iptv_epg_" + _cc] = ("%s · EPGShare %s (rerouted from iptv-epg.org 23 Nov 2026; verify)" % (_cc.upper(), _tag),
+                              "https://epgshare01.online/epgshare01/epg_ripper_%s.xml.gz" % _tag)
 # Further markets present in the owner's provider categories (CA, AU, NZ, PT,
 # PL, GR, SG, IN). Canada uses the publisher's CA2 feed.
 EPGSHARE_MARKETS = {
@@ -143,8 +148,8 @@ EPG_FAMILY = {
     "fr_xmltv": "xmltvfr", "mjh_sky_uk": "mjh", "mjh_nz": "mjh", "mjh_au_sydney": "mjh",
     "mjh_skysportnow_nz": "mjh", "mjh_kayo_au": "mjh", "epgtalk_uk": "schedules_direct",
     "epgtalk_sports": "schedules_direct",
-    **{f"iptv_epg_{market}": "iptv_epg_org" for market in ("gb", "au", "de", "it", "es", "nl", "ca")},
-    "iptv_epg_fr": "iptv_epg_org", "iptv_epg_hk": "iptv_epg_org", "iptv_epg_ge": "iptv_epg_org",
+    **{f"iptv_epg_{market}": "epgshare" for market in ("gb", "au", "de", "it", "es", "nl", "ca")},
+    "iptv_epg_fr": "epgshare", "iptv_epg_hk": "epgshare", "iptv_epg_ge": "epgshare",
 }
 UNVERIFIED_LINEAGE_FAMILIES = frozenset({"epgshare", "iptv_epg_org", "fazzani_grab", "doblem", "iptv_org"})
 EPG["epgshare_bein"] = ("beIN Sports MENA (Arabic/English) · EPG Share BEIN1 (verify)",
@@ -156,15 +161,15 @@ EPG_FAMILY.update({"epgshare_bein": "epgshare", "es_doblem": "doblem", "fr_mena_
                    "epgtalk_latino": "schedules_direct", "epgtalk_freetv": "schedules_direct",
                    "mjh_roku_us": "mjh", "mjh_plex_us": "mjh", "mjh_dstv_za": "mjh",
                    "mjh_samsung_in": "mjh", "mjh_au_all": "mjh", "mjh_skygo_nz": "mjh", "mjh_plex_gb": "mjh", "mjh_samsung_gb": "mjh", "mjh_pluto_gb": "mjh",
-                   **{"iptv_epg_" + cc: "iptv_epg_org" for cc in ("se", "no", "dk", "tr", "pt", "pl", "ru", "al",
-                                                                 "bg", "cz", "hu", "ro")}})
+                   **{"iptv_epg_" + cc: "epgshare" for cc in ("se", "no", "dk", "tr", "pt", "pl", "ru", "al",
+                                                               "bg", "cz", "hu", "ro")}})
 # (max download bytes, max programmes) per guide; broad national guides are large.
 EPG_LIMITS = {
     # The publisher serves an uncompressed file of about 21 MB.
     "uk_freeview": (30_000_000, 100_000),
-    "iptv_epg_gb": (30_000_000, 180_000), "iptv_epg_au": (14_000_000, 100_000),
+    "iptv_epg_gb": (40_000_000, 250_000), "iptv_epg_au": (40_000_000, 250_000),
     "epgshare_us_sports": (5_000_000, 150_000),
-    "iptv_epg_ca": (16_000_000, 175_000), "iptv_epg_nl": (20_000_000, 100_000),
+    "iptv_epg_ca": (40_000_000, 250_000), "iptv_epg_nl": (40_000_000, 250_000),
     "epgshare_uk": (60_000_000, 300_000), "epgshare_fr": (40_000_000, 250_000),
     "epgshare_ie": (30_000_000, 200_000), "epgshare_us": (60_000_000, 300_000),
     "epgshare_hk": (30_000_000, 200_000), "epgshare_my": (30_000_000, 200_000),

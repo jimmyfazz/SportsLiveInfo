@@ -2,18 +2,7 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
-## 0.3.28 — 21 Nov 2026: live budget fix (core-tier only, time-of-day reserve), live-budget advisory, docs refresh
-
-Owner approved CA-09 on 21 Nov 2026. Evidence: live publishes ran every 15 minutes from 08:43 to 10:13 UTC, then at 10:28 and 11:13, then none until the 12:14 collection although six events were live at 12:00. The lane read the API-Sports live board every 15 minutes whenever any collected event (extra tier included) was in its window, and `LIVE_DAILY_BUDGET` was 40 calls per product a day (10 hours of polling), so the day's budget was gone by about 11:13 UTC, before the afternoon and evening kick-offs. No wire change; `sli/1.7` and the golden feed are unchanged apart from the version string.
-
-- **Core tier only:** `engine._live_candidates` tags each candidate with its tier (`feed.event_tier`, the test the feed publishes). Only core events trigger a board read; extra-tier events never do, but a board read made for core events still updates the extra events in play. A pass with only extra events makes no call and says so in the job note.
-- **Budget from the plan:** `engine.live_daily_budget(daily_limit)` = limit minus `LIVE_RESERVE` (80 - 20 = 60 calls per product a day; the API-Sports free plan allows 100). `LIVE_DAILY_BUDGET` stays as the explicit constant (60, was 40). The reserve now means what it says: the 20 calls the scheduled refreshes (about 14-16) and the settle pass (at most 4) may still take. The old extra stop at "total use >= limit - reserve" counted those calls twice and would have blocked the live lane and the settle pass every evening, so the live lane and the settle pass now stop only at the product's hard daily limit.
-- **Time-of-day reserve:** `live_allowance` holds back 30% of the live budget (18 calls) until 17:00 UTC, so the morning cannot spend the evening (17:00-23:00 UTC).
-- **Adaptive back-off:** when less than 25% of the usable live budget is left, the lane polls every 30 minutes (minus a minute of tick slack) and only while a core event is live or kicked off in the last 15 minutes. A day of 15-minute polling with core and extra events now lasts to 23:45 UTC (56 of 60 live calls, 16 of them between 17:00 and 23:00 UTC; the test simulates 06:00-23:45 with the scheduled refreshes and settle calls counted).
-- **Health advisory `live_budget_exhausted:<product>`** (advisory, 200 on `/healthz`, never a stall): raised when core events are in play and the product's live budget is spent; one de-duplicated Home Assistant notification naming the product, the calls used of the limit and when it resets (00:00 UTC); cleared at once when the new UTC day starts or the budget recovers.
-- **Visible counters:** the live lane stores per product `live_budget` (calls used and limit, last live call time, core and extra candidates, back-off, exhausted). Shown on the Scheduler page (Live status lane card), in Diagnostics > Service health, and in the health snapshot.
-- **Tests:** `tests/test_live_budget.py` (extra-only makes no calls, core plus extra, allowance and back-off arithmetic, a simulated Saturday of 15-minute polling, advisory fires, stays 200, notifies once and clears, Scheduler and Diagnostics text). Updated `test_owner_calls_20nov` (budget 60), `test_live_tiers_corroboration` and `test_settle_pass` (the hard limit, not limit minus reserve).
-- **Docs refresh:** README, add-on README and DOCS (`sli/1.7`, shipped wording), CURRENT_STATUS, contract, RUNBOOK, DOCUMENTATION_INDEX, OPERATIONS_HARDENING headers, IMPLEMENTATION_PROGRESS; changelog headings for 0.3.25 to 0.3.27 tidied.
+## 0.3.29 — fix(providers): reroute iptv_epg_* from iptv-epg.org (403) to epgshare01.online
 
 ## 0.3.27 — 20 Nov 2026: audit fixes (expected_end_utc gaps, year boundary, Z-suffix)
 
@@ -24,14 +13,17 @@ Owner approved CA-09 on 21 Nov 2026. Evidence: live publishes ran every 15 minut
 - **Dead code removed:** redundant `db.commit()` in `storage._put()`, unreachable code after `return` in `server.e()`.
 - Tests: `test_live_tiers_corroboration`, `test_event_titles_and_durations`, `test_history_display_state` updated; golden fixtures regenerated.
 
-### Owner decisions of 20 Nov 2026 (CA-16, CA-17, CA-18)
+### owner decisions of 20 Nov 2026 (CA-09, CA-16, CA-17, CA-18; no version bump)
 
+- **CA-09: no change (owner).** `LIVE_DAILY_BUDGET` (40) and the live candidate gating are untouched.
 - **CA-18: `LIVE_REFRESH` 30 to 15 minutes.** An unchanged live status is re-stamped every 15 minutes, so LIVE no longer flickers (15 + 5 CDN + 15 poll is inside `LIVE_MAX_AGE` 45, which is unchanged; `refresh.live_stale_after_minutes` stays 45). No extra API calls. About 4 live commits an hour in play: the growth ledger now marks live-lane commits (`kind: live`), `feed.growth_report` gains `live_commits`, `live_per_day` and a separate `live_commits_per_day` budget of 60 (7-day average); `commits_per_day` (8) counts only the other commits, so the alert does not fire just because matches are on. Contract section 4.2, RUNBOOK section 3, OPERATIONS_HARDENING section 4.
 - **CA-16: wrestling and sumo removed.** `providers.is_not_carried` (whole words WWE, WWF, AEW, NXT, TNA, wrestling, sumo, basho in sport, league or title) drops them in `thesportsdb_events` and again in `build_feed`, so no day, extra, live or history asset (also from snapshots collected before the upgrade) carries them. Boxing, MMA/UFC, BKFC and kickboxing are untouched, and the midnight `date_only` rule is unchanged.
 - **CA-17: tennis.** (a) A tennis row with no final status is omitted from every asset once the collection time is past `expected_end_utc` + 30 minutes (`feed.tennis_lapsed`); never published as `finished`. (b) Tennis is core only for Grand Slams, ATP/WTA main tour, Davis Cup, Billie Jean King Cup, United Cup and the Olympics; ITF, Challenger, UTR, WTA 125, exhibitions and unknown tours are `extra` (`feed.tennis_tier`). Day assets are evaluated at collection time, so lapsed rows leave at the next collection, not at every live build (keeps live commits small). The first automatic publish after the upgrade may fall under the 20 % regression gate because past tennis rows disappear at once; a manual publish overrides.
 - Tests: `tests/test_owner_calls_20nov.py`; live-lane tests updated for the 15 minute re-stamp. Golden fixtures regenerated: unchanged (they hold no tennis or wrestling).
 
-### Audit 20 Nov follow-ups (SLI side of `COMBINED_AUDIT_2026-11-20`: CA-03, CA-06, CA-07, CA-08, CA-12, CA-24)
+## 0.3.26 — 20 Nov 2026 follow-ups: blocked-publish alert, crest toggles, seeded tables review and overrides
+
+### Audit 20 Nov follow-ups (SLI side of `COMBINED_AUDIT_2026-11-20`; no version bump)
 
 - **CA-08 F1 sessions published twice.** `linking._same_event` merges motorsport rows of one competition when both name the same session (own `session`, or one found in the title) within 90 minutes, or when one row names no session (TheSportsDB titles the weekend, for example "Las Vegas Grand Prix") and starts within 15 minutes of the other's session. A title that names a different session ("Reverse Grid Race") stays separate; two sessionless rows never merge. `tests/test_f1_practice_dedupe.py`.
 - **CA-06 `refresh.collected_at`** (optional) and `refresh.collected_at_expected` in the manifest, and `collected_at` in the health asset: the last full collection (`sports` snapshot `generated_at`), not renewed by a live-lane publish. Contract section 3, schema, golden fixtures regenerated. B1G does not read it yet.
@@ -39,17 +31,15 @@ Owner approved CA-09 on 21 Nov 2026. Evidence: live publishes ran every 15 minut
 - **CA-03 dictionary budget.** Confirmed existing: parts splitter, 80% alert, plain `dictionary` alias when UK/Europe fits in one part. Added `tests/test_audit_20nov_sli.py` with the recorded live size (6,969,653 bytes, 83%) and a headroom test (fails when the recorded size plus 15% reaches the cap). B1G cannot read parts yet.
 - **CA-12 crest preview.** The Publishing page says "Crest references: OFF/ON, N of M collected events would carry / carry crests" (`feed.crest_preview`). Enabling is still owner configuration.
 - **CA-24** README, CLAUDE.md, CURRENT_STATUS and the contract header now say `sli/1.7` / 0.3.26 with the capability list.
-- Decided by the owner later on 20 Nov and shipped in this release: CA-16, CA-17, CA-18 (below). CA-09 was changed in 0.3.28; CA-19 stays open.
+- Not done at that point: CA-09, CA-18, CA-16, CA-17 (decided by the owner later on 20 Nov: see the Unreleased entry above), CA-19.
 
-## 0.3.26 — 20 Nov 2026: blocked-publish alert, crest toggles, seeded tables review and overrides
+## 0.3.25 — 20 Nov 2026 release: history, scores, crests, standings, channel hints, health alerts, ops hardening
 
-### Blocked-publish alert, crest toggles, seeded-table overrides
+### Follow-ups: blocked-publish alert, crest toggles, seeded-table overrides (after 0.3.25 was cut; the lead bumps the version)
 
 - **Health:** new advisory incident `publish_gate_blocked` for an automatic publish refused by the regression gate (previously stored only as publisher state `blocked`, with no notification). One de-duplicated Home Assistant notification naming events and guide-confirmed bindings before and after and the override (Publish feed now), dismissed on recovery; shown in Service health and `/healthz` `advisories`; never a 503. `publish_gate` now also stores the before/after counts.
 - **Publishing page:** toggles for `publish_crest_refs` and `crest_device_lookup_thesportsdb` (attestation to switch on), read-only `binds_rule` / `rights_holder_prior` line.
-- **Seeded tables:** optional config overrides `broadcaster_rank_override` and `rights_holder_prior_override` (JSON, validated on save, empty = built-in, feed byte-identical when absent) with a form on the Publishing page; owner review checklist in `docs/SEEDED_TABLES_REVIEW.md`. No wire change, golden fixtures unchanged, 
-
-## 0.3.25 — 20 Nov 2026 release: history, scores, crests, standings, channel hints, health alerts, ops hardening
+- **Seeded tables:** optional config overrides `broadcaster_rank_override` and `rights_holder_prior_override` (JSON, validated on save, empty = built-in, feed byte-identical when absent) with a form on the Publishing page; owner review checklist in `docs/SEEDED_TABLES_REVIEW.md`. No wire change, golden fixtures unchanged, version not bumped.
 
 ### Owner statement 20 Nov 2026: scores and crest references on for fresh installs
 
@@ -65,6 +55,7 @@ Owner approved CA-09 on 21 Nov 2026. Evidence: live publishes ran every 15 minut
 - **`display_state`, `state_until_utc`, `finished_at_utc`.** Computed centrally from status, clock, `live_until_utc` and the expected end (rules and table in contract 4.5); day assets state it as of the collection that produced the event, `live` rows as of their build. Day assets stay byte-identical across live republishes.
 - **Guarantees.** Every event has `competition_id` (catch-all `<sport>.other` when the taxonomy does not know it; the tier is still decided from the taxonomy, so the catch-all does not make an event core), `status_normalized` (default `scheduled`) and `expected_end_utc` (sport default; now also for date-only events, as a placeholder). `date_only` and `time_tbc` events carry `start_utc` = 00:00 Europe/London of the date (was noon UTC) and no `end_utc`.
 - Schemas (events-day, live, manifest), golden fixtures (a finished match yesterday with its channel link, a date-only event) and `tests/test_history_display_state.py` updated; no version bump, `format` stays `sli/1.6`.
+
 
 ### Event metadata, feature ranking and F1 weekends (all optional, `sli/1.6`, `min_reader_minor` unchanged)
 
@@ -116,6 +107,7 @@ Audit 15 Nov O1, O3, C4, C10. Details and owner steps: [`docs/OPERATIONS_HARDENI
 - Tests: 481 pass (39 new in `tests/test_ops_hardening.py`; one assertion in `tests/test_feed.py` changed from "dictionary skipped" to "dictionary published as parts").
 
 ### Scores per source behind a rights flag (feed `sli/1.7`, default off)
+
 
 - **Nothing is published until the owner approves a source.** New config `score_approvals` (list of source ids, default empty, separate from `publication_approvals`; Ingress → Publishing → Score approvals, with an attestation checkbox). Eligible: the API-Sports products except MMA (live and final) and football-data.org (final scores of regular-time results only). TheSportsDB, Jolpica, OpenF1 and every other source are rejected by validation. The owner must still read each source's terms and approve.
 - **Disabled means byte-identical.** With no approved source the manifest is still `sli/1.6`, there is no `score` field, no `scores` capability and the revision hash is unchanged (the golden `schemas/fixtures/sli-v1` fixtures did not change). With approved sources the manifest is `sli/1.7` (`min_reader_minor` unchanged), capability `scores`, `compatibility.scores` and `rights.scores.approved_sources`; removing the approvals is the kill switch.
