@@ -2,7 +2,7 @@
 
 > **Repository roles:** [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) is the public App source and installation repository; [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is PUBLIC daily data only. [Current status and evidence](docs/CURRENT_STATUS.md).
 
-SportsLiveInfo is an experimental **v0.3.28 Home Assistant OS App** for two equally required products: international full-channel EPG and multi-sport event intelligence. It collects centrally on the owner's always-on home mini PC; B1G TV clients (up to ten) read the shared static feed and resolve playable channels locally.
+SportsLiveInfo is an experimental **v0.3.29 Home Assistant OS App** for two equally required products: international full-channel EPG and multi-sport event intelligence. It collects centrally on the owner's always-on home mini PC; B1G TV clients (up to ten) read the shared static feed and resolve playable channels locally.
 
 See [current status](docs/CURRENT_STATUS.md) for what is installed, measured and still open, and the [changelog](sportsliveinfo/CHANGELOG.md) for each release.
 

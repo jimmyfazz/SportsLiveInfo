@@ -2,6 +2,16 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.29 — 23 Nov 2026: publish gate compares published days, not the snapshot total
+
+Owner report 23 Nov 2026: "Stalled: no publication since 03:50 UTC although the 04:00 refresh was due more than 3 h ago". Every automatic and live publish from 04:13 UTC was refused with "events fell from 5387 to 3254 (more than 20%)". The figure was `coverage.events`, which counts the whole collected snapshot, including past weekend days that are not published. When Monday's collection dropped Saturday, the total fell 40% although the published days were unchanged (published records on the shared days rose). Last week's Sunday-to-Monday change was −52% (2,496 → 1,210), so the gate added on 20 Nov would have blocked publishing every Monday. No wire change; `sli/1.6` and `sli/1.7` and the golden feed are unchanged apart from the version string.
+
+- **Like-for-like events:** `engine.publish_comparison` compares published event records per London day (the `events:<date>` and `events_extra:<date>` assets) over the days both feeds publish. The 20% threshold, the minimum baseline of 5 and the manual override are unchanged. A real loss on shared days still blocks.
+- **Bindings:** guide-corroborated bindings have no per-day breakdown, so they are compared only while the window has not moved to a new day.
+- **Stored stats:** `feed_state.stats` now holds `records_by_day` and `window_from` as well. Stats saved by 0.3.28 give no events baseline, so the first automatic publish after the update is not gated.
+- **Tests:** `test_live_tiers_corroboration` (rule, the 23 Nov Monday shift, old stats, refused-then-manual flow).
+- **Seen in the same collection, not changed:** the optional India guide (`epgshare_in`) failed with "Guide exceeded an import size or record limit". Its cap is 40 MB / 250,000 programmes. It was not measured from the cloud session (the host is blocked there).
+
 ## 0.3.28 — 21 Nov 2026: live budget fix (core-tier only, time-of-day reserve), live-budget advisory, docs refresh
 
 Owner approved CA-09 on 21 Nov 2026. Evidence: live publishes ran every 15 minutes from 08:43 to 10:13 UTC, then at 10:28 and 11:13, then none until the 12:14 collection although six events were live at 12:00. The lane read the API-Sports live board every 15 minutes whenever any collected event (extra tier included) was in its window, and `LIVE_DAILY_BUDGET` was 40 calls per product a day (10 hours of polling), so the day's budget was gone by about 11:13 UTC, before the afternoon and evening kick-offs. No wire change; `sli/1.7` and the golden feed are unchanged apart from the version string.

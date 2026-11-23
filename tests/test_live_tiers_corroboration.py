@@ -565,17 +565,40 @@ class LiveExpiryAndPublishGateTests(LiveLaneBase):
             (Path(__file__).resolve().parents[1] / "schemas" / "sli-manifest.schema.json").read_text())
             ["properties"]["refresh"]["properties"])
 
+    @staticmethod
+    def gate_manifest(days, bindings=10, window_from="2026-11-23", total=5000):
+        assets = [{"kind": "taxonomy"}] + [{"kind": "events:" + d, "date": d, "records": n} for d, n in days.items()]
+        return {"coverage": {"events": total, "guide_corroborated_broadcasts": bindings}, "assets": assets,
+                "window": {"from": window_from}}
+
     def test_regression_rule(self):
-        manifest = {"coverage": {"events": 79, "guide_corroborated_broadcasts": 10}}
-        rule = engine_module.publish_regression
-        self.assertIsNone(rule(None, manifest))
-        self.assertIsNone(rule({"events": 100, "corroborated_bindings": 12}, {"coverage": {
-            "events": 80, "guide_corroborated_broadcasts": 10}}))              # exactly 20% down: allowed
-        self.assertIn("events fell from 100 to 79", rule({"events": 100, "corroborated_bindings": 10}, manifest))
-        self.assertIn("corroborated bindings fell from 20 to 10",
-                      rule({"events": 79, "corroborated_bindings": 20}, manifest))
-        self.assertIsNone(rule({"events": 3, "corroborated_bindings": 3}, {"coverage": {
-            "events": 0, "guide_corroborated_broadcasts": 0}}))                 # tiny baseline ignored
+        rule, m = engine_module.publish_regression, self.gate_manifest
+        stats = engine_module.publish_stats
+        before = stats(m({"2026-11-22": 50, "2026-11-23": 50}, bindings=12))
+        self.assertEqual(before["records_by_day"], {"2026-11-22": 50, "2026-11-23": 50})
+        self.assertIsNone(rule(None, m({"2026-11-23": 1})))
+        self.assertIsNone(rule(before, m({"2026-11-22": 40, "2026-11-23": 40}, bindings=10)))   # exactly 20%: allowed
+        self.assertIn("events fell from 100 to 79 (more than 20%) on the days both feeds publish (2026-11-22 to 2026-11-23)",
+                      rule(before, m({"2026-11-22": 40, "2026-11-23": 39})))
+        self.assertIn("guide-corroborated bindings fell from 12 to 9",
+                      rule(before, m({"2026-11-22": 50, "2026-11-23": 50}, bindings=9)))
+        tiny = stats(m({"2026-11-23": 3}, bindings=3))
+        self.assertIsNone(rule(tiny, m({"2026-11-23": 0}, bindings=0)))                        # tiny baseline ignored
+
+    def test_monday_window_shift_is_not_a_regression(self):
+        """Owner report 23 Nov 2026: the snapshot total fell 5387 -> 3254 when Saturday left it; published days held."""
+        rule, m, stats = engine_module.publish_regression, self.gate_manifest, engine_module.publish_stats
+        sunday = stats(m({"2026-11-22": 182, "2026-11-23": 45, "2026-11-24": 28}, bindings=64,
+                         window_from="2026-11-23", total=5387))
+        monday = m({"2026-11-23": 300, "2026-11-24": 30, "2026-11-25": 25}, bindings=20, window_from="2026-11-24",
+                   total=3254)
+        self.assertIsNone(rule(sunday, monday))        # common days 23-24 grew; bindings not compared across a day
+        lost = m({"2026-11-23": 10, "2026-11-24": 5, "2026-11-25": 25}, window_from="2026-11-24", total=3254)
+        self.assertIn("fell from 73 to 15", rule(sunday, lost))              # a real loss on shared days still trips
+
+    def test_stats_from_before_the_fix_give_no_events_baseline(self):
+        rule, m = engine_module.publish_regression, self.gate_manifest
+        self.assertIsNone(rule({"events": 5387, "corroborated_bindings": 64}, m({"2026-11-23": 1}, bindings=0, total=3254)))
 
     def test_automatic_publish_is_refused_on_regression_and_manual_overrides(self):
         self.snapshot()
@@ -586,13 +609,14 @@ class LiveExpiryAndPublishGateTests(LiveLaneBase):
             self.assertEqual(len(commits), 1)
             state = self.store._get("feed_state")
             self.assertEqual(state["stats"]["events"], 1)
-            self.store._put("feed_state", dict(state, stats={"events": 50, "corroborated_bindings": 0},
+            days = {d: n * 50 + 50 for d, n in state["stats"]["records_by_day"].items()}
+            self.store._put("feed_state", dict(state, stats=dict(state["stats"], records_by_day=days),
                                                last_revision="0" * 20))
             self.assertIsNone(self.engine._publish_job("automatic"))
             self.assertEqual(len(commits), 1)                              # nothing committed
             status = self.store._get("publish_status")
             self.assertEqual(status["state"], "failed")
-            self.assertIn("events fell from 50 to 1", status["message"])
+            self.assertIn("on the days both feeds publish", status["message"])
             self.assertEqual(self.store.recent_jobs(1, provider="publisher")[0]["state"], "blocked")
             self.assertIn("events fell", self.store._get("publish_gate")["reason"])
             self.assertIsNotNone(self.engine._publish_job("manual"))      # manual publish overrides
