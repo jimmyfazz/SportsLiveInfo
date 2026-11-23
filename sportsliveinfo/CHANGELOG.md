@@ -2,6 +2,12 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.30 — fix(logging): suppress /healthz spam, consolidate EPG family failures, enrich regression gate message
+
+- **server.py** `log_message`: skip logging for `/healthz` requests (~720 redundant INFO entries/day from the 2-min supervisor poll)
+- **engine.py** `_collect_epg_run`: demote per-source failure from WARNING→DEBUG; `_collect_run` emits one consolidated WARNING when any EPG sources fail (groups by family, lists names)
+- **engine.py** `_publish`: attach recently-failed EPG source names to `PublishRegression.details`; `_publish_job` appends them to the blocked message so the cause is visible without log-diving
+
 ## 0.3.29 — fix(providers): reroute iptv_epg_* from iptv-epg.org (403) to epgshare01.online
 
 ## 0.3.27 — 20 Nov 2026: audit fixes (expected_end_utc gaps, year boundary, Z-suffix)

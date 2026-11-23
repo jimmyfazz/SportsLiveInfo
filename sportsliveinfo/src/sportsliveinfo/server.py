@@ -193,6 +193,8 @@ class UI(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         # Never emit paths or form fields; some future auth connectors may use URLs.
+        if self.path and self.path.startswith("/healthz"):
+            return  # suppress 2-minute supervisor polling — 720 INFO entries/day
         LOGGER.info("Ingress %s %s", self.command, self.client_address[0])
 
     def _allowed(self):

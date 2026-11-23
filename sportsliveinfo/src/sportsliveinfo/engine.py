@@ -345,6 +345,12 @@ class Engine:
                     result = future.result(timeout=max(0.05, overall.remaining()))
                     if future is epg_future:
                         guides_refreshed = sum(item is True for item in result)
+                        failed_epg = [guides[i] for i, r in enumerate(result) if r is False]
+                        if failed_epg:
+                            families = sorted({providers.EPG_FAMILY.get(n, "unknown") for n in failed_epg})
+                            LOGGER.warning("%d EPG source(s) failed (families: %s): %s",
+                                           len(failed_epg), ", ".join(families),
+                                           ", ".join(failed_epg[:6]) + ("..." if len(failed_epg) > 6 else ""))
                     results = result if isinstance(result, list) else [result]
                     successes += sum(bool(item) for item in results)
                     deferrals += sum(item is None for item in results)
@@ -892,7 +898,7 @@ class Engine:
         except (ValueError, RuntimeError, TimeoutError, OSError, EOFError, json.JSONDecodeError, ET.ParseError, zlib.error) as exc:
             reason = _guide_failure(exc)
             self.store.job(name, "failed", reason)
-            LOGGER.warning("EPG source %s failed: %s", name, reason)
+            LOGGER.debug("EPG source %s failed: %s", name, reason)
             return False
 
     @staticmethod
@@ -1915,6 +1921,9 @@ class Engine:
             revision = self.publish() if trigger == "manual" else self.publish(allow_regression=False)
         except PublishRegression as exc:
             message = "Automatic publish refused: %s; the previous feed stays live. Publish manually to override" % exc
+            _failed_srcs = (getattr(exc, "details", None) or {}).get("failed_epg_sources")
+            if _failed_srcs:
+                message += " (failed EPG: %s)" % ", ".join(_failed_srcs[:6])
             LOGGER.warning("Feed publication refused (%s): %s", trigger, message)
             self.store.job("publisher", "blocked", message)
             gate = {"blocked_at": utcnow(), "reason": str(exc)[:200], "trigger": trigger}
@@ -2012,10 +2021,18 @@ class Engine:
                 cover = manifest.get("coverage") or {}
                 before = state.get("stats") or {}
                 failure = PublishRegression(reason)
+                _recent_jobs = self.store.recent_jobs(60)
+                _failed_epg = []
+                for _r in _recent_jobs:
+                    if _r["state"] in ("failed", "coverage_collapse") and _r["provider"] in providers.EPG:
+                        _failed_epg.append(_r["provider"])
+                    elif _r["provider"] == "collector" and _r["state"] not in ("deferred",):
+                        break
                 failure.details = {
                     "events_before": before.get("events"), "events_after": cover.get("events", 0),
                     "bindings_before": before.get("corroborated_bindings"),
-                    "bindings_after": cover.get("guide_corroborated_broadcasts", 0)}
+                    "bindings_after": cover.get("guide_corroborated_broadcasts", 0),
+                    "failed_epg_sources": _failed_epg[:10]}
                 raise failure
         outcome, revision = self._commit_feed(owner, repository, branch, token, manifest, files, state,
                                               "feed_state", "publisher", "SportsLiveInfo feed", private=False)
