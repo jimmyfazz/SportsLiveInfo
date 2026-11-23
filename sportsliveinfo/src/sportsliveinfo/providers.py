@@ -44,7 +44,7 @@ EPG = {
     # International sports lineups named in the B1G 10 Nov sports-coverage register entry.
     "epgshare_hk": ("Hong Kong · EPG Share HK1 — Now Sports/beIN (verify)", "https://epgshare01.online/epgshare01/epg_ripper_HK1.xml.gz"),
     "iptv_epg_hk": ("Hong Kong · EPGShare HK1 (rerouted from iptv-epg.org 23 Nov 2026; verify)", "https://epgshare01.online/epgshare01/epg_ripper_HK1.xml.gz"),
-    "iptv_epg_ge": ("Georgia · EPGShare GE1 (rerouted from iptv-epg.org 23 Nov 2026; verify)", "https://epgshare01.online/epgshare01/epg_ripper_GE1.xml.gz"),
+    "iptv_epg_ge": ("Georgia · EPGShare GE1 — Setanta (rerouted from iptv-epg.org 23 Nov 2026; verify)", "https://epgshare01.online/epgshare01/epg_ripper_GE1.xml.gz"),
     "epgshare_my": ("Malaysia · EPG Share MY1 — Astro (verify)", "https://epgshare01.online/epgshare01/epg_ripper_MY1.xml.gz"),
     # Matt Huisman regional guides (path pattern reported in community forums).
     "mjh_nz": ("New Zealand free-to-air · Matt Huisman", "https://raw.githubusercontent.com/matthuisman/i.mjh.nz/master/nz/epg.xml.gz"),
