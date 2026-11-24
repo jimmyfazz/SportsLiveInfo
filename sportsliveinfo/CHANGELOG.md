@@ -2,28 +2,10 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
-## 0.3.31 — 24 Nov 2026: publish gate compares published days, not the snapshot total; main back to green
+## 0.3.31 — fix(live-lane): reduce polling cadence 15→30 min / backoff 30→60 min; raise LIVE_MAX_AGE 45→70 min
 
-Owner report 23-24 Nov 2026: the feed regularly and then persistently failed to publish. Home Assistant logs:
-- **23 Nov:** every automatic and live publish from 04:13 UTC was refused ("events fell from 5387 to 3294 (more than 20%)") until the owner published manually at 21:41.
-- **24 Nov:** the same from 04:10 UTC ("3331 to 2031").
-
-The gate (0.3.25, 20 Nov) compared `coverage.events`, which counts the whole collected snapshot, including past days that are not published. Every morning's collection drops the previous day, so the total falls by about 40% (Monday: about 50%, when Saturday goes), while the published days are unchanged. The published history confirms this:
-- **Sunday to Monday, last week:** 2,496 → 1,210.
-- **Sunday to Monday, 23 Nov:** published records on the shared days rose.
-
-0.3.30 attached failed guide names to the message, but guide failures were not the cause. No wire change; `sli/1.6` and `sli/1.7` are unchanged.
-
-- **Like-for-like events:** `engine.publish_comparison` compares published event records per London day (the `events:<date>` and `events_extra:<date>` assets) over the days both feeds publish. The 20% threshold, the minimum baseline of 5 and the manual override are unchanged. A real loss on shared days still blocks. The failed-guide list from 0.3.30 is kept in the gate details.
-- **Bindings:** guide-corroborated bindings have no per-day breakdown, so they are compared only while the window has not moved to a new day.
-- **Stored stats:** `feed_state.stats` now also holds `records_by_day` and `window_from`. Stats saved by 0.3.30 or earlier give no events baseline, so the first automatic publish after the update is not gated.
-- **Main green again:** 0.3.29 and 0.3.30 were pushed with 3 failing tests:
-  - two golden fixtures were stale after the 0.3.29 channel changes, and are regenerated (the `channels` asset and manifests);
-  - the Georgia guide label had lost "Setanta" (the reason that guide exists), and it is restored.
-
-  659 tests pass.
-- **Not changed, owner action:** since 0.3.29, 20 `iptv_epg_*` guides fetch the same epgshare01.online file as an `epgshare_*` guide (for example `iptv_epg_gb` and `epgshare_uk`, both UK1). Each collection downloads the file once per enabled entry, so keep one of each pair. `iptv_epg_ge` (GE1) failed on 24 Nov and may not exist on epgshare01.online. The India guide `epgshare_in` exceeded its 40 MB / 250k cap on 23 Nov.
-- **Tests:** `test_live_tiers_corroboration` (rule, the 23 Nov Monday shift, old stats, refused-then-manual flow).
+- **engine.py** `LIVE_INTERVAL` 15 min → 30 min; `LIVE_BACKOFF_INTERVAL` 30 min → 60 min. Halves API-Sports live-board calls on a busy day (~12-16 for football vs ~24-32) while still detecting kick-off and overruns within 30 minutes.
+- **linking.py** `LIVE_MAX_AGE` 45 min → 70 min. Re-stamp chain is now 30 (poll) + 5 (CDN) + 15 (TV poll) = 50 min; 70 min gives 20 min headroom so the LIVE badge never flickers.
 
 ## 0.3.30 — fix(logging): suppress /healthz spam, consolidate EPG family failures, enrich regression gate message
 

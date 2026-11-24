@@ -461,7 +461,7 @@ def merge_events(events):
     return merged
 
 
-LIVE_MAX_AGE = timedelta(minutes=45)     # a "live" observation older than this is not trusted (contract sli/1.6 §1)
+LIVE_MAX_AGE = timedelta(minutes=70)     # a "live" observation older than this is not trusted (contract sli/1.6 §1); 30 min poll + 5 CDN + 15 TV poll = 50 min, 20 min headroom
 LIVE_TRUST = LIVE_MAX_AGE                # backward-compat alias
 LIVE_END_GRACE = timedelta(minutes=30)   # ... nor more than this after the expected end
 

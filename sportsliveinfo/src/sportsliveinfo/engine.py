@@ -41,9 +41,9 @@ SAFE_ERRORS = (ValueError, RuntimeError, TimeoutError, OSError, EOFError,
                json.JSONDecodeError, TypeError, KeyError, OverflowError, ET.ParseError)
 FEED_RETAIN = 10  # published manifests (and the assets they reference) kept for slow/offline TVs
 # Light live-status lane (contract sli/1.6 §2). API-Sports "live=all" boards, only while the collected feed has an
-# event between its start and expected end, at most every 15 minutes, within a daily budget per product that also
+# event between its start and expected end, at most every 30 minutes, within a daily budget per product that also
 # counts against the product's own daily quota (and always leaves calls for the scheduled refreshes).
-LIVE_INTERVAL = timedelta(minutes=15)
+LIVE_INTERVAL = timedelta(minutes=30)
 LIVE_RESERVE = 20               # product calls kept back for the scheduled refreshes
 
 
@@ -64,13 +64,13 @@ LIVE_EVENING_SHARE = 0.30
 # Adaptive back-off: when the usable live budget is below this share of its nominal size, the interval stretches to
 # LIVE_BACKOFF_INTERVAL and only core events that are live (or kicked off in the last interval) justify a call.
 LIVE_BACKOFF_SHARE = 0.25
-LIVE_BACKOFF_INTERVAL = timedelta(minutes=30)
+LIVE_BACKOFF_INTERVAL = timedelta(minutes=60)
 LIVE_BACKOFF_SLACK = timedelta(minutes=1)          # the scheduler tick is not exact
-# Re-confirm (re-stamp) an unchanged "live" this often so readers keep trusting it. 15 minutes (owner decision 20 Nov
-# 2026, CA-18): re-stamp 15 + CDN cache 5 + TV poll 15 = 35 minutes, inside LIVE_MAX_AGE (45), so LIVE never flickers.
-# No extra provider calls (the lane already reads the board every LIVE_INTERVAL); it costs about 4 live commits an
+# Re-confirm (re-stamp) an unchanged "live" this often so readers keep trusting it. LIVE_INTERVAL = 30 min gives
+# a re-stamp chain of 30 + CDN 5 + TV poll 15 = 50 minutes, inside LIVE_MAX_AGE (70), so LIVE never flickers.
+# No extra provider calls (the lane already reads the board every LIVE_INTERVAL); it costs about 2 live commits an
 # hour while events are in play, counted against the separate live commit budget (feed.GROWTH_LIVE_COMMITS_PER_DAY_BUDGET).
-LIVE_REFRESH = timedelta(minutes=15)
+LIVE_REFRESH = timedelta(minutes=15)  # minimum gap between re-stamps; effective cadence is LIVE_INTERVAL
 LIVE_RETAIN = timedelta(hours=36)
 LIVE_SLOT_GUARD = 3             # minutes either side of a scheduled refresh when the lane stays quiet
 LIVE_UNSUPPORTED_DAYS = 3       # a product that refuses live=all is not asked again for this long
