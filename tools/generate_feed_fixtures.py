@@ -79,15 +79,6 @@ SNAPSHOTS = {
            title="Boston Celtics v Los Angeles Lakers", participants=["Boston Celtics", "Los Angeles Lakers"],
            start_utc="2026-11-15T00:30:00+00:00", status_normalized="scheduled"),
     ],
-    # Metadata fixture (contract 4.3): an F1 weekend gets session_label and a stable weekend_id.
-    "jolpica": [
-        _e(id="f1:2026:22:practice1", source_id="jolpica", sport="motorsport", competition="Formula 1", event_type="FirstPractice",
-           session="practice1", title="Las Vegas Grand Prix \u2014 Practice 1", start_utc="2026-11-20T00:30:00+00:00",
-           status_normalized="scheduled", venue="Las Vegas Strip Circuit", country="USA"),
-        _e(id="f1:2026:22:qualifying", source_id="jolpica", sport="motorsport", competition="Formula 1", event_type="Qualifying",
-           session="qualifying", title="Las Vegas Grand Prix \u2014 Qualifying", start_utc="2026-11-21T04:00:00+00:00",
-           status_normalized="scheduled", venue="Las Vegas Strip Circuit", country="USA"),
-    ],
     "thesportsdb": [
         _e(id="thesportsdb:6001", source_id="thesportsdb", sport="Darts", competition="Grand Slam of Darts", title="Luke Littler vs Luke Humphries",
            participants=["Luke Littler", "Luke Humphries"], start_utc="2026-11-14T19:00:00+00:00", status_normalized="scheduled"),

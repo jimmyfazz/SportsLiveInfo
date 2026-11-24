@@ -78,6 +78,12 @@ LIVE_UNSUPPORTED_DAYS = 3       # a product that refuses live=all is not asked a
 # Pre-publish regression gate: automatic publication is refused when the new feed has more than this share fewer
 # events, or fewer guide-corroborated bindings, than the one last published (manual publish overrides). Baselines
 # below the minimum are ignored so a tiny feed cannot trip it.
+#
+# Events are compared as PUBLISHED records per London day (the events:<date> and events_extra:<date> assets), over the
+# days both feeds cover. Owner report 23 Nov 2026: the gate used coverage.events, which counts the whole collected
+# snapshot including past weekend days that are not published, so every Monday (Saturday leaving the snapshot) it fell
+# by about 40% and blocked publishing for hours although the published days were unchanged. Bindings have no per-day
+# breakdown, so they are compared only while the window has not moved to a new day.
 PUBLISH_REGRESSION_THRESHOLD = 0.20
 PUBLISH_REGRESSION_MIN_BASELINE = 5
 
@@ -86,19 +92,50 @@ class PublishRegression(RuntimeError):
     """Automatic publication refused: the new feed lost too much against the published one."""
 
 
+def published_records_by_day(manifest):
+    """{London date: published event records} from the manifest's events:<date> / events_extra:<date> assets."""
+    days = {}
+    for asset in manifest.get("assets") or []:
+        kind = str(asset.get("kind") or "")
+        if kind.startswith(("events:", "events_extra:")) and asset.get("date") and isinstance(asset.get("records"), int):
+            days[asset["date"]] = days.get(asset["date"], 0) + asset["records"]
+    return days
+
+
+def publish_stats(manifest):
+    """What the gate remembers about a published feed."""
+    cover = manifest.get("coverage") or {}
+    return {"events": cover.get("events", 0), "corroborated_bindings": cover.get("guide_corroborated_broadcasts", 0),
+            "records_by_day": published_records_by_day(manifest),
+            "window_from": (manifest.get("window") or {}).get("from")}
+
+
+def publish_comparison(previous, manifest):
+    """Like-for-like before/after figures for the gate, or {} when there is no comparable baseline."""
+    if not isinstance(previous, dict):
+        return {}
+    now = publish_stats(manifest)
+    out = {}
+    before_days = previous.get("records_by_day")
+    if isinstance(before_days, dict):
+        common = sorted(set(before_days) & set(now["records_by_day"]))
+        if common:
+            out["events"] = (sum(int(before_days[d]) for d in common), sum(now["records_by_day"][d] for d in common),
+                             "events", " on the days both feeds publish (%s to %s)" % (common[0], common[-1]))
+    # Stats stored before 23 Nov 2026 have no per-day figures: no events baseline (the old total is not comparable).
+    if previous.get("window_from") and previous.get("window_from") == now["window_from"]:
+        out["corroborated_bindings"] = (previous.get("corroborated_bindings"), now["corroborated_bindings"],
+                                        "guide-corroborated bindings", "")
+    return out
+
+
 def publish_regression(previous, manifest):
     """Reason string when ``manifest`` regresses against ``previous`` (stored stats), else None."""
-    if not isinstance(previous, dict):
-        return None
-    cover = manifest.get("coverage") or {}
-    now = {"events": cover.get("events", 0), "corroborated_bindings": cover.get("guide_corroborated_broadcasts", 0)}
-    labels = {"events": "events", "corroborated_bindings": "guide-corroborated bindings"}
-    for key, label in labels.items():
-        before = previous.get(key)
+    for before, after, label, scope in publish_comparison(previous, manifest).values():
         if (isinstance(before, int) and before >= PUBLISH_REGRESSION_MIN_BASELINE
-                and now[key] < before * (1 - PUBLISH_REGRESSION_THRESHOLD)):
-            return "%s fell from %d to %d (more than %d%%)" % (label, before, now[key],
-                                                                round(PUBLISH_REGRESSION_THRESHOLD * 100))
+                and after < before * (1 - PUBLISH_REGRESSION_THRESHOLD)):
+            return "%s fell from %d to %d (more than %d%%)%s" % (label, before, after,
+                                                                  round(PUBLISH_REGRESSION_THRESHOLD * 100), scope)
     return None
 
 
@@ -2018,21 +2055,19 @@ class Engine:
         if not allow_regression and manifest["revision"] != state.get("last_revision"):
             reason = publish_regression(state.get("stats"), manifest)
             if reason:
-                cover = manifest.get("coverage") or {}
-                before = state.get("stats") or {}
+                compared = publish_comparison(state.get("stats"), manifest)
+                events = compared.get("events", (None, None, "", ""))
+                bindings = compared.get("corroborated_bindings", (None, None, "", ""))
                 failure = PublishRegression(reason)
-                _recent_jobs = self.store.recent_jobs(60)
                 _failed_epg = []
-                for _r in _recent_jobs:
+                for _r in self.store.recent_jobs(60):
                     if _r["state"] in ("failed", "coverage_collapse") and _r["provider"] in providers.EPG:
                         _failed_epg.append(_r["provider"])
                     elif _r["provider"] == "collector" and _r["state"] not in ("deferred",):
                         break
-                failure.details = {
-                    "events_before": before.get("events"), "events_after": cover.get("events", 0),
-                    "bindings_before": before.get("corroborated_bindings"),
-                    "bindings_after": cover.get("guide_corroborated_broadcasts", 0),
-                    "failed_epg_sources": _failed_epg[:10]}
+                failure.details = {"events_before": events[0], "events_after": events[1],
+                                   "bindings_before": bindings[0], "bindings_after": bindings[1],
+                                   "failed_epg_sources": _failed_epg[:10]}
                 raise failure
         outcome, revision = self._commit_feed(owner, repository, branch, token, manifest, files, state,
                                               "feed_state", "publisher", "SportsLiveInfo feed", private=False)
@@ -2066,10 +2101,8 @@ class Engine:
         self._github_commit(owner, repository, branch, token, uploads, deletions,
                             "%s %s (%d events)" % (label, revision, manifest["coverage"]["events"]),
                             required=files, private=private)
-        cover = manifest["coverage"]
         self.store._put(state_key, {"last_revision": revision, "revisions": keep, "published_at": utcnow(),
-                                    "stats": {"events": cover["events"],
-                                              "corroborated_bindings": cover["guide_corroborated_broadcasts"]}})
+                                    "stats": publish_stats(manifest)})
         if not private:
             try:    # C10: one ledger entry per history commit; the health report alerts when the budget is exceeded
                 now = datetime.now(timezone.utc)
