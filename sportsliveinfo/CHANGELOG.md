@@ -2,6 +2,11 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.32 — fix(live-lane): reduce polling cadence 15→30 min / backoff 30→60 min; raise LIVE_MAX_AGE 45→70 min
+
+- **engine.py** `LIVE_INTERVAL` 15 min → 30 min; `LIVE_BACKOFF_INTERVAL` 30 min → 60 min. Halves API-Sports live-board calls on a busy day (~12-16 for football vs ~24-32) while still detecting kick-off and overruns within 30 minutes.
+- **linking.py** `LIVE_MAX_AGE` 45 min → 70 min. Re-stamp chain is now 30 (poll) + 5 (CDN) + 15 (TV poll) = 50 min; 70 min gives 20 min headroom so the LIVE badge never flickers.
+
 ## 0.3.31 — fix(live-lane): reduce polling cadence 15→30 min / backoff 30→60 min; raise LIVE_MAX_AGE 45→70 min
 
 - **engine.py** `LIVE_INTERVAL` 15 min → 30 min; `LIVE_BACKOFF_INTERVAL` 30 min → 60 min. Halves API-Sports live-board calls on a busy day (~12-16 for football vs ~24-32) while still detecting kick-off and overruns within 30 minutes.
