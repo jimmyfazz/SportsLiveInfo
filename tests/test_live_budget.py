@@ -88,22 +88,26 @@ class AllowanceTests(unittest.TestCase):
         self.assertTrue(live_allowance(at(12), 80, 30, 42)[0])           # plenty left in the morning
         self.assertEqual(live_allowance(at(12), 80, 60, 60)[1], "exhausted")
 
-    def test_backoff_below_a_quarter_stretches_to_30_minutes_and_needs_a_live_core_event(self):
+    def test_backoff_below_a_quarter_stretches_to_the_backoff_interval_and_needs_a_live_core_event(self):
         # evening, budget 60, 48 used: 12 left (< 15 = 25%)
         ok, reason, detail = live_allowance(at(19, 15), 80, 48, 20, last_call=at(19), active_core=True)
         self.assertEqual((ok, reason, detail["backoff"]), (False, "backoff_spacing", True))
-        self.assertTrue(live_allowance(at(19, 30), 80, 48, 20, last_call=at(19), active_core=True)[0])
-        self.assertEqual(live_allowance(at(19, 30), 80, 48, 20, last_call=at(19), active_core=False)[1], "backoff_idle")
+        # LIVE_BACKOFF_INTERVAL is 60 minutes since 0.3.32 (was 30)
+        self.assertFalse(live_allowance(at(19, 30), 80, 48, 20, last_call=at(19), active_core=True)[0])
+        self.assertTrue(live_allowance(at(20), 80, 48, 20, last_call=at(19), active_core=True)[0])
+        self.assertEqual(live_allowance(at(20), 80, 48, 20, last_call=at(19), active_core=False)[1], "backoff_idle")
         self.assertFalse(live_allowance(at(19, 15), 80, 30, 20, last_call=at(19))[2]["backoff"])   # plenty left: 15 min
 
 
 class DaySimulationTests(LiveBudgetBase):
     def simulate(self, core, extra):
-        """15 minute ticks 06:00-23:45 UTC; scheduled refreshes use API calls at 04:00, 12:00 and 17:00."""
+        """Ticks at the lane's own cadence (engine.LIVE_INTERVAL, 30 minutes since 0.3.32) from 06:00 UTC to midnight;
+        scheduled refreshes use API calls at 04:00, 12:00 and 17:00."""
         calls_at = []
         for _ in range(4):
             self.store.increment("api_sports", 1000)
-        for minutes in range(6 * 60, 24 * 60, 15):
+        step = int(engine_module.LIVE_INTERVAL.total_seconds() // 60)
+        for minutes in range(6 * 60, 24 * 60, step):
             now = at(minutes // 60, minutes % 60)
             if minutes in (12 * 60, 17 * 60):
                 for _ in range(6 if minutes == 12 * 60 else 4):
@@ -116,7 +120,7 @@ class DaySimulationTests(LiveBudgetBase):
                 calls_at.append(now)
         return calls_at
 
-    def test_a_saturday_of_15_minute_polling_lasts_through_the_evening(self):
+    def test_a_saturday_of_live_polling_lasts_through_the_evening(self):
         # Kick-offs every two hours from 06:00 keep six events in play all day, as on 21 Nov; extras alongside.
         self.store.save_snapshot("sports:api_sports", {"events": []})
         rows = []
@@ -136,8 +140,10 @@ class DaySimulationTests(LiveBudgetBase):
         self.assertLessEqual(usage["live:api_sports"], budget)
         self.assertLessEqual(usage["api_sports"], LIMIT)       # live 60 + scheduled and settle 18 fit the 80 a day
         evening = [c for c in calls if 17 <= c.hour < 23]
-        self.assertGreaterEqual(len([c for c in calls if c.hour >= 17]), 0.30 * budget)   # reserve kept (18 of 60)
-        self.assertGreaterEqual(len(evening), 15)                        # 17:00-23:00: 3 at 15 min, then every 30
+        # 0.3.32 polls every 30 minutes (was 15): the day stays inside the budget, so the evening reserve is never
+        # touched and every evening slot is polled.
+        self.assertLess(usage["live:api_sports"], budget)
+        self.assertGreaterEqual(len(evening), 12)                        # 17:00-23:00 every 30 minutes
         self.assertGreaterEqual(max(calls), at(22))                      # still polling at the end of the evening
         self.assertTrue(any(c.hour < 12 for c in calls))                 # and the morning was served too
         gap = max(b - a for a, b in zip(calls, calls[1:]) if a.hour >= 17 and b.hour < 23)

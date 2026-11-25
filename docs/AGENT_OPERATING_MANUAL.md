@@ -22,10 +22,15 @@
 ## 4. Gate, release and deploy
 
 ```sh
-python3 -m compileall -q sportsliveinfo/src tests
+python3 -m compileall -q sportsliveinfo/src tests tools
+python3 -m pyflakes sportsliveinfo/src tools                              # CI lint step (pip install pyflakes==3.2.0)
+python3 tools/bump_version.py --check                                     # the three version files agree
 PYTHONPATH=sportsliveinfo/src python3 -m unittest discover -q -s tests   # a MemoryError line from a mock is expected
-PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py     # after any wire or version change
+PYTHONPATH=sportsliveinfo/src python3 tools/generate_feed_fixtures.py     # after ANY code or version change; commit the result
 ```
+
+- **Never push to `main` directly, and never ship with a red gate.** Between 23 and 25 Nov 2026, 0.3.29, 0.3.30 and 0.3.32 went straight to `main` with 3 and then 12 failing tests. Changing a constant that tests pin (for example `LIVE_INTERVAL` or `LIVE_MAX_AGE`) means updating those tests. It also means updating everything the feed publishes about that constant (`refresh.live_lane`, the rule texts) and the contract, in the same PR.
+- **The changelog only grows.** Add a new top entry; never overwrite or delete an older one (the 0.3.28 and 0.3.31 entries were lost this way and restored in 0.3.33).
 
 - CI (`.github/workflows/verify.yml`) runs on every PR. This repo is public, so Actions run.
 - After a wire change, copy `schemas/fixtures/sli-v1/v1` into B1's `platforms/android/app/src/test/resources/sli-v1-6/` so B1's interop test reads the same golden feed.

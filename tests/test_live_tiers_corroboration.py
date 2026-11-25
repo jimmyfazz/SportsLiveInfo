@@ -131,7 +131,7 @@ class HonestLiveStateTests(unittest.TestCase):
     def test_live_is_trusted_only_when_fresh_and_in_the_window(self):
         live = taxonomy.classify(ev(status_normalized="live", status_observed_at=iso(NOW - timedelta(minutes=10))))
         self.assertEqual(linking.live_state(live, NOW), "live")
-        self.assertEqual(linking.live_state(live, NOW + timedelta(minutes=40)), "unknown")   # observation 50 min old
+        self.assertEqual(linking.live_state(live, NOW + timedelta(minutes=65)), "unknown")   # observation 75 min old (limit 70)
         fresh_late = dict(live, status_observed_at=iso(NOW + timedelta(hours=2)))
         self.assertEqual(linking.live_state(fresh_late, NOW + timedelta(hours=2)), "live")    # 17:30 = end + 30
         fresh_later = dict(live, status_observed_at=iso(NOW + timedelta(hours=2, minutes=5)))
@@ -479,8 +479,8 @@ class LiveLaneTests(LiveLaneBase):
         live = json.loads(uploads[live_paths[0]])
         self.assertEqual(live["events"], [{"id": "api-sports:1", "status_normalized": "live",
                                            "status_observed_at": "2026-11-14T15:30:00Z",
-                                           "live_until_utc": "2026-11-14T16:15:00Z",
-                                           "display_state": "live", "state_until_utc": "2026-11-14T16:15:00Z"}])
+                                           "live_until_utc": "2026-11-14T16:40:00Z",
+                                           "display_state": "live", "state_until_utc": "2026-11-14T16:40:00Z"}])
         manifest = json.loads(uploads["v1/manifest.json"])
         self.assertIn("live_status", manifest["capabilities"])
         self.assertNotIn("score", uploads[live_paths[0]].decode())
@@ -525,10 +525,10 @@ class LiveExpiryAndPublishGateTests(LiveLaneBase):
 
     def test_live_asset_drops_rows_past_live_until(self):
         self.snapshot()
-        self.run_lane(board((1, "2H")))                                   # live, observed 15:30, until 16:15
-        fresh, _ = feed.build_feed(self.store, now=NOW + timedelta(minutes=30))
+        self.run_lane(board((1, "2H")))                                   # live, observed 15:30, until 16:40
+        fresh, _ = feed.build_feed(self.store, now=NOW + timedelta(minutes=60))
         self.assertIn("live", {a["kind"] for a in fresh["assets"]})
-        expired, _ = feed.build_feed(self.store, now=NOW + timedelta(minutes=50))
+        expired, _ = feed.build_feed(self.store, now=NOW + timedelta(minutes=75))
         self.assertNotIn("live", {a["kind"] for a in expired["assets"]})
         self.assertNotIn("live_status", expired["capabilities"])
 
@@ -555,8 +555,8 @@ class LiveExpiryAndPublishGateTests(LiveLaneBase):
         self.run_lane(board((1, "2H")))
         manifest, _ = feed.build_feed(self.store, now=NOW)
         refresh = manifest["refresh"]
-        self.assertEqual(refresh["live_stale_after_minutes"], 45)
-        self.assertEqual(refresh["live_lane"], {"enabled": True, "interval_minutes": 15,
+        self.assertEqual(refresh["live_stale_after_minutes"], 70)
+        self.assertEqual(refresh["live_lane"], {"enabled": True, "interval_minutes": 30,
                                                 "active_only_while_events_in_play": True,
                                                 "quiet_slots_guard_minutes": 3, "last_run_utc": "2026-11-14T15:30:00Z"})
         self.assertLessEqual(manifest["compatibility"]["min_reader_minor"], 6)
@@ -574,14 +574,14 @@ class LiveExpiryAndPublishGateTests(LiveLaneBase):
     def test_regression_rule(self):
         rule, m = engine_module.publish_regression, self.gate_manifest
         stats = engine_module.publish_stats
-        before = stats(m({"2026-11-22": 50, "2026-11-23": 50}, bindings=12))
+        before = stats(m({"2026-11-22": 50, "2026-11-23": 50}, bindings=12, window_from="2026-11-22"))
         self.assertEqual(before["records_by_day"], {"2026-11-22": 50, "2026-11-23": 50})
         self.assertIsNone(rule(None, m({"2026-11-23": 1})))
-        self.assertIsNone(rule(before, m({"2026-11-22": 40, "2026-11-23": 40}, bindings=10)))   # exactly 20%: allowed
+        self.assertIsNone(rule(before, m({"2026-11-22": 40, "2026-11-23": 40}, bindings=10, window_from="2026-11-22")))   # exactly 20%: allowed
         self.assertIn("events fell from 100 to 79 (more than 20%) on the days both feeds publish (2026-11-22 to 2026-11-23)",
-                      rule(before, m({"2026-11-22": 40, "2026-11-23": 39})))
+                      rule(before, m({"2026-11-22": 40, "2026-11-23": 39}, window_from="2026-11-22")))
         self.assertIn("guide-corroborated bindings fell from 12 to 9",
-                      rule(before, m({"2026-11-22": 50, "2026-11-23": 50}, bindings=9)))
+                      rule(before, m({"2026-11-22": 50, "2026-11-23": 50}, bindings=9, window_from="2026-11-22")))
         tiny = stats(m({"2026-11-23": 3}, bindings=3))
         self.assertIsNone(rule(tiny, m({"2026-11-23": 0}, bindings=0)))                        # tiny baseline ignored
 
@@ -592,9 +592,9 @@ class LiveExpiryAndPublishGateTests(LiveLaneBase):
                          window_from="2026-11-23", total=5387))
         monday = m({"2026-11-23": 300, "2026-11-24": 30, "2026-11-25": 25}, bindings=20, window_from="2026-11-24",
                    total=3254)
-        self.assertIsNone(rule(sunday, monday))        # common days 23-24 grew; bindings not compared across a day
+        self.assertIsNone(rule(sunday, monday))        # forward day 24 held; the 23rd is history now; bindings not compared across a day
         lost = m({"2026-11-23": 10, "2026-11-24": 5, "2026-11-25": 25}, window_from="2026-11-24", total=3254)
-        self.assertIn("fell from 73 to 15", rule(sunday, lost))              # a real loss on shared days still trips
+        self.assertIn("fell from 28 to 5", rule(sunday, lost))               # a real loss on shared forward days still trips
 
     def test_stats_from_before_the_fix_give_no_events_baseline(self):
         rule, m = engine_module.publish_regression, self.gate_manifest

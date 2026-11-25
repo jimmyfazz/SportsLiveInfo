@@ -82,7 +82,7 @@ class PublishedLinkTests(unittest.TestCase):
 class LiveUntilTests(unittest.TestCase):
     def test_live_until_is_the_earlier_of_age_and_end_limits(self):
         self.assertEqual(feed.live_until("live", "2026-11-15T15:30:00Z", "2026-11-15T15:00:00Z",
-                                         "2026-11-15T17:00:00+00:00"), "2026-11-15T16:15:00Z")
+                                         "2026-11-15T17:00:00+00:00"), "2026-11-15T16:40:00Z")
         self.assertEqual(feed.live_until("live", "2026-11-15T17:20:00Z", "2026-11-15T15:00:00Z",
                                          "2026-11-15T17:00:00+00:00"), "2026-11-15T17:30:00Z")
 
@@ -99,7 +99,7 @@ class LiveUntilTests(unittest.TestCase):
                  "start_precision": "scheduled", "status_normalized": "live",
                  "status_observed_at": "2026-11-15T15:40:00Z", "participants": ["A", "B"]}
         row = feed._event_public(event)
-        self.assertEqual(row["live_until_utc"], "2026-11-15T16:25:00Z")
+        self.assertEqual(row["live_until_utc"], "2026-11-15T16:50:00Z")
         self.assertNotIn("live_until_utc", feed._event_public(dict(event, status_normalized="scheduled")))
 
 

@@ -149,9 +149,10 @@ class LiveBudgetTests(unittest.TestCase):
 
     def test_the_cadence_constants(self):
         self.assertEqual(engine_module.LIVE_REFRESH, timedelta(minutes=15))
-        self.assertEqual(engine_module.LIVE_INTERVAL, timedelta(minutes=15))
-        self.assertEqual(feed.LIVE_MAX_AGE, timedelta(minutes=45))
-        self.assertEqual(feed.LIVE_LANE_INTERVAL_MINUTES, 15)
+        self.assertEqual(engine_module.LIVE_INTERVAL, timedelta(minutes=30))      # 0.3.32 (24 Nov): was 15
+        self.assertEqual(feed.LIVE_MAX_AGE, timedelta(minutes=70))                # 0.3.32: was 45
+        # The cadence the manifest publishes is the cadence the lane runs at.
+        self.assertEqual(timedelta(minutes=feed.LIVE_LANE_INTERVAL_MINUTES), engine_module.LIVE_INTERVAL)
         self.assertEqual(engine_module.LIVE_DAILY_BUDGET, 60)        # CA-09 (21 Nov 2026): daily_limit 80 - LIVE_RESERVE 20
 
     def test_a_busy_live_day_does_not_trip_the_daily_budget_but_runaway_live_does(self):
