@@ -55,9 +55,12 @@ EVENT_FIELDS = (
 )
 # Optional metadata computed centrally (metadata.py, contract 4.3); never copied from the internal record.
 EVENT_FIELDS = EVENT_FIELDS + metadata.EVENT_FIELDS
-LIVE_STATE_RULE = ("status_normalized == 'live' is trusted only when status_observed_at is at most 45 minutes old AND "
+# The minutes in these reader rules come from linking.LIVE_MAX_AGE, so the text can never disagree with
+# compatibility.live_max_age_minutes (0.3.32 raised it to 70 while the text still said 45).
+_LIVE_MAX_AGE_MINUTES = int(linking.LIVE_MAX_AGE.total_seconds() // 60)
+LIVE_STATE_RULE = ("status_normalized == 'live' is trusted only when status_observed_at is at most %d minutes old AND "
                    "start_utc <= now <= expected_end_utc + 30 minutes. Otherwise treat it as unknown and fall back to the "
-                   "clock (start..expected_end) shown as 'should be on now', never 'LIVE'.")
+                   "clock (start..expected_end) shown as 'should be on now', never 'LIVE'." % _LIVE_MAX_AGE_MINUTES)
 FEATURED_TAGS = sorted(linking.FEATURED_TAGS)
 
 # 1.7 (optional, capability "scores"): event and live-row `score`. Published only for the sources listed in config
@@ -197,7 +200,7 @@ def standings_rights(docs):
 
 
 LIVE_MAX_AGE = linking.LIVE_MAX_AGE
-LIVE_LANE_INTERVAL_MINUTES = 15       # published in refresh.live_lane; applies only while events are in play
+LIVE_LANE_INTERVAL_MINUTES = 30       # must equal engine.LIVE_INTERVAL (0.3.32: 30 min); published in refresh.live_lane; applies only while events are in play
 LIVE_QUIET_SLOT_GUARD_MINUTES = 3     # the lane stays quiet this long either side of a scheduled refresh
 LIVE_END_GRACE = linking.LIVE_END_GRACE
 
@@ -205,7 +208,7 @@ LIVE_END_GRACE = linking.LIVE_END_GRACE
 def live_until(status, observed_at, start_utc, expected_end_utc):
     """``live_until_utc`` (contract sli/1.6, 0.3.24): the moment after which a reader stops showing this event as LIVE,
     computed here so readers compare one clock time instead of applying the rule themselves. None unless the status
-    is live and was observed: min(observed + 45 min, expected end + 30 min), never before the start."""
+    is live and was observed: min(observed + LIVE_MAX_AGE, expected end + 30 min), never before the start."""
     if status != "live":
         return None
     observed, start, end = _z(observed_at), _z(start_utc), _z(expected_end_utc)
@@ -689,7 +692,7 @@ def live_document(store, events, now=None):
 
     Built from the live-status lane's observations (``live_observations``, keyed by source event id). An event is
     listed when an observation newer than its published status either changes the status or confirms play in
-    progress (so a reader keeps trusting "live" for 45 minutes). Rows whose ``live_until_utc`` is not after ``now``
+    progress (so a reader keeps trusting "live" for LIVE_MAX_AGE). Rows whose ``live_until_utc`` is not after ``now``
     are dropped: a build never lists an expired "live". Ids, statuses and times; since 1.7 also the score, only for sources in ``score_approvals``."""
     observations = ((store._get("live_observations") or {}).get("events") or {})
     if not observations:
@@ -1119,8 +1122,8 @@ def build_feed(store, now=None, previous_revision=None, private=False):
                           "on_major_mismatch": "keep last good feed; show 'update B1G to read the newer SportsLiveInfo feed'",
                           "live_state_rule": LIVE_STATE_RULE,
                           "live_overlay_rule": "overlay the optional 'live' asset on the day assets by event id when its "
-                                               "status_observed_at is newer; a feed older than 45 minutes never makes "
-                                               "anything 'LIVE'",
+                                               "status_observed_at is newer; a feed older than %d minutes never makes "
+                                               "anything 'LIVE'" % _LIVE_MAX_AGE_MINUTES,
                           "tier_rule": "events:<date> and today carry tier 'core'; the optional events_extra:<date> "
                                        "assets (same schema) carry tier 'extra'",
                           # 0.3.24: decisions made here, so readers follow them without an update.

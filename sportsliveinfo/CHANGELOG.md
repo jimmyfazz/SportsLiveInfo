@@ -2,15 +2,47 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.33 — 25 Nov 2026: gate ignores the history day; publishing retries; live timing published consistently
+
+Owner request 24 Nov 2026 ("regularly and now persistently fails to update and publish to GitHub"). The Home Assistant log on 25 Nov showed two more causes:
+- **00:11–03:41:** every live publish was refused: "events fell from 1695 to 1100 (more than 20%) on the days both feeds publish (2026-11-24 to 2026-12-01)".
+- **04:11–04:20:** "Could not reach GitHub while uploading feed files (URLError)" for both feeds. Nothing tried again, because the live lane republishes only when a status changes, and the next scheduled refresh was 12:00.
+
+- **Gate, forward days only:** at London midnight "today" (core and extra tiers) becomes the history day (core events only). The comparison counted that day in both feeds, so it read the dropped extra tier as a loss. `publish_comparison` now compares only days that are today or later in both feeds.
+- **GitHub requests retried:** every GitHub API request in a publication is retried after 5 s and 20 s on network errors, timeouts and HTTP 500/502/503/504 (`GITHUB_RETRY_DELAYS`). A permission error (4xx) or a branch conflict is never retried. The final message names the number of attempts.
+- **Failed publications retried:** when a publication (public or private) still failed for one of those reasons, the scheduler retries it every 10 minutes, at most 6 times in a row (`PUBLISH_RETRY_INTERVAL`, `PUBLISH_RETRY_MAX`, trigger `retry`). A success or a different outcome ends the series, and a later failure of a normal publication starts a new one. Gate refusals are never retried automatically: they still need a manual publish.
+- **Live timing published consistently (0.3.32 follow-up):** 0.3.32 polls every 30 minutes and trusts "live" for 70 minutes, but the manifest still declared `refresh.live_lane.interval_minutes` 15 and the published `live_state_rule` and `live_overlay_rule` text still said 45 minutes. `feed.LIVE_LANE_INTERVAL_MINUTES` is now 30, and a test pins it to `engine.LIVE_INTERVAL`. The rule text is built from `linking.LIVE_MAX_AGE`. Contract §1.6 is updated.
+- **Main green again:** 0.3.32 went to `main` with 12 failing tests: tests pinned to the 15 and 45 minute values, stale golden fixtures, and a day simulation still ticking every 15 minutes. These are updated to the 0.3.32 values; the simulation now ticks at `LIVE_INTERVAL`. 670 tests pass.
+- **Changelog repaired:** the 0.3.28 entry (lost in the 0.3.29 commit) and the 0.3.31 entry (overwritten in the 0.3.32 commit) are restored.
+- **Tests:** `tests/test_publish_resilience.py` (11): the midnight shift, request retries, the retry series and its limits.
+
 ## 0.3.32 — fix(live-lane): reduce polling cadence 15→30 min / backoff 30→60 min; raise LIVE_MAX_AGE 45→70 min
 
 - **engine.py** `LIVE_INTERVAL` 15 min → 30 min; `LIVE_BACKOFF_INTERVAL` 30 min → 60 min. Halves API-Sports live-board calls on a busy day (~12-16 for football vs ~24-32) while still detecting kick-off and overruns within 30 minutes.
 - **linking.py** `LIVE_MAX_AGE` 45 min → 70 min. Re-stamp chain is now 30 (poll) + 5 (CDN) + 15 (TV poll) = 50 min; 70 min gives 20 min headroom so the LIVE badge never flickers.
 
-## 0.3.31 — fix(live-lane): reduce polling cadence 15→30 min / backoff 30→60 min; raise LIVE_MAX_AGE 45→70 min
+## 0.3.31 — 24 Nov 2026: publish gate compares published days, not the snapshot total; main back to green
 
-- **engine.py** `LIVE_INTERVAL` 15 min → 30 min; `LIVE_BACKOFF_INTERVAL` 30 min → 60 min. Halves API-Sports live-board calls on a busy day (~12-16 for football vs ~24-32) while still detecting kick-off and overruns within 30 minutes.
-- **linking.py** `LIVE_MAX_AGE` 45 min → 70 min. Re-stamp chain is now 30 (poll) + 5 (CDN) + 15 (TV poll) = 50 min; 70 min gives 20 min headroom so the LIVE badge never flickers.
+Owner report 23-24 Nov 2026: the feed regularly and then persistently failed to publish. Home Assistant logs:
+- **23 Nov:** every automatic and live publish from 04:13 UTC was refused ("events fell from 5387 to 3294 (more than 20%)") until the owner published manually at 21:41.
+- **24 Nov:** the same from 04:10 UTC ("3331 to 2031").
+
+The gate (0.3.25, 20 Nov) compared `coverage.events`, which counts the whole collected snapshot, including past days that are not published. Every morning's collection drops the previous day, so the total falls by about 40% (Monday: about 50%, when Saturday goes), while the published days are unchanged. The published history confirms this:
+- **Sunday to Monday, last week:** 2,496 → 1,210.
+- **Sunday to Monday, 23 Nov:** published records on the shared days rose.
+
+0.3.30 attached failed guide names to the message, but guide failures were not the cause. No wire change; `sli/1.6` and `sli/1.7` are unchanged.
+
+- **Like-for-like events:** `engine.publish_comparison` compares published event records per London day (the `events:<date>` and `events_extra:<date>` assets) over the days both feeds publish. The 20% threshold, the minimum baseline of 5 and the manual override are unchanged. A real loss on shared days still blocks. The failed-guide list from 0.3.30 is kept in the gate details.
+- **Bindings:** guide-corroborated bindings have no per-day breakdown, so they are compared only while the window has not moved to a new day.
+- **Stored stats:** `feed_state.stats` now also holds `records_by_day` and `window_from`. Stats saved by 0.3.30 or earlier give no events baseline, so the first automatic publish after the update is not gated.
+- **Main green again:** 0.3.29 and 0.3.30 were pushed with 3 failing tests:
+  - two golden fixtures were stale after the 0.3.29 channel changes, and are regenerated (the `channels` asset and manifests);
+  - the Georgia guide label had lost "Setanta" (the reason that guide exists), and it is restored.
+
+  659 tests pass.
+- **Not changed, owner action:** since 0.3.29, 20 `iptv_epg_*` guides fetch the same epgshare01.online file as an `epgshare_*` guide (for example `iptv_epg_gb` and `epgshare_uk`, both UK1). Each collection downloads the file once per enabled entry, so keep one of each pair. `iptv_epg_ge` (GE1) failed on 24 Nov and may not exist on epgshare01.online. The India guide `epgshare_in` exceeded its 40 MB / 250k cap on 23 Nov.
+- **Tests:** `test_live_tiers_corroboration` (rule, the 23 Nov Monday shift, old stats, refused-then-manual flow).
 
 ## 0.3.30 — fix(logging): suppress /healthz spam, consolidate EPG family failures, enrich regression gate message
 
@@ -19,6 +51,19 @@
 - **engine.py** `_publish`: attach recently-failed EPG source names to `PublishRegression.details`; `_publish_job` appends them to the blocked message so the cause is visible without log-diving
 
 ## 0.3.29 — fix(providers): reroute iptv_epg_* from iptv-epg.org (403) to epgshare01.online
+
+## 0.3.28 — 21 Nov 2026: live budget fix (core-tier only, time-of-day reserve), live-budget advisory, docs refresh
+
+Owner approved CA-09 on 21 Nov 2026. Evidence: live publishes ran every 15 minutes from 08:43 to 10:13 UTC, then at 10:28 and 11:13, then none until the 12:14 collection although six events were live at 12:00. The lane read the API-Sports live board every 15 minutes whenever any collected event (extra tier included) was in its window, and `LIVE_DAILY_BUDGET` was 40 calls per product a day (10 hours of polling), so the day's budget was gone by about 11:13 UTC, before the afternoon and evening kick-offs. No wire change; `sli/1.7` and the golden feed are unchanged apart from the version string.
+
+- **Core tier only:** `engine._live_candidates` tags each candidate with its tier (`feed.event_tier`, the test the feed publishes). Only core events trigger a board read; extra-tier events never do, but a board read made for core events still updates the extra events in play. A pass with only extra events makes no call and says so in the job note.
+- **Budget from the plan:** `engine.live_daily_budget(daily_limit)` = limit minus `LIVE_RESERVE` (80 - 20 = 60 calls per product a day; the API-Sports free plan allows 100). `LIVE_DAILY_BUDGET` stays as the explicit constant (60, was 40). The reserve now means what it says: the 20 calls the scheduled refreshes (about 14-16) and the settle pass (at most 4) may still take. The old extra stop at "total use >= limit - reserve" counted those calls twice and would have blocked the live lane and the settle pass every evening, so the live lane and the settle pass now stop only at the product's hard daily limit.
+- **Time-of-day reserve:** `live_allowance` holds back 30% of the live budget (18 calls) until 17:00 UTC, so the morning cannot spend the evening (17:00-23:00 UTC).
+- **Adaptive back-off:** when less than 25% of the usable live budget is left, the lane polls every 30 minutes (minus a minute of tick slack) and only while a core event is live or kicked off in the last 15 minutes. A day of 15-minute polling with core and extra events now lasts to 23:45 UTC (56 of 60 live calls, 16 of them between 17:00 and 23:00 UTC; the test simulates 06:00-23:45 with the scheduled refreshes and settle calls counted).
+- **Health advisory `live_budget_exhausted:<product>`** (advisory, 200 on `/healthz`, never a stall): raised when core events are in play and the product's live budget is spent; one de-duplicated Home Assistant notification naming the product, the calls used of the limit and when it resets (00:00 UTC); cleared at once when the new UTC day starts or the budget recovers.
+- **Visible counters:** the live lane stores per product `live_budget` (calls used and limit, last live call time, core and extra candidates, back-off, exhausted). Shown on the Scheduler page (Live status lane card), in Diagnostics > Service health, and in the health snapshot.
+- **Tests:** `tests/test_live_budget.py` (extra-only makes no calls, core plus extra, allowance and back-off arithmetic, a simulated Saturday of 15-minute polling, advisory fires, stays 200, notifies once and clears, Scheduler and Diagnostics text). Updated `test_owner_calls_20nov` (budget 60), `test_live_tiers_corroboration` and `test_settle_pass` (the hard limit, not limit minus reserve).
+- **Docs refresh:** README, add-on README and DOCS (`sli/1.7`, shipped wording), CURRENT_STATUS, contract, RUNBOOK, DOCUMENTATION_INDEX, OPERATIONS_HARDENING headers, IMPLEMENTATION_PROGRESS; changelog headings for 0.3.25 to 0.3.27 tidied.
 
 ## 0.3.27 — 20 Nov 2026: audit fixes (expected_end_utc gaps, year boundary, Z-suffix)
 

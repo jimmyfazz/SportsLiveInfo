@@ -743,7 +743,7 @@ class CoverageFollowupTests(unittest.TestCase):
         self.assertFalse(live["broadcast_verified"])
         live["live_observed_at"] = NOW.isoformat()
         self.assertEqual(linking.live_state(live, NOW), "live")
-        self.assertEqual(linking.live_state(live, NOW + timedelta(hours=1)), "unknown")
+        self.assertEqual(linking.live_state(live, NOW + linking.LIVE_MAX_AGE + timedelta(minutes=1)), "unknown")
         with self.assertRaises(ValueError):
             providers.tennis_api_events('{"success":false,"results":[]}', live=True)
 

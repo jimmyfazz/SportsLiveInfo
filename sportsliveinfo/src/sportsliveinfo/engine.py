@@ -88,6 +88,23 @@ PUBLISH_REGRESSION_THRESHOLD = 0.20
 PUBLISH_REGRESSION_MIN_BASELINE = 5
 
 
+# Transient GitHub failures (network, timeouts, HTTP 5xx) are retried inside one publication after these delays
+# (seconds), and a publication that still failed for such a reason is retried by the scheduler every
+# PUBLISH_RETRY_INTERVAL, at most PUBLISH_RETRY_MAX times in a row. Owner report 25 Nov 2026: one network drop at 04:11
+# failed both feeds and nothing tried again until the next status change or scheduled refresh.
+GITHUB_RETRY_DELAYS = (5, 20)
+GITHUB_RETRY_STATUS = (500, 502, 503, 504)
+PUBLISH_RETRY_INTERVAL = timedelta(minutes=10)
+PUBLISH_RETRY_MAX = 6
+PUBLISH_RETRYABLE = ("Could not reach GitHub", "Feed branch changed during publication", "GitHub HTTP 50")
+
+
+def publish_retryable(status):
+    """True when the last publication failed for a transient reason worth retrying automatically (never a gate refusal)."""
+    return (isinstance(status, dict) and status.get("state") == "failed"
+            and any(marker in str(status.get("message", "")) for marker in PUBLISH_RETRYABLE))
+
+
 class PublishRegression(RuntimeError):
     """Automatic publication refused: the new feed lost too much against the published one."""
 
@@ -118,7 +135,11 @@ def publish_comparison(previous, manifest):
     out = {}
     before_days = previous.get("records_by_day")
     if isinstance(before_days, dict):
-        common = sorted(set(before_days) & set(now["records_by_day"]))
+        # Only days that are today or later in BOTH feeds. Owner report 25 Nov 2026: at London midnight "today" (core
+        # and extra tiers) becomes the history day (core only), so counting it in both feeds read the dropped extra
+        # tier as a loss and refused every live publish from 00:11 to 03:41.
+        floor = max(str(previous.get("window_from") or ""), str(now["window_from"] or ""))
+        common = sorted(d for d in set(before_days) & set(now["records_by_day"]) if d >= floor)
         if common:
             out["events"] = (sum(int(before_days[d]) for d in common), sum(now["records_by_day"][d] for d in common),
                              "events", " on the days both feeds publish (%s to %s)" % (common[0], common[-1]))
@@ -1239,6 +1260,42 @@ class Engine:
                     # Worker already running: allow a retry within this minute.
                     self.store.release_scheduler_slot(key)
         self._live_tick(conf, local)
+        self._publish_retry_tick(conf)
+
+    def _publish_retry_tick(self, conf):
+        """Retry a publication that failed for a transient GitHub reason (see PUBLISH_RETRYABLE)."""
+        status = self.store._get("publish_status") or {}
+        retry = self.store._get("publish_retry") or {}
+        if not publish_retryable(status):
+            if retry:
+                self.store._put("publish_retry", {})
+            return
+        github = conf["github"]
+        if not (github.get("enabled") and github.get("auto_publish") and conf.get("publication_approvals")):
+            return
+        count = retry.get("count", 0)
+        if status.get("trigger") != "retry" and str(retry.get("last", "")) < str(status.get("at", "")):
+            count = 0                      # a new failure from a normal publication starts a new series
+        if count >= PUBLISH_RETRY_MAX:
+            return
+        try:
+            if datetime.now(timezone.utc) - datetime.fromisoformat(status["at"]) < PUBLISH_RETRY_INTERVAL:
+                return
+        except (KeyError, TypeError, ValueError):
+            return
+        if not self._busy.acquire(blocking=False):
+            return
+        self.store._put("publish_retry", {"count": count + 1, "last": utcnow()})
+
+        def worker():
+            try:
+                self._publish_job("retry")
+            finally:
+                self._busy.release()
+        try:
+            threading.Thread(target=worker, name="sportsliveinfo-publish-retry", daemon=True).start()
+        except RuntimeError:
+            self._busy.release()
 
     # ---- live-status lane -------------------------------------------------
     @staticmethod
@@ -1458,7 +1515,7 @@ class Engine:
                         observations[sid]["score"] = score
                     changed += 1
         # A stored "live" nobody re-confirmed within LIVE_MAX_AGE becomes "unknown" (no API call), so the lane
-        # republishes and a published "live" cannot outlive its evidence (readers already ignore it after 45 min).
+        # republishes and a published "live" cannot outlive its evidence (readers already ignore it after LIVE_MAX_AGE).
         for sid, obs in observations.items():
             try:
                 stale = (obs.get("status_normalized") == "live"
@@ -2130,15 +2187,21 @@ class Engine:
             req = urllib.request.Request(base + path, method=method, data=json.dumps(body).encode() if body is not None else None,
                                          headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
                                                   "User-Agent": "SportsLiveInfo/0.3", "Content-Type": "application/json"})
-            try:
-                with _github_open(req, timeout=30) as res:
-                    return json.loads(res.read(20_000_000))
-            except urllib.error.HTTPError as exc:
-                if method == "PATCH" and exc.code in (409, 422):
-                    raise RuntimeError("Feed branch changed during publication; publish again") from None
-                raise RuntimeError(_github_failure(step, exc)) from None
-            except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-                raise RuntimeError("Could not reach GitHub while %s (%s); publish again" % (step, type(exc).__name__)) from None
+            for attempt, delay in enumerate(tuple(GITHUB_RETRY_DELAYS) + (None,)):
+                try:
+                    with _github_open(req, timeout=30) as res:
+                        return json.loads(res.read(20_000_000))
+                except urllib.error.HTTPError as exc:
+                    if method == "PATCH" and exc.code in (409, 422):
+                        raise RuntimeError("Feed branch changed during publication; publish again") from None
+                    if exc.code not in GITHUB_RETRY_STATUS or delay is None:
+                        raise RuntimeError(_github_failure(step, exc)) from None
+                except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                    if delay is None:
+                        raise RuntimeError("Could not reach GitHub while %s (%s, %d attempts); publish again" % (
+                            step, type(exc).__name__, attempt + 1)) from None
+                LOGGER.info("GitHub request while %s failed; retrying in %ss", step, delay)
+                time.sleep(delay)
 
         # Re-check the destination on every publish, not only in the connection test: a private feed (every collected
         # event and guide-derived listings) must never land in a repository that was made public or mistyped since.

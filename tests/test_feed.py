@@ -199,12 +199,12 @@ class GoldenFixtureContractTests(unittest.TestCase):
         self.assertEqual(live, {"schema": "sli.live/1", "generated_at": "2026-11-14T13:55:00Z",
                                 "events": [{"id": "api-sports-rugby:301", "status_normalized": "live",
                                             "status_observed_at": "2026-11-14T13:55:00Z",
-                                            "live_until_utc": "2026-11-14T14:40:00Z",
-                                            "display_state": "live", "state_until_utc": "2026-11-14T14:40:00Z"}]})
+                                            "live_until_utc": "2026-11-14T15:05:00Z",
+                                            "display_state": "live", "state_until_utc": "2026-11-14T15:05:00Z"}]})
         self.assertEqual(self.manifest["compatibility"]["link_order"], "best_first")
-        self.assertEqual(self.manifest["compatibility"]["live_max_age_minutes"], 45)
+        self.assertEqual(self.manifest["compatibility"]["live_max_age_minutes"], 70)
         self.assertEqual(core["api-sports-rugby:301"]["status_observed_at"], "2026-11-14T12:00:00Z")
-        self.assertIn("45 minutes", self.manifest["compatibility"]["live_state_rule"])
+        self.assertIn("70 minutes", self.manifest["compatibility"]["live_state_rule"])
         self.assertEqual(self.manifest["format"], "sli/1.6")
 
     def test_registry_is_data_for_the_reader(self):
