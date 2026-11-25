@@ -93,6 +93,17 @@ PUBLISH_REGRESSION_MIN_BASELINE = 5
 # PUBLISH_RETRY_INTERVAL, at most PUBLISH_RETRY_MAX times in a row. Owner report 25 Nov 2026: one network drop at 04:11
 # failed both feeds and nothing tried again until the next status change or scheduled refresh.
 GITHUB_RETRY_DELAYS = (5, 20)
+# Request timeout grows with the upload: 30 s plus one second per GITHUB_TIMEOUT_BYTES_PER_SECOND of body, at most
+# GITHUB_TIMEOUT_MAX. The channel dictionary is about 7 MB (9.3 MB as base64) and is new after each morning refresh;
+# with a fixed 30 s timeout a slow uplink failed its upload every time ("URLError while uploading feed files").
+GITHUB_TIMEOUT_BASE = 30
+GITHUB_TIMEOUT_BYTES_PER_SECOND = 100_000
+GITHUB_TIMEOUT_MAX = 300
+
+
+def github_timeout(body_bytes):
+    """Seconds allowed for one GitHub request carrying ``body_bytes`` of body."""
+    return min(GITHUB_TIMEOUT_MAX, GITHUB_TIMEOUT_BASE + int(body_bytes or 0) // GITHUB_TIMEOUT_BYTES_PER_SECOND)
 GITHUB_RETRY_STATUS = (500, 502, 503, 504)
 PUBLISH_RETRY_INTERVAL = timedelta(minutes=10)
 PUBLISH_RETRY_MAX = 6
@@ -2187,9 +2198,10 @@ class Engine:
             req = urllib.request.Request(base + path, method=method, data=json.dumps(body).encode() if body is not None else None,
                                          headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
                                                   "User-Agent": "SportsLiveInfo/0.3", "Content-Type": "application/json"})
+            timeout = github_timeout(len(req.data or b""))
             for attempt, delay in enumerate(tuple(GITHUB_RETRY_DELAYS) + (None,)):
                 try:
-                    with _github_open(req, timeout=30) as res:
+                    with _github_open(req, timeout=timeout) as res:
                         return json.loads(res.read(20_000_000))
                 except urllib.error.HTTPError as exc:
                     if method == "PATCH" and exc.code in (409, 422):
@@ -2198,8 +2210,9 @@ class Engine:
                         raise RuntimeError(_github_failure(step, exc)) from None
                 except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
                     if delay is None:
-                        raise RuntimeError("Could not reach GitHub while %s (%s, %d attempts); publish again" % (
-                            step, type(exc).__name__, attempt + 1)) from None
+                        reason = re.sub(r"[^\w .,:;()/-]", "", str(getattr(exc, "reason", "") or exc))[:80].strip()
+                        raise RuntimeError("Could not reach GitHub while %s (%s%s, %d attempts); publish again" % (
+                            step, type(exc).__name__, ": " + reason if reason else "", attempt + 1)) from None
                 LOGGER.info("GitHub request while %s failed; retrying in %ss", step, delay)
                 time.sleep(delay)
 

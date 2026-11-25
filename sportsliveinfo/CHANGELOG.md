@@ -2,6 +2,18 @@
 
 [SportsLiveInfo](https://github.com/jimmyfazz/SportsLiveInfo) hosts the App source. [LiveSports-EPG](https://github.com/jimmyfazz/LiveSports-EPG) is the separate feed repository.
 
+## 0.3.34 — 25 Nov 2026: GitHub upload timeout grows with the file; network errors name their cause
+
+The 25 Nov log under 0.3.32 showed every automatic and live publish after the 04:00 collection failing for more than an hour, always at "uploading feed files", while the earlier repository reads in the same publication succeeded:
+- 04:11, 04:16, 04:46 and 05:16 UTC: "Could not reach GitHub while uploading feed files (URLError)";
+- 06:46: the next attempt succeeded.
+
+The channel dictionary is about 7 MB (9.3 MB as base64). It is new after each morning refresh, so that publication has to upload it, and each request had a fixed 30 s timeout. On a slow uplink that request times out every time, and retries alone cannot help.
+
+- **Size-aware timeout:** `engine.github_timeout(body_bytes)` allows 30 s plus 1 s per 100 kB of request body, at most 300 s. The dictionary upload now gets about 123 s; small requests keep 30 s.
+- **Diagnosable failures:** the final "Could not reach GitHub" message now includes the underlying reason, for example "(URLError: timed out, 3 attempts)", so DNS, TLS and timeout failures can be told apart from the Publishing page and the App log.
+- **Tests:** `test_publish_resilience` (+1: timeout scaling on a 7 MB upload; the reason appears in the message). 671 tests pass.
+
 ## 0.3.33 — 25 Nov 2026: gate ignores the history day; publishing retries; live timing published consistently
 
 Owner request 24 Nov 2026 ("regularly and now persistently fails to update and publish to GitHub"). The Home Assistant log on 25 Nov showed two more causes:
