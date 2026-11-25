@@ -70,6 +70,7 @@ class GitHubRetryTests(unittest.TestCase):
         def respond(request, timeout=30):
             url, method = request.full_url, request.get_method()
             calls.append((method, url))
+            self.timeouts.append((url, len(request.data or b""), timeout))
             if url.endswith("/git/blobs") and errors:
                 raise errors.pop(0)
             if "/git/ref/heads/" in url:
@@ -106,8 +107,26 @@ class GitHubRetryTests(unittest.TestCase):
         respond, _ = self.fake_github([urllib.error.URLError("down")] * 3)
         with patch.object(engine_module, "GITHUB_RETRY_DELAYS", (0, 0)), \
                 patch("sportsliveinfo.engine._github_open", side_effect=respond):
-            with self.assertRaisesRegex(RuntimeError, r"Could not reach GitHub while uploading feed files \(URLError, 3 attempts\)"):
+            with self.assertRaisesRegex(RuntimeError, r"Could not reach GitHub while uploading feed files \(URLError: down, 3 attempts\)"):
                 self.commit()
+
+    def setUp(self):
+        self.timeouts = []
+
+    def test_request_timeout_grows_with_the_upload(self):
+        """A 7 MB dictionary (9.3 MB as base64) gets far more than 30 s; small requests keep 30 s; capped at 5 min."""
+        self.assertEqual(engine_module.github_timeout(0), 30)
+        self.assertEqual(engine_module.github_timeout(9_300_000), 123)
+        self.assertEqual(engine_module.github_timeout(500_000_000), engine_module.GITHUB_TIMEOUT_MAX)
+        respond, _ = self.fake_github([])
+        with patch("sportsliveinfo.engine._github_open", side_effect=respond):
+            Engine._github_commit("owner", "repo", "main", "dummy", {"v1/assets/dictionary/a.json": b"x" * 7_000_000},
+                                  [], "msg")
+        blob = next(t for t in self.timeouts if t[0].endswith("/git/blobs"))
+        self.assertGreater(blob[1], 9_000_000)
+        self.assertEqual(blob[2], engine_module.github_timeout(blob[1]))
+        self.assertGreaterEqual(blob[2], 120)
+        self.assertEqual(next(t for t in self.timeouts if "/git/ref/heads/" in t[0])[2], 30)
 
     def test_permission_errors_are_not_retried(self):
         denied = urllib.error.HTTPError("https://api.github.com/x", 403, "denied", {}, io.BytesIO())
